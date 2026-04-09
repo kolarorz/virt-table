@@ -1,0 +1,28 @@
+export { bootstrapTableBasic } from './basic.js';
+export { bootstrapTableFixed } from './fixed.js';
+export { bootstrapTableBorder } from './border.js';
+export { bootstrapTableStripe } from './stripe.js';
+export { bootstrapTableEmpty } from './empty.js';
+export { bootstrapTableNoHeader } from './no-header.js';
+export { bootstrapTableHighlight } from './highlight.js';
+export { bootstrapTableIndex } from './index-col.js';
+export { bootstrapTableCheckbox } from './checkbox.js';
+export { bootstrapTableResize } from './resize.js';
+export { bootstrapTableOverflow } from './overflow.js';
+export { bootstrapTableWrap } from './wrap.js';
+export { bootstrapTableAlign } from './align.js';
+export { bootstrapTableExpand } from './expand.js';
+export { bootstrapTableTree } from './tree.js';
+export { bootstrapTableGroup } from './group.js';
+export { bootstrapTableGroupTree } from './group-tree.js';
+export { bootstrapTableMerge } from './merge.js';
+export { bootstrapTableHeaderMerge } from './header-merge.js';
+export { bootstrapTableFooterMerge } from './footer-merge.js';
+export { bootstrapTableHeadFootMerge } from './head-foot-merge.js';
+export { bootstrapTableCellSelection } from './cell-selection.js';
+export { bootstrapTableSearch } from './search.js';
+export { bootstrapTableSpreadsheet } from './spreadsheet.js';
+export { bootstrapTableCells } from './cells.js';
+export { bootstrapTableFilter } from './filter.js';
+
+export { bootstrapTableFixed as bootstrapTable } from './fixed.js';

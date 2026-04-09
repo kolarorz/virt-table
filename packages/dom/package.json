@@ -1,0 +1,14 @@
+{
+  "name": "@virt-list/dom",
+  "version": "1.0.0",
+  "description": "DOM-based virtual list implementation",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@virt-list/core": "workspace:*"
+  },
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

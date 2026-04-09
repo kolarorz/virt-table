@@ -1,0 +1,94 @@
+.virt-table-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
+}
+
+.virt-table-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgb(0 0 0 / 20%);
+}
+
+.virt-table-btn:active {
+  transform: translateY(0);
+}
+
+.virt-table-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.virt-table-btn-secondary {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.virt-table-btn-success {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.virt-table-btn-warning {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.virt-table-controls {
+  margin-bottom: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.virt-table-control-group {
+  display: flex;
+  flex-direction: column;
+  margin-right: 12px;
+}
+
+.virt-table-control-group label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.virt-table-control-group input {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  width: 100px;
+  margin-bottom: 6px;
+}
+
+.status-text {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #4e5969;
+}
+
+.virt-table-container {
+  width: 640px;
+  height: 600px;
+  border: 1px solid #000;
+  border-radius: 8px;
+  overflow: auto;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
+}
+
+.virt-table-container.hide-native-scrollbar {
+  scrollbar-width: none;
+}
+
+.virt-table-container.hide-native-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* .virt-item {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+} */

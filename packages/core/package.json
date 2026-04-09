@@ -1,0 +1,11 @@
+{
+  "name": "@virt-list/core",
+  "version": "1.0.0",
+  "description": "Framework-agnostic virtual list core engine",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

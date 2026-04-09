@@ -1,0 +1,33 @@
+{
+  "name": "@virt-table/js",
+  "version": "1.0.0",
+  "description": "Pure JS virtual table component",
+  "type": "module",
+  "main": "dist/index.umd.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.umd.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@virt-list/core": "workspace:*",
+    "lodash-es": "^4.18.1"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

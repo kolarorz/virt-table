@@ -1,0 +1,33 @@
+{
+  "name": "virt-table",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.2",
+  "workspaces": [
+    "docs",
+    "docs/apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n docs,react,vue,js -c cyan,green,magenta,yellow \"pnpm dev:docs\" \"pnpm dev:react\" \"pnpm dev:vue\" \"pnpm dev:js\"",
+    "dev:docs": "pnpm -C docs dev",
+    "dev:react": "pnpm -C docs/apps/react dev",
+    "dev:vue": "pnpm -C docs/apps/vue dev",
+    "dev:js": "pnpm -C docs/apps/js dev",
+    "build": "pnpm -C packages/js build",
+    "build:docs": "pnpm -C docs build",
+    "preview": "pnpm -C docs preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -C docs typecheck && pnpm -C docs/apps/react typecheck && pnpm -C docs/apps/vue typecheck"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^10.3.0",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^24.10.1",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  }
+}
