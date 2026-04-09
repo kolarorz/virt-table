@@ -1,6 +1,6 @@
 {
   "name": "@virt-table/js",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Pure JS virtual table component",
   "type": "module",
   "main": "dist/index.umd.cjs",

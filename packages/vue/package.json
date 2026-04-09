@@ -1,6 +1,6 @@
 {
   "name": "@virt-table/vue",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Vue wrapper for @virt-table/js virtual table",
   "main": "src/index.ts",
   "types": "src/index.ts",
