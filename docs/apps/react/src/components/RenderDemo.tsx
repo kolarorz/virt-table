@@ -80,7 +80,7 @@ export default function RenderDemo() {
       <div style={{ width: 800, height: 500, border: '1px solid #e5e6eb' }}>
         <VirtTableReact
           columns={columns}
-          options={{ list, itemKey: 'id', minSize: 40, buffer: 4, border: true }}
+          options={{ list, itemKey: 'id', itemPreSize: 40, buffer: 4, border: true }}
         />
       </div>
     </div>

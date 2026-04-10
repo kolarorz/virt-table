@@ -18,7 +18,6 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@virt-list/core": ["../../../packages/core/src/index.ts"],
       "@virt-table/react": ["../../../packages/react/src/index.ts"]
     },
 

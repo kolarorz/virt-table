@@ -21,7 +21,7 @@
     "build": "vite build && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@virt-list/core": "workspace:*",
+    "@virt-list/core": "^0.0.1",
     "lodash-es": "^4.18.1"
   },
   "devDependencies": {

@@ -9,7 +9,6 @@ export default defineConfig({
   plugins: [qiankun('jsDemo', { useDevMode: true })],
   resolve: {
     alias: {
-      '@virt-list/core': fileURLToPath(new URL('../../../packages/core/src/index.ts', import.meta.url)),
       '@virt-table/js': fileURLToPath(
         new URL('../../../packages/js/src/index.ts', import.meta.url),
       ),

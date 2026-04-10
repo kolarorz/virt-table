@@ -11,7 +11,6 @@ export default defineConfig({
   plugins: [react(), qiankun('reactDemo', { useDevMode: true })],
   resolve: {
     alias: {
-      '@virt-list/core': fileURLToPath(new URL('../../../packages/core/src/index.ts', import.meta.url)),
       '@virt-table/js': fileURLToPath(new URL('../../../packages/js/src/index.ts', import.meta.url)),
       '@virt-table/react': fileURLToPath(new URL('../../../packages/react/src/index.ts', import.meta.url)),
     },

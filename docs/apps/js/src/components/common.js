@@ -62,7 +62,7 @@ export function createDemo(
     list: tableOptions.list ?? rows,
     columns,
     itemKey: 'id',
-    minSize: 40,
+    itemPreSize: 40,
     buffer: 4,
     merges: useMerges ? mergesData : undefined,
     ...tableOptions,

@@ -87,9 +87,6 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: {
-        // 后面会摘出去
-        '@virt-list/core': fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)),
-
         '@virt-table/js': fileURLToPath(new URL('../../packages/js/src/index.ts', import.meta.url)),
         '@virt-table/react': fileURLToPath(new URL('../../packages/react/src/index.ts', import.meta.url)),
         '@virt-table/vue': fileURLToPath(new URL('../../packages/vue/src/index.ts', import.meta.url)),

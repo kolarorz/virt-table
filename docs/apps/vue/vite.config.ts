@@ -12,7 +12,6 @@ export default defineConfig({
   plugins: [vue(), vueJsx(), qiankun('vueDemo', { useDevMode: true })],
   resolve: {
     alias: {
-      '@virt-list/core': fileURLToPath(new URL('../../../packages/core/src/index.ts', import.meta.url)),
       '@virt-table/js': fileURLToPath(new URL('../../../packages/js/src/index.ts', import.meta.url)),
       '@virt-table/vue': fileURLToPath(new URL('../../../packages/vue/src/index.ts', import.meta.url)),
     },

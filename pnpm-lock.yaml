@@ -136,19 +136,11 @@ importers:
         specifier: ^3.1.5
         version: 3.2.5(typescript@5.9.3)
 
-  packages/core: {}
-
-  packages/dom:
-    dependencies:
-      '@virt-list/core':
-        specifier: workspace:*
-        version: link:../core
-
   packages/js:
     dependencies:
       '@virt-list/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^0.0.1
+        version: 0.0.1
       lodash-es:
         specifier: ^4.18.1
         version: 4.18.1
@@ -1090,6 +1082,9 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==, tarball: https://registry.npmmirror.com/@ungap/structured-clone/-/structured-clone-1.3.0.tgz}
+
+  '@virt-list/core@0.0.1':
+    resolution: {integrity: sha512-tyHWAYSgMFvNMXSPEgQsjs4cGLuN6zQEK740KcBIYJiu39HeDZTh5U0WrgqbYLsVCqwHacM62tWoihhHCCd7Dg==, tarball: https://registry.npmmirror.com/@virt-list/core/-/core-0.0.1.tgz}
 
   '@vitejs/plugin-react@5.1.4':
     resolution: {integrity: sha512-VIcFLdRi/VYRU8OL/puL7QXMYafHmqOnwTZY50U1JPlCNj30PxCMx65c494b1K9be9hX83KVt0+gTEwTWLqToA==, tarball: https://registry.npmmirror.com/@vitejs/plugin-react/-/plugin-react-5.1.4.tgz}
@@ -3111,6 +3106,8 @@ snapshots:
       eslint-visitor-keys: 5.0.1
 
   '@ungap/structured-clone@1.3.0': {}
+
+  '@virt-list/core@0.0.1': {}
 
   '@vitejs/plugin-react@5.1.4(vite@7.3.1(@types/node@24.10.13))':
     dependencies:

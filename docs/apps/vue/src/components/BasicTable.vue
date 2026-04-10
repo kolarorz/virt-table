@@ -40,7 +40,7 @@ const list = Array.from({ length: ROW_COUNT }, (_, i) => {
 const options = {
   list,
   itemKey: 'id',
-  minSize: 40,
+  itemPreSize: 40,
   buffer: 4,
   border: true,
 };

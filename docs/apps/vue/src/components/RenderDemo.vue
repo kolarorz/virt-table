@@ -87,7 +87,7 @@ const columns: VueTableColumn<Row>[] = [
 const options = {
   list: list.value,
   itemKey: 'id',
-  minSize: 40,
+  itemPreSize: 40,
   buffer: 4,
   border: true,
 };

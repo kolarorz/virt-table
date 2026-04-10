@@ -50,7 +50,7 @@ export default function BasicTable() {
         <VirtTableReact
           ref={tableRef}
           columns={columns}
-          options={{ list, itemKey: 'id', minSize: 40, buffer: 4, border: true }}
+          options={{ list, itemKey: 'id', itemPreSize: 40, buffer: 4, border: true }}
         />
       </div>
     </div>

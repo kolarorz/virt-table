@@ -140,7 +140,7 @@ export function bootstrapTableCells(root) {
     list,
     columns,
     itemKey: 'id',
-    minSize: 40,
+    itemPreSize: 40,
     buffer: 4,
     border: true,
     textOverflow: 'ellipsis',
