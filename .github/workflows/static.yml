@@ -40,7 +40,7 @@ jobs:
         run: |
           pnpm -C docs/apps/react exec vite build
           pnpm -C docs/apps/vue exec vite build
-          pnpm -C docs/apps/js exec vite build
+          pnpm -C docs/apps/vanilla exec vite build
         env:
           DEPLOY_BASE: /virt-table/
 

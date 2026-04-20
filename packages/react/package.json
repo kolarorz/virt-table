@@ -1,11 +1,11 @@
 {
   "name": "@virt-table/react",
   "version": "0.0.1",
-  "description": "React wrapper for @virt-table/js virtual table",
+  "description": "React wrapper for @virt-table/vanilla virtual table",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@virt-table/js": "workspace:*"
+    "@virt-table/vanilla": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18",

@@ -4,9 +4,9 @@ import {
   VirtTable,
   type VirtTableColumn,
   type VirtTableOptions,
-} from '@virt-table/js';
+} from '@virt-table/vanilla';
 
-export type { VirtTableOptions, VirtTableColumn } from '@virt-table/js';
+export type { VirtTableOptions, VirtTableColumn } from '@virt-table/vanilla';
 
 export interface ReactTableColumn<T = any>
   extends Omit<VirtTableColumn<T>, 'render' | 'headerRender' | 'cellCoverRender' | 'expandRender'> {

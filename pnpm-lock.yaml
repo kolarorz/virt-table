@@ -43,19 +43,6 @@ importers:
         specifier: ^3.1.5
         version: 3.2.5(typescript@5.9.3)
 
-  docs/apps/js:
-    dependencies:
-      '@faker-js/faker':
-        specifier: ^10.3.0
-        version: 10.3.0
-    devDependencies:
-      vite:
-        specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.10.13)
-      vite-plugin-qiankun:
-        specifier: ^1.0.15
-        version: 1.0.15(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.13))
-
   docs/apps/react:
     dependencies:
       '@faker-js/faker':
@@ -105,6 +92,19 @@ importers:
         specifier: ^1.0.15
         version: 1.0.15(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.13))
 
+  docs/apps/vanilla:
+    dependencies:
+      '@faker-js/faker':
+        specifier: ^10.3.0
+        version: 10.3.0
+    devDependencies:
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.10.13)
+      vite-plugin-qiankun:
+        specifier: ^1.0.15
+        version: 1.0.15(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.13))
+
   docs/apps/vue:
     dependencies:
       '@faker-js/faker':
@@ -136,24 +136,11 @@ importers:
         specifier: ^3.1.5
         version: 3.2.5(typescript@5.9.3)
 
-  packages/js:
-    dependencies:
-      '@virt-list/core':
-        specifier: ^0.0.1
-        version: 0.0.1
-      lodash-es:
-        specifier: ^4.18.1
-        version: 4.18.1
-    devDependencies:
-      vite:
-        specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.10.13)
-
   packages/react:
     dependencies:
-      '@virt-table/js':
+      '@virt-table/vanilla':
         specifier: workspace:*
-        version: link:../js
+        version: link:../vanilla
       react:
         specifier: '>=18'
         version: 19.2.4
@@ -168,11 +155,24 @@ importers:
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.14)
 
+  packages/vanilla:
+    dependencies:
+      '@virt-list/core':
+        specifier: ^0.0.2
+        version: 0.0.2
+      lodash-es:
+        specifier: ^4.18.1
+        version: 4.18.1
+    devDependencies:
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.10.13)
+
   packages/vue:
     dependencies:
-      '@virt-table/js':
+      '@virt-table/vanilla':
         specifier: workspace:*
-        version: link:../js
+        version: link:../vanilla
       vue:
         specifier: '>=3.0.0'
         version: 3.5.29(typescript@5.9.3)
@@ -1083,8 +1083,8 @@ packages:
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==, tarball: https://registry.npmmirror.com/@ungap/structured-clone/-/structured-clone-1.3.0.tgz}
 
-  '@virt-list/core@0.0.1':
-    resolution: {integrity: sha512-tyHWAYSgMFvNMXSPEgQsjs4cGLuN6zQEK740KcBIYJiu39HeDZTh5U0WrgqbYLsVCqwHacM62tWoihhHCCd7Dg==, tarball: https://registry.npmmirror.com/@virt-list/core/-/core-0.0.1.tgz}
+  '@virt-list/core@0.0.2':
+    resolution: {integrity: sha512-TS8OhBGwNvapYoETgZh238fceqSthKfodEnC4Rpngl9s6+8q3R4wr0E1yz7WpACwEmm+Kdy3jqY7KkRfBHdKkw==, tarball: https://registry.npmmirror.com/@virt-list/core/-/core-0.0.2.tgz}
 
   '@vitejs/plugin-react@5.1.4':
     resolution: {integrity: sha512-VIcFLdRi/VYRU8OL/puL7QXMYafHmqOnwTZY50U1JPlCNj30PxCMx65c494b1K9be9hX83KVt0+gTEwTWLqToA==, tarball: https://registry.npmmirror.com/@vitejs/plugin-react/-/plugin-react-5.1.4.tgz}
@@ -3107,7 +3107,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@virt-list/core@0.0.1': {}
+  '@virt-list/core@0.0.2': {}
 
   '@vitejs/plugin-react@5.1.4(vite@7.3.1(@types/node@24.10.13))':
     dependencies:

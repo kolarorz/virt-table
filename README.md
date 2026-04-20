@@ -15,11 +15,11 @@ pnpm dev
 ```text
 .
 ├─ docs/          # VitePress 文档站点 + playground 宿主
-│  ├─ apps/       # 文档内微应用（react/vue/js）
-│  │  ├─ js/         # JS 应用
+│  ├─ apps/       # 文档内微应用（react/vue/vanilla）
+│  │  ├─ js/         # Vanilla 应用
 │  │  ├─ react/      # React 应用
 │  │  └─ vue/        # Vue 应用
-│  ├─ js/         # JS 文档
+│  ├─ vanilla/    # Vanilla 文档
 │  ├─ react/      # React 文档
 │  └─ vue/        # Vue 文档
 ├─ packages/      # npm 发布包（见下方详细说明）
@@ -59,7 +59,7 @@ packages/
 │  └─ src/
 │     └─ index.ts
 │
-└─ js/                            # @virt-table/js — 纯 JS 虚拟表格
+└─ js/                            # @virt-table/vanilla — Vanilla 虚拟表格
    └─ src/
       ├─ index.ts                 # VirtTable 类：自定义 table DOM + VirtListCore 驱动纵向虚拟滚动
       ├─ merge.ts                 # 合并单元格算法
@@ -72,7 +72,7 @@ packages/
 @virt-list/core        ← 零依赖，纯算法
     ↑
 @virt-list/dom         ← 依赖 core，面向无框架 / 纯 JS 用户
-@virt-table/js         ← 依赖 core，纯 JS 虚拟表格
+@virt-table/vanilla    ← 依赖 core，Vanilla 虚拟表格
 @virt-table/react      ← 依赖 core，peerDep: react ≥17
 @virt-table/vue        ← 依赖 core，peerDep: vue ≥2.7
 ```
@@ -81,7 +81,7 @@ packages/
 
 | 用户类型       | 推荐包              | 导入示例                                            |
 | -------------- | ------------------- | --------------------------------------------------- |
-| 纯 JS 表格     | `@virt-table/js`    | `import { VirtTable } from '@virt-table/js'`        |
+| Vanilla 表格   | `@virt-table/vanilla` | `import { VirtTable } from '@virt-table/vanilla'` |
 | Vue 表格       | `@virt-table/vue`   | `import { VirtTable } from '@virt-table/vue'`       |
 | React 表格     | `@virt-table/react` | `import { VirtTable } from '@virt-table/react'`     |
 | 纯 JS 虚拟列表 | `@virt-list/dom`    | `import { VirtListDOM } from '@virt-list/dom'`      |

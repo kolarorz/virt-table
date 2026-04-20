@@ -4,7 +4,7 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   resolve: {
     alias: {
-      '@virt-table/js': fileURLToPath(new URL('./packages/js/src/index.ts', import.meta.url)),
+      '@virt-table/vanilla': fileURLToPath(new URL('./packages/vanilla/src/index.ts', import.meta.url)),
     },
   },
   test: {

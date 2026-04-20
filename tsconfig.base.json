@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@virt-table/js": ["./packages/js/src/index.ts"],
+      "@virt-table/vanilla": ["./packages/vanilla/src/index.ts"],
       "@virt-table/react": ["./packages/react/src/index.ts"],
       "@virt-table/vue": ["./packages/vue/src/index.ts"]
     }

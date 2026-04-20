@@ -10,12 +10,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n docs,react,vue,js -c cyan,green,magenta,yellow \"pnpm dev:docs\" \"pnpm dev:react\" \"pnpm dev:vue\" \"pnpm dev:js\"",
+    "dev": "concurrently -n docs,react,vue,vanilla -c cyan,green,magenta,yellow \"pnpm dev:docs\" \"pnpm dev:react\" \"pnpm dev:vue\" \"pnpm dev:vanilla\"",
     "dev:docs": "pnpm -C docs dev",
     "dev:react": "pnpm -C docs/apps/react dev",
     "dev:vue": "pnpm -C docs/apps/vue dev",
-    "dev:js": "pnpm -C docs/apps/js dev",
-    "build": "pnpm -C packages/js build",
+    "dev:vanilla": "pnpm -C docs/apps/vanilla dev",
+    "build": "pnpm -C packages/vanilla build",
     "build:docs": "pnpm -C docs build",
     "preview": "pnpm -C docs preview",
     "test": "vitest run",

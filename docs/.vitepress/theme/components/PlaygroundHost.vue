@@ -2,7 +2,7 @@
 import type { MicroApp } from 'qiankun';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-type FrameworkKind = 'react' | 'vue' | 'js';
+type FrameworkKind = 'vanilla' | 'vue' | 'react';
 
 interface PlaygroundProps {
   framework: FrameworkKind;
@@ -16,7 +16,7 @@ const props = withDefaults(
     exampleId?: string;
   }>(),
   {
-    framework: 'react',
+    framework: 'vanilla',
     exampleId: '',
   },
 );
@@ -40,21 +40,26 @@ const isDev = (import.meta as ImportMeta & { env: { DEV: boolean } }).env.DEV;
 
 const base = (import.meta as any).env.BASE_URL || '/';
 const appEntries: Record<FrameworkKind, string> = {
-  react: isDev ? 'http://localhost:8101/' : `${base}micro-apps/react/`,
+  vanilla: isDev ? 'http://localhost:8101/' : `${base}micro-apps/vanilla/`,
   vue: isDev ? 'http://localhost:8102/' : `${base}micro-apps/vue/`,
-  js: isDev ? 'http://localhost:8103/' : `${base}micro-apps/js/`,
+  react: isDev ? 'http://localhost:8103/' : `${base}micro-apps/react/`,
 };
 
 const appNames: Record<FrameworkKind, string> = {
-  react: 'reactDemo',
+  vanilla: 'vanillaDemo',
   vue: 'vueDemo',
-  js: 'jsDemo',
+  react: 'reactDemo',
+};
+
+const resolveFramework = (fw: string): FrameworkKind => {
+  if (fw === 'vanilla' || fw === 'vue' || fw === 'react') return fw;
+  return 'vanilla';
 };
 
 const titleMap: Record<FrameworkKind, string> = {
-  react: 'React 示例运行中',
+  vanilla: 'Vanilla 示例运行中',
   vue: 'Vue 示例运行中',
-  js: 'JS 示例运行中',
+  react: 'React 示例运行中',
 };
 
 const appendLog = (message: string) => {
@@ -84,12 +89,13 @@ const mountApp = async () => {
 
     containerRef.value.innerHTML = '';
 
+    const targetFramework = resolveFramework(framework.value);
     currentApp = qiankunApi.loadMicroApp({
-      name: appNames[framework.value],
-      entry: appEntries[framework.value],
+      name: appNames[targetFramework],
+      entry: appEntries[targetFramework],
       container: containerRef.value,
       props: {
-        framework: framework.value,
+        framework: targetFramework,
         exampleId: exampleId.value,
         onEvent: (payload: { framework: FrameworkKind; message: string }) =>
           appendLog(`[${payload.framework}] ${payload.message}`),
