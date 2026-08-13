@@ -1,0 +1,17 @@
+{
+  // 类型级测试专用：只做检查、不出产物。
+  //
+  // 为什么需要单独一份：`tsconfig.build.json` 是 `emitDeclarationOnly` 的产物配置，
+  // 且排除了 `*.test.ts`（那些测试是**故意**类型宽松的，比如省略 `width`）。
+  // 类型断言（`*.test-d.ts`）既不能进产物，也不能和宽松测试一起检查，所以自成一份。
+  //
+  // 跑法：`pnpm -C packages/vanilla typecheck`，已挂进根 `pnpm typecheck`。
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

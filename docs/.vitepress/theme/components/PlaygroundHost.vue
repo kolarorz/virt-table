@@ -4,12 +4,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 type FrameworkKind = 'vanilla' | 'vue' | 'react';
 
-interface PlaygroundProps {
-  framework: FrameworkKind;
-  exampleId: string;
-  onEvent?: (payload: { framework: FrameworkKind; message: string }) => void;
-}
-
 const props = withDefaults(
   defineProps<{
     framework?: FrameworkKind;
@@ -29,20 +23,15 @@ const isLoading = ref(false);
 const loadError = ref('');
 const eventLog = ref<string[]>([]);
 
-let started = false;
 let currentApp: MicroApp | null = null;
-let qiankunApi: null | {
-  start: typeof import('qiankun').start;
-  loadMicroApp: typeof import('qiankun').loadMicroApp;
-} = null;
 
 const isDev = (import.meta as ImportMeta & { env: { DEV: boolean } }).env.DEV;
 
 const base = (import.meta as any).env.BASE_URL || '/';
 const appEntries: Record<FrameworkKind, string> = {
-  vanilla: isDev ? 'http://localhost:8101/' : `${base}micro-apps/vanilla/`,
-  vue: isDev ? 'http://localhost:8102/' : `${base}micro-apps/vue/`,
-  react: isDev ? 'http://localhost:8103/' : `${base}micro-apps/react/`,
+  vanilla: isDev ? 'http://localhost:7901/' : `${base}micro-apps/vanilla/`,
+  vue: isDev ? 'http://localhost:7902/' : `${base}micro-apps/vue/`,
+  react: isDev ? 'http://localhost:7903/' : `${base}micro-apps/react/`,
 };
 
 const appNames: Record<FrameworkKind, string> = {
@@ -56,15 +45,25 @@ const resolveFramework = (fw: string): FrameworkKind => {
   return 'vanilla';
 };
 
-const titleMap: Record<FrameworkKind, string> = {
-  vanilla: 'Vanilla 示例运行中',
-  vue: 'Vue 示例运行中',
-  react: 'React 示例运行中',
-};
-
 const appendLog = (message: string) => {
   eventLog.value = [message, ...eventLog.value].slice(0, 8);
 };
+
+async function getQiankunApi() {
+  const w = window as any;
+  if (w.__playgroundQiankun) return w.__playgroundQiankun;
+  const api = await import('qiankun');
+  w.__playgroundQiankun = api;
+  return api;
+}
+
+function ensureStarted(api: { start: typeof import('qiankun').start }) {
+  const w = window as any;
+  if (!w.__playgroundStarted) {
+    api.start({ sandbox: true, prefetch: false });
+    w.__playgroundStarted = true;
+  }
+}
 
 const mountApp = async () => {
   if (!containerRef.value) return;
@@ -73,14 +72,8 @@ const mountApp = async () => {
   loadError.value = '';
 
   try {
-    if (!qiankunApi) {
-      qiankunApi = await import('qiankun');
-    }
-
-    if (!started) {
-      qiankunApi.start({ sandbox: true, prefetch: false });
-      started = true;
-    }
+    const api = await getQiankunApi();
+    ensureStarted(api);
 
     if (currentApp) {
       await currentApp.unmount();
@@ -90,7 +83,8 @@ const mountApp = async () => {
     containerRef.value.innerHTML = '';
 
     const targetFramework = resolveFramework(framework.value);
-    currentApp = qiankunApi.loadMicroApp({
+    // 先存局部常量：currentApp 是被多个闭包写入的 let，await 后类型收窄会失效
+    const app = api.loadMicroApp({
       name: appNames[targetFramework],
       entry: appEntries[targetFramework],
       container: containerRef.value,
@@ -102,7 +96,9 @@ const mountApp = async () => {
       },
     });
 
-    await currentApp.mountPromise;
+    currentApp = app;
+
+    await app.mountPromise;
     isMounted.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : '微应用加载失败';

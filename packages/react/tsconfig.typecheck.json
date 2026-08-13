@@ -1,0 +1,12 @@
+{
+  // 源码级类型检查（挂在根 `pnpm typecheck` 上），只检查、不出产物。
+  //
+  // 与 `tsconfig.build.json` 的区别就在解析目标：这份 extends 根 base，`paths` 把
+  // `@virt-table/vanilla` 指向它的**源码**，所以 clone 下来不构建也能跑；出声明那份
+  // 必须走真实包解析（读 vanilla 的 dist），因此不能共用一份配置。
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

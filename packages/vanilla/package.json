@@ -1,33 +1,101 @@
 {
   "name": "@virt-table/vanilla",
   "version": "0.0.1",
-  "description": "Vanilla virtual table component",
+  "description": "行列双向虚拟化的高性能表格，零框架依赖：合并单元格、分组表头/表尾、固定行列、树形、编辑器、插件化",
   "type": "module",
-  "main": "dist/index.umd.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "author": "keno-lee <keno.lee@foxmail.com>",
+  "homepage": "https://keno-lee.github.io/virt-table/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keno-lee/virt-table.git",
+    "directory": "packages/vanilla"
+  },
+  "bugs": {
+    "url": "https://github.com/keno-lee/virt-table/issues"
+  },
+  "keywords": [
+    "virtual-table",
+    "virtual-scroll",
+    "virtualization",
+    "table",
+    "datagrid",
+    "data-grid",
+    "grid",
+    "spreadsheet",
+    "merged-cells",
+    "vanilla-js",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/virt-table.umd.cjs",
+  "jsdelivr": "./dist/virt-table.umd.cjs",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.umd.cjs"
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
     },
-    "./style.css": "./dist/style.css"
+    "./plugins": {
+      "import": { "types": "./dist/plugins/index.d.ts", "default": "./dist/plugins/index.js" },
+      "require": { "types": "./dist/plugins/index.d.cts", "default": "./dist/plugins/index.cjs" }
+    },
+    "./plugins/*.css": "./dist/plugins/*.css",
+    "./plugins/*": {
+      "import": { "types": "./dist/plugins/*.d.ts", "default": "./dist/plugins/*.js" },
+      "require": { "types": "./dist/plugins/*.d.cts", "default": "./dist/plugins/*.cjs" }
+    },
+    "./components": {
+      "import": { "types": "./dist/components/index.d.ts", "default": "./dist/components/index.js" },
+      "require": { "types": "./dist/components/index.d.cts", "default": "./dist/components/index.cjs" }
+    },
+    "./components/index.css": "./dist/components/index.css",
+    "./components/vt-filter-builder": {
+      "import": {
+        "types": "./dist/components/vt-filter-builder.d.ts",
+        "default": "./dist/components/vt-filter-builder.js"
+      },
+      "require": {
+        "types": "./dist/components/vt-filter-builder.d.cts",
+        "default": "./dist/components/vt-filter-builder.cjs"
+      }
+    },
+    "./components/vt-filter-builder.css": "./dist/components/vt-filter-builder.css",
+    "./infer-columns": {
+      "import": { "types": "./dist/infer-columns.d.ts", "default": "./dist/infer-columns.js" },
+      "require": { "types": "./dist/infer-columns.d.cts", "default": "./dist/infer-columns.cjs" }
+    },
+    "./ai-query": {
+      "import": { "types": "./dist/ai-query.d.ts", "default": "./dist/ai-query.js" },
+      "require": { "types": "./dist/ai-query.d.cts", "default": "./dist/ai-query.cjs" }
+    },
+    "./core.css": "./dist/core.css",
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "vite build && tsc -p tsconfig.build.json"
+    "build": "vite build && vite build -c vite.config.umd.ts && tsc -p tsconfig.build.json && node ../../scripts/emit-dcts.mjs dist",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@virt-list/core": "^0.0.2",
-    "lodash-es": "^4.18.1"
+    "@virt-list/core": "^0.0.7"
   },
   "devDependencies": {
+    "@virt-list/vanilla": "^0.0.7",
+    "lodash-es": "^4.18.1",
     "vite": "^7.3.1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  }
 }

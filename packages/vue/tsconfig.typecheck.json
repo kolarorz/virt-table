@@ -1,0 +1,9 @@
+{
+  // 源码级类型检查（挂在根 `pnpm typecheck` 上），只检查、不出产物。
+  // 为什么与 `tsconfig.build.json` 分成两份，见 `packages/react/tsconfig.typecheck.json`。
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

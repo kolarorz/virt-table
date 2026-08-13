@@ -11,5 +11,6 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  // `*.test-d.ts` 是类型级断言（见 tsconfig.typecheck.json），不能进产物
+  "exclude": ["src/**/*.test.ts", "src/**/*.test-d.ts"]
 }

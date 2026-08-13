@@ -1,0 +1,48 @@
+/* ==========================================================================
+ * vtColumnPanel 插件样式
+ *
+ * 本插件**复用**共享的通用面板样式（`.vt-filter-panel` / `.vt-filter-list` /
+ * `.vt-filter-item` / `.vt-filter-item-group`），它们同时被 vtColumnFilter 与
+ * VtFilterBuilder 使用，因此单独放在 `_panel.css`、由下面的 `@import` 内联进来。
+ * `.vt-filter-checkbox` 与核心勾选框共用规则，留在核心 `index.css`。
+ *
+ * `@import` 之后只放列设置面板**专属**的部分。
+ * ========================================================================== */
+@import './_panel.css';
+
+.vt-column-panel {
+  min-width: 160px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vt-scrollbar-thumb) var(--vt-scrollbar-track);
+}
+
+/* 分组表头按列树层级缩进（层级由 --vt-panel-level 行内传入） */
+.vt-column-panel .vt-filter-item {
+  margin-left: calc(var(--vt-panel-level, 0) * var(--vt-panel-indent-size));
+}
+
+/* 自定义滚动条：与核心 `.vt-client` / `.vt-filter-list` 同款
+   （WebKit 伪元素无法继承，只能按选择器重复一份，规则须与 index.css §3 保持一致） */
+.vt-column-panel::-webkit-scrollbar {
+  width: var(--vt-scrollbar-size);
+  height: var(--vt-scrollbar-size);
+}
+
+.vt-column-panel::-webkit-scrollbar-track {
+  background: var(--vt-scrollbar-track);
+}
+
+.vt-column-panel::-webkit-scrollbar-thumb {
+  background-color: var(--vt-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full);
+  background-clip: padding-box;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-column-panel::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vt-scrollbar-thumb-hover);
+}

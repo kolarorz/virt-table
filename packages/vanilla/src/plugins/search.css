@@ -1,0 +1,115 @@
+/* ==========================================================================
+ * vtSearch 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量与 `vt-pop-in` keyframes。
+ * 按项目约定：不写字面颜色/圆角/间距，一律引用变量。
+ * ========================================================================== */
+
+/* ---- 命中高亮（当前项）---- */
+.vt-search-match-active {
+  position: relative;
+}
+
+/* 用 ::before 覆盖而不是改 background：虚拟滚动会复用行 DOM，
+   直接改 .vt-td 背景会与斑马纹/悬停态互相覆盖 */
+.vt-search-match-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--vt-highlight-bg) !important;
+  border: 2px solid var(--vt-highlight-border);
+  border-radius: var(--vt-radius-sm);
+  pointer-events: none;
+}
+
+/* ---- 搜索框 ---- */
+.vt-search-box {
+  position: absolute;
+  top: 10px;
+  right: 18px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-panel);
+  box-shadow: var(--vt-shadow-lg);
+  animation: vt-pop-in var(--vt-transition) var(--vt-ease);
+}
+
+.vt-search-input {
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  color: var(--vt-text-color);
+  background: var(--vt-bg);
+  outline: none;
+  width: 180px;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-search-input::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-search-input:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-search-counter {
+  font-size: var(--vt-font-size-xs);
+  color: var(--vt-text-placeholder);
+  min-width: 40px;
+  text-align: center;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.vt-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  padding: 0 5px;
+  color: var(--vt-text-secondary);
+  border-radius: var(--vt-radius-control);
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-search-btn:hover {
+  background: var(--vt-fill-color);
+  color: var(--vt-text-color);
+}
+
+.vt-search-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-search-close {
+  font-size: var(--vt-font-size);
+  margin-left: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-search-box {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

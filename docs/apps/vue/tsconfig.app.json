@@ -8,7 +8,12 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@virt-table/vue": ["../../../packages/vue/src/index.ts"]
+      "@virt-table/vue": ["../../../packages/vue/src/index.ts"],
+      "@virt-table/vanilla": ["../../../packages/vanilla/dist/index.d.ts"],
+      "@virt-table/vanilla/plugins": ["../../../packages/vanilla/dist/plugins/index.d.ts"],
+      "@virt-table/vanilla/plugins/*": ["../../../packages/vanilla/dist/plugins/*"],
+      "@virt-table/vanilla/components": ["../../../packages/vanilla/dist/components/index.d.ts"],
+      "@virt-table/vanilla/components/*": ["../../../packages/vanilla/dist/components/*"]
     },
     /* Linting */
     "strict": true,

@@ -1,7 +1,5 @@
 .playground-shell {
-  /* border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  padding: 16px; */
+  margin: 16px 0;
 }
 
 .playground-header {
@@ -11,50 +9,83 @@
   margin-bottom: 12px;
 }
 
+/* 加载 / 错误状态：统一的胶囊提示 */
 .status {
-  margin-bottom: 10px;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--vtd-radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--vtd-radius-full);
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .status.error {
-  color: #f53f3f;
+  color: var(--vtd-danger);
+  background: var(--vtd-danger-soft);
+  border-color: var(--vtd-danger-border);
 }
 
 .status.loading {
-  color: #165dff;
+  color: var(--vtd-primary);
+  background: var(--vtd-primary-soft);
+  border-color: var(--vtd-primary-border);
+}
+
+.status.loading::before {
+  animation: vtd-pulse 1s var(--vtd-ease) infinite;
 }
 
 .status.warning {
-  color: #ff7d00;
+  color: var(--vtd-warning);
+  background: var(--vtd-warning-soft);
+  border-color: var(--vtd-warning-border);
 }
 
-.micro-container {
-  /* min-height: 240px;
-  border: 1px dashed var(--vp-c-divider);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px; */
+@keyframes vtd-pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .event-log {
-  border-top: 1px solid var(--vp-c-divider);
+  margin-top: 16px;
+  border-top: 1px solid var(--vtd-border);
   padding-top: 12px;
 }
 
 .event-log h4 {
   margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .event-log ul {
   margin: 0;
   padding-left: 20px;
+  font-size: 13px;
+  color: var(--vtd-text-2);
 }
 
 .content-container {
   margin: 0 !important;
+  max-width: unset !important;
 }
 
-h1 {
+/* 仅作用于文档正文，避免影响首页 hero 等布局组件 */
+.VPDoc h1 {
   letter-spacing: -0.02em;
   line-height: 40px;
   font-size: 32px;
@@ -64,6 +95,357 @@ h1 {
   margin-bottom: 12px;
 }
 
-html, body {
-  overscroll-behavior: none;
+/* ---- full-width layout: sidebars pinned, content adaptive ---- */
+:root {
+  --vp-layout-max-width: 100%;
+}
+
+.VPContent.has-sidebar {
+  padding-left: var(--vp-sidebar-width, 272px) !important;
+  padding-right: 0 !important;
+}
+
+.VPDoc {
+  padding: 0 32px !important;
+}
+
+.VPDoc .container {
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+.VPDoc .content {
+  max-width: 100% !important;
+}
+
+.VPDoc .aside {
+  max-width: 224px;
+  padding-left: 16px;
+}
+
+@media (min-width: 1280px) {
+  .VPContent.has-sidebar {
+    padding-right: 0 !important;
+  }
+}
+
+@media (min-width: 1440px) {
+  .VPSidebar {
+    /* padding-left: 16px !important; */
+    width: var(--vp-sidebar-width, 272px) !important;
+  }
+
+  .VPContent.has-sidebar {
+    padding-left: var(--vp-sidebar-width, 272px) !important;
+  }
+}
+
+/* ===========================================================================
+   [data-vp-example] — replaces .vp-doc on example pages,
+   provides all vp-doc styles EXCEPT table rules so demos stay clean.
+   =========================================================================== */
+
+/* ---- Headings ----
+   同样带 `:not(.playground-shell *)`：demo 里的说明文字用了 h3/h4，
+   不加限定会被文档站的标题排版（h2 那条还带 border-top + 48px 上边距）改掉 */
+[data-vp-example] h1:not(.playground-shell *),
+[data-vp-example] h2:not(.playground-shell *),
+[data-vp-example] h3:not(.playground-shell *),
+[data-vp-example] h4:not(.playground-shell *),
+[data-vp-example] h5:not(.playground-shell *),
+[data-vp-example] h6:not(.playground-shell *) {
+  position: relative;
+  font-weight: 600;
+  outline: none;
+}
+
+[data-vp-example] h1:not(.playground-shell *) {
+  letter-spacing: -0.02em;
+  line-height: 40px;
+  font-size: 28px;
+}
+
+[data-vp-example] h2:not(.playground-shell *) {
+  margin: 48px 0 16px;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 24px;
+  letter-spacing: -0.02em;
+  line-height: 32px;
+  font-size: 24px;
+}
+
+[data-vp-example] h3:not(.playground-shell *) {
+  margin: 32px 0 0;
+  letter-spacing: -0.01em;
+  line-height: 28px;
+  font-size: 20px;
+}
+
+[data-vp-example] .header-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin-left: -0.87em;
+  font-weight: 500;
+  user-select: none;
+  opacity: 0;
+  text-decoration: none;
+  transition: color 0.25s, opacity 0.25s;
+}
+
+[data-vp-example] .header-anchor:before {
+  content: var(--vp-header-anchor-symbol);
+}
+
+[data-vp-example] h1:hover .header-anchor,
+[data-vp-example] h2:hover .header-anchor,
+[data-vp-example] h3:hover .header-anchor,
+[data-vp-example] h4:hover .header-anchor {
+  opacity: 1;
+}
+
+[data-vp-example] h2 .header-anchor {
+  top: 24px;
+}
+
+@media (min-width: 768px) {
+  [data-vp-example] h1:not(.playground-shell *) {
+    letter-spacing: -0.02em;
+    line-height: 40px;
+    font-size: 32px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   下面这些裸元素规则一律带 `:not(.playground-shell *)`
+
+   `.playground-shell` 是 PlaygroundHost.vue 的根节点，里面是 qiankun 同文档挂载的
+   demo —— 那是组件的地盘，文档正文样式一律不得越界。少了这个限定，
+   `p{line-height:28px}` 会撑开单元格里的 <p>、`a{underline}` 会命中 vt-link demo 的
+   <a>、`code{padding:3px 6px}` 会命中任何在单元格里渲染 <code> 的 demo。
+
+   复杂 `:not()` 与下方 inline code 那条已在用的 selector-list 形式 `:not()` 同属
+   Selectors 4，同一批浏览器落地（Chrome 88 / Firefox 84 / Safari 16.4），无新增基线。
+   --------------------------------------------------------------------------- */
+
+/* ---- Paragraph & inline ---- */
+[data-vp-example] p:not(.playground-shell *),
+[data-vp-example] summary:not(.playground-shell *) {
+  margin: 16px 0;
+}
+
+[data-vp-example] p:not(.playground-shell *) {
+  line-height: 28px;
+}
+
+[data-vp-example] a:not(.playground-shell *) {
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.25s, opacity 0.25s;
+}
+
+[data-vp-example] a:hover:not(.playground-shell *) {
+  color: var(--vp-c-brand-2);
+}
+
+[data-vp-example] strong:not(.playground-shell *) {
+  font-weight: 600;
+}
+
+/* ---- Lists ---- */
+[data-vp-example] ul:not(.playground-shell *),
+[data-vp-example] ol:not(.playground-shell *) {
+  padding-left: 1.25rem;
+  margin: 16px 0;
+}
+
+[data-vp-example] ul:not(.playground-shell *) {
+  list-style: disc;
+}
+
+[data-vp-example] ol:not(.playground-shell *) {
+  list-style: decimal;
+}
+
+[data-vp-example] li + li:not(.playground-shell *) {
+  margin-top: 8px;
+}
+
+/* ---- HR ---- */
+[data-vp-example] hr:not(.playground-shell *) {
+  margin: 16px 0;
+  border: none;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+/* ---- Code blocks ---- */
+[data-vp-example] div[class*='language-'],
+[data-vp-example] .vp-block {
+  position: relative;
+  margin: 16px -24px;
+  background-color: var(--vp-code-block-bg);
+  overflow-x: auto;
+  transition: background-color 0.5s;
+}
+
+@media (min-width: 640px) {
+  [data-vp-example] div[class*='language-'],
+  [data-vp-example] .vp-block {
+    border-radius: var(--vtd-radius-lg);
+    margin: 16px 0;
+  }
+}
+
+[data-vp-example] [class*='language-'] pre,
+[data-vp-example] [class*='language-'] code {
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  word-wrap: normal;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+  -ms-hyphens: none;
+  hyphens: none;
+}
+
+[data-vp-example] [class*='language-'] pre {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 20px 0;
+  background: transparent;
+  overflow-x: auto;
+}
+
+[data-vp-example] [class*='language-'] code {
+  display: block;
+  padding: 0 24px;
+  width: fit-content;
+  min-width: 100%;
+  line-height: var(--vp-code-line-height);
+  font-size: var(--vp-code-font-size);
+  color: var(--vp-code-block-color);
+  transition: color 0.5s;
+}
+
+[data-vp-example] [class*='language-'] > button.copy {
+  direction: ltr;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  border: 1px solid var(--vp-code-copy-code-border-color);
+  border-radius: var(--vtd-radius-md);
+  width: 40px;
+  height: 40px;
+  background-color: var(--vp-code-copy-code-bg);
+  opacity: 0;
+  cursor: pointer;
+  background-image: var(--vp-icon-copy);
+  background-position: 50%;
+  background-size: 20px;
+  background-repeat: no-repeat;
+  transition: border-color 0.25s, background-color 0.25s, opacity 0.25s;
+}
+
+[data-vp-example] [class*='language-']:hover > button.copy,
+[data-vp-example] [class*='language-'] > button.copy:focus {
+  opacity: 1;
+}
+
+[data-vp-example] [class*='language-'] > button.copy:hover,
+[data-vp-example] [class*='language-'] > button.copy.copied {
+  border-color: var(--vp-code-copy-code-hover-border-color);
+  background-color: var(--vp-code-copy-code-hover-bg);
+}
+
+[data-vp-example] [class*='language-'] > button.copy.copied,
+[data-vp-example] [class*='language-'] > button.copy:hover.copied {
+  border-radius: 0 var(--vtd-radius-md) var(--vtd-radius-md) 0;
+  background-color: var(--vp-code-copy-code-hover-bg);
+  background-image: var(--vp-icon-copied);
+}
+
+[data-vp-example] [class*='language-'] > button.copy.copied::before,
+[data-vp-example] [class*='language-'] > button.copy:hover.copied::before {
+  position: relative;
+  top: -1px;
+  transform: translateX(calc(-100% - 1px));
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid var(--vp-code-copy-code-hover-border-color);
+  border-right: 0;
+  border-radius: var(--vtd-radius-md) 0 0 var(--vtd-radius-md);
+  padding: 0 10px;
+  width: fit-content;
+  height: 40px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vp-code-copy-code-active-text);
+  background-color: var(--vp-code-copy-code-hover-bg);
+  white-space: nowrap;
+  content: var(--vp-code-copy-copied-text-content);
+}
+
+[data-vp-example] [class*='language-'] > span.lang {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  z-index: 2;
+  font-size: 12px;
+  font-weight: 500;
+  user-select: none;
+  color: var(--vp-code-lang-color);
+  transition: color 0.4s, opacity 0.4s;
+}
+
+[data-vp-example] [class*='language-']:hover > button.copy + span.lang,
+[data-vp-example] [class*='language-'] > button.copy:focus + span.lang {
+  opacity: 0;
+}
+
+/* ---- Inline code ---- */
+[data-vp-example] :not(pre, h1, h2, h3, h4, h5, h6) > code:not(.playground-shell *) {
+  font-size: var(--vp-code-font-size);
+  color: var(--vp-code-color);
+}
+
+[data-vp-example] :not(pre) > code:not(.playground-shell *) {
+  border-radius: var(--vtd-radius-sm);
+  padding: 3px 6px;
+  background-color: var(--vp-code-bg);
+  transition: color 0.25s, background-color 0.5s;
+}
+
+/* ---- Custom block overrides (details etc.) ---- */
+[data-vp-example] .custom-block {
+  margin: 16px 0;
+}
+
+[data-vp-example] .custom-block p {
+  margin: 8px 0;
+  line-height: 24px;
+}
+
+[data-vp-example] .custom-block p:first-child {
+  margin: 0;
+}
+
+[data-vp-example] .custom-block div[class*='language-'] {
+  margin: 8px 0;
+  border-radius: var(--vtd-radius-lg);
+}
+
+[data-vp-example] .custom-block div[class*='language-'] code {
+  font-weight: 400;
+  background-color: transparent;
 }

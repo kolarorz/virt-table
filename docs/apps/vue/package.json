@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host --port 8102 --strictPort",
+    "dev": "vite --host --port 7902 --strictPort",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
     "@faker-js/faker": "^10.3.0",
+    "element-plus": "^2.13.7",
     "vue": "^3.5.25"
   },
   "devDependencies": {

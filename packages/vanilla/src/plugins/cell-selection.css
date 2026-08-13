@@ -1,0 +1,15 @@
+/* ==========================================================================
+ * vtCellSelection 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量。
+ * `vtKeyboardNav` 复用同一个 class 作为焦点框（它 inject 本插件的选区服务）。
+ * ========================================================================== */
+.vt-cell-selection-overlay {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-cell-selection-bg);
+  pointer-events: none;
+  z-index: 3;
+}

@@ -2,10 +2,11 @@ import { computed } from 'vue';
 import { useRoute, useData, withBase } from 'vitepress';
 
 export type Framework = 'vanilla' | 'vue' | 'react' ;
-export type ModuleName = 'guide' | 'examples' | 'api';
+/** 顶部导航的四个模块，顺序即导航顺序（`ai` 夹在指南与示例之间） */
+export type ModuleName = 'guide' | 'ai' | 'examples' | 'api';
 
 const FRAMEWORKS: Framework[] = ['vanilla', 'vue', 'react'];
-const MODULES: ModuleName[] = ['guide', 'examples', 'api'];
+const MODULES: ModuleName[] = ['guide', 'ai', 'examples', 'api'];
 
 export const FRAMEWORK_LABELS: Record<Framework, string> = {
   vanilla: 'Vanilla',
@@ -24,9 +25,10 @@ export const FRAMEWORK_ICONS: Record<Framework, string> = {
  * Uses withBase() to prepend the configured base path (e.g. /virt-table/).
  */
 const MODULE_ENTRY: Record<ModuleName, string> = {
-  guide: 'started',
+  guide: 'index',
+  ai: 'index',
   examples: 'basic/basic',
-  api: 'api',
+  api: 'index',
 };
 
 export function getModuleLink(fw: Framework, mod: ModuleName): string {

@@ -10,6 +10,14 @@
     "forceConsistentCasingInFileNames": true,
     "paths": {
       "@virt-table/vanilla": ["./packages/vanilla/src/index.ts"],
+      "@virt-table/vanilla/plugins": ["./packages/vanilla/src/plugins/index.ts"],
+      "@virt-table/vanilla/plugins/*": ["./packages/vanilla/src/plugins/*"],
+      "@virt-table/vanilla/components": ["./packages/vanilla/src/components/index.ts"],
+      // 单元格组件**只有 barrel 一个 JS 入口**：它们共用 `components.css`
+      // （`shared.ts` 统一引），按组件拆入口拆不出对应的 CSS，所以 vanilla 的
+      // `exports` 里也没有 `./components/*`。这里刻意不配通配，免得 monorepo 内
+      // 能 import 的路径发到 npm 上却是 404。`vt-filter-builder` 是唯一例外
+      // （400+ 行 CSS 单独成 chunk），需要时按真实路径显式加。
       "@virt-table/react": ["./packages/react/src/index.ts"],
       "@virt-table/vue": ["./packages/vue/src/index.ts"]
     }

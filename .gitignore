@@ -1,7 +1,32 @@
 node_modules
 dist
 .DS_Store
+
+# pnpm 的内容寻址缓存。仓库里这份是误提交进来的（见 ee2c169），
+# 忽略只能防止继续长大，已入库的 792 个文件需要另外 `git rm -r --cached`。
+.pnpm-store
+
+# 构建产物
 docs/.vitepress/cache
 docs/.vitepress/dist
-apps/*/dist
-apps/*/.vite
+docs/apps/*/dist
+docs/apps/*/.vite
+# 三端 demo 构建到这里（CI 每次部署都会重新构建，不该入库）
+docs/public/micro-apps
+
+# vitepress 每次启动都会在 config 旁边落一个临时的编译产物
+docs/.vitepress/*.timestamp-*
+
+# `npm pack` / `pnpm pack` 的产物
+*.tgz
+
+# tsc 误 emit 到源码目录的声明文件残留。
+#
+# 不只是碍眼：`packages/vanilla/vite.config.ts` 扫 `src/plugins/*.ts` 当构建入口，
+# `.d.ts` 同时满足「以 .ts 结尾」和「不以 .test.ts 结尾」，于是 `search.d.ts` 会变成
+# 一个叫 `plugins/search.d` 的入口，把 `search.css` 的产物名带成 `search.d.css`
+# —— `exports` 里的 `./plugins/*.css` 就此 404。入口过滤那边也加了 `.d.ts` 排除，
+# 两道一起防复发。
+#
+# 注意：类型级断言用的 `*.test-d.ts` 不匹配这条规则（后缀是 `-d.ts` 而非 `.d.ts`）。
+packages/*/src/**/*.d.ts

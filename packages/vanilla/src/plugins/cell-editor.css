@@ -1,0 +1,59 @@
+/* ==========================================================================
+ * vtCellEditor 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量。
+ * 注：校验相关的 `.vt-comp-input--invalid` / `.vt-cell--invalid` 留在核心
+ *     （`validator` 与 `validateAll()` 是核心能力，内置编辑器组件也在用）。
+ * ========================================================================== */
+.vt-cell-cover {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  background: var(--vt-bg);
+  border: 2px solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  box-shadow:
+    var(--vt-shadow-md),
+    0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-cell-cover > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+ * 裸模式（列上 `editorChrome: false`）
+ *
+ * 默认那套外观建立在一个隐式契约上：**浮层画边框和背景，编辑器组件退化成纯内容层**。
+ * 内置 `vt-*` 遵守它（`.vt-comp-input` 自己 `border: none; background: transparent`）。
+ *
+ * 第三方组件库不可能知道这个约定，它自带一整套外观 —— 静态边框、`.is-focus` 加深、
+ * error 变红、hover 变色。叠上浮层的边框就是两层框，而且 `> * { height: 100% }` 会把
+ * 组件从它自己的 size（如 el-input--small 的 24px）拉满，激活前后高度对不上。
+ *
+ * 所以这里让浮层退成纯定位层：
+ *   - 去掉全部边框与 focus 环，外观完全交给组件自己（连交互态一起）
+ *   - 不强拉高度，组件保持自己的 size 并垂直居中，和查看态严丝合缝
+ *   - **背景保留**：浮层得盖住底下那一格的查看态，组件比单元格窄或矮时靠它兜底
+ *   - 补上和 `.vt-td` 相同的水平内边距：浮层的 rect 是**整个 td**（含 td 的内边距，见
+ *     插件里的 `position()`），不补的话激活瞬间内容会往左跳一个 padding
+ *
+ * 这三条都**只在裸模式里生效**。放到 `.vt-cell-cover` 基类上会波及全部内置编辑器：
+ * 输入区凭空窄一个 padding，`VtTextarea` 的 cover 浮层和 `VtAutocomplete` 的建议列表
+ * （这两个没传 `geometry`，默认拿 anchor 当几何基准）宽度还会跟着缩、位置跟着偏。
+ * ========================================================================== */
+.vt-cell-cover--bare {
+  /* `border: none` 而不是把基类的 border 换成 inset shadow —— inset 阴影会被有背景色的
+     子元素盖掉（`.vt-comp-input--invalid` 就带 `background !important`），而这里本来就
+     不要边框，直接归零最干净，也不占盒模型 */
+  border: none;
+  box-shadow: none;
+  padding: 0 var(--vt-cell-padding-x);
+}
+
+.vt-cell-cover--bare > * {
+  height: auto;
+}

@@ -1,0 +1,171 @@
+/* ==========================================================================
+ * 通用面板 / 面板项样式（多方共享，非单个插件私有）
+ *
+ * 使用方：vtColumnFilter（列头筛选下拉）、vtColumnPanel（列设置面板）、
+ *         VtFilterBuilder（表格外部的 AND/OR 条件构建器）。
+ *
+ * 这些使用方各自 `@import './_panel.css'` 把本文件**内联**进自己的 CSS，
+ * 而不是在 JS 里 import —— 这样每个插件的 CSS 产物都是自包含的（用户只需引
+ * 一个文件），也不会因为共享模块被提成 hash 命名的公共 chunk。同时引入多份时
+ * 规则完全相同，重复无副作用。
+ *
+ * 依赖核心 `core.css`：`--vt-*` 变量、`vt-pop-in` keyframes、
+ * `.vt-filter-checkbox`（与核心勾选框共用规则）。
+ * ========================================================================== */
+.vt-filter-panel {
+  position: absolute;
+  z-index: 30;
+  min-width: 172px;
+  overflow: hidden;
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-panel);
+  box-shadow: var(--vt-shadow-lg);
+  color: var(--vt-text-color);
+  animation: vt-pop-in var(--vt-transition) var(--vt-ease);
+}
+
+.vt-filter-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vt-scrollbar-thumb) var(--vt-scrollbar-track);
+}
+
+/* 自定义滚动条：与核心表体（`.vt-client`）同款，变量来自 core.css */
+.vt-filter-list::-webkit-scrollbar {
+  width: var(--vt-scrollbar-size);
+  height: var(--vt-scrollbar-size);
+}
+
+.vt-filter-list::-webkit-scrollbar-track {
+  background: var(--vt-scrollbar-track);
+}
+
+.vt-filter-list::-webkit-scrollbar-thumb {
+  background-color: var(--vt-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full);
+  background-clip: padding-box;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-filter-list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vt-scrollbar-thumb-hover);
+}
+
+/* 注：动效降级不用在这里重写 —— 用到本文件的面板一律 `ctx.rootEl.appendChild`，
+ * 核心 `index.css` 里 `prefers-reduced-motion` 那条 `.vt-root *` 已经覆盖到。 */
+
+.vt-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--vt-radius-md);
+  cursor: pointer;
+  font-size: var(--vt-font-size-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-filter-item:hover {
+  background: var(--vt-fill-color);
+}
+
+.vt-filter-item-group {
+  font-weight: var(--vt-font-weight-semibold);
+}
+
+.vt-filter-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+  background: var(--vt-fill-color-light);
+}
+
+.vt-filter-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  font-weight: var(--vt-font-weight-medium);
+  padding: 5px 12px;
+  border-radius: var(--vt-radius-control);
+  color: var(--vt-text-secondary);
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-filter-btn:hover {
+  color: var(--vt-text-color);
+  background: var(--vt-fill-color-hover);
+}
+
+.vt-filter-btn:active {
+  transform: translateY(0.5px);
+}
+
+.vt-filter-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-filter-btn--primary {
+  color: var(--vt-text-inverse);
+  background: var(--vt-color-primary);
+}
+
+.vt-filter-btn--primary:hover {
+  color: var(--vt-text-inverse);
+  background: var(--vt-color-primary-hover);
+}
+
+.vt-filter-btn--primary:active {
+  background: var(--vt-color-primary-active);
+}
+
+/* 富筛选输入 */
+.vt-filter-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  margin: 6px 0;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  outline: none;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-filter-text::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-filter-text:hover {
+  border-color: var(--vt-color-primary-hover);
+}
+
+.vt-filter-text:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-filter-range {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 2px;
+}

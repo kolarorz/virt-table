@@ -1,0 +1,54 @@
+/* ==========================================================================
+ * vtColumnFilter 插件样式（表头漏斗图标 + 下拉面板）
+ *
+ * 面板本体走共享的 _panel.css；下面只有漏斗图标与表头留白。
+ * 与排序图标的组合选择器（`.vt-th--sortable.vt-th--filterable` /
+ * `.vt-th--filterable .vt-sort-icon`）也放这里：`vt-th--filterable` 只由本插件
+ * 添加，且两条规则特异度都高于核心里被覆盖的那条，与文件加载顺序无关。
+ * ========================================================================== */
+@import './_panel.css';
+
+.vt-th--sortable.vt-th--filterable {
+  padding-right: 48px !important;
+}
+
+.vt-th--filterable .vt-sort-icon {
+  right: 26px;
+}
+
+.vt-th--filterable {
+  position: relative;
+  padding-right: 28px !important;
+}
+
+.vt-filter-icon {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vt-icon-btn-size);
+  height: var(--vt-icon-btn-size);
+  cursor: pointer;
+  color: var(--vt-text-disabled);
+  border-radius: var(--vt-radius-control);
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+}
+
+.vt-filter-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.vt-filter-icon:hover {
+  color: var(--vt-color-primary);
+  background: var(--vt-color-primary-soft);
+}
+
+.vt-filter-icon--active {
+  color: var(--vt-color-primary);
+}

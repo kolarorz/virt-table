@@ -1,3 +1,10 @@
+/* ==========================================================================
+ * Playground(demo)外观 —— 与 virt-table / 文档站同一套设计语言
+ *
+ * 令牌策略：`--dm-*` 优先取文档站的 `--vtd-*`（因此暗色自动跟随文档站主题
+ * 切换），独立预览 micro-app 时回落到内置亮色值。改色只需改文档站的
+ * `--vtd-primary`，或在此覆盖 `--dm-*`。
+ * ========================================================================== */
 #root,
 #react-root {
   margin: 0;
@@ -5,3 +12,311 @@
   min-height: 180px;
 }
 
+:root {
+  --dm-primary: var(--vtd-primary, #2563eb);
+  --dm-primary-hover: var(--vtd-primary-hover, #3b82f6);
+  --dm-primary-active: var(--vtd-primary-active, #1d4ed8);
+  --dm-primary-soft: var(--vtd-primary-soft, rgb(37 99 235 / 12%));
+  --dm-danger: var(--vtd-danger, #ef4444);
+  --dm-warning: var(--vtd-warning, #f59e0b);
+  --dm-success: var(--vtd-success, #10b981);
+
+  --dm-bg: var(--vtd-bg, #ffffff);
+  --dm-bg-soft: var(--vtd-bg-soft, #f8fafc);
+  --dm-bg-mute: var(--vtd-bg-mute, #f1f3f7);
+  --dm-border: var(--vtd-border, #e8ecf1);
+  --dm-border-strong: var(--vtd-border-strong, #d5dae2);
+  --dm-text: var(--vtd-text, #1f2937);
+  --dm-text-2: var(--vtd-text-2, #5b6472);
+  --dm-text-3: var(--vtd-text-3, #98a2b3);
+  --dm-text-inverse: #ffffff;
+
+  --dm-radius-sm: var(--vtd-radius-sm, 4px);
+  --dm-radius-md: var(--vtd-radius-md, 6px);
+  --dm-radius-lg: var(--vtd-radius-lg, 10px);
+  --dm-shadow-sm: var(--vtd-shadow-sm, 0 1px 2px rgb(15 23 42 / 8%));
+  --dm-shadow-md: var(--vtd-shadow-md, 0 4px 12px rgb(15 23 42 / 10%));
+  --dm-ease: var(--vtd-ease, cubic-bezier(0.32, 0.72, 0, 1));
+  --dm-transition: var(--vtd-transition, 200ms);
+}
+
+/* ---- 演示区容器 ---- */
+.demo-wrapper {
+  margin: 0;
+}
+
+.demo-title {
+  margin: 0 0 12px;
+  color: var(--dm-text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.status-text {
+  margin-bottom: 12px;
+  padding: 5px 10px;
+  display: inline-block;
+  border: 1px solid var(--dm-border);
+  border-radius: var(--dm-radius-md);
+  background: var(--dm-bg-soft);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dm-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 示例顶部的一段说明文字（块级） */
+.demo-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dm-text-2);
+}
+
+.demo-hint b {
+  color: var(--dm-text);
+  font-weight: 600;
+}
+
+/* 工具栏里跟随按钮的辅助说明 / 结果回显（行内） */
+.demo-note {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dm-text-3);
+}
+
+.demo-container {
+}
+
+/* border 模式的表格自带外框 + 圆角，容器不再重复描边 */
+.demo-container:has(> .vt-root--border) {
+}
+
+.virt-table-container {
+  width: 640px;
+  height: 600px;
+  border: 1px solid var(--dm-border);
+  border-radius: var(--dm-radius-lg);
+  overflow: auto;
+  background: var(--dm-bg);
+  box-shadow: var(--dm-shadow-md);
+}
+
+.virt-table-container.hide-native-scrollbar {
+  scrollbar-width: none;
+}
+
+.virt-table-container.hide-native-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ---- 工具栏 ---- */
+.virt-table-controls {
+  margin-bottom: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 工具栏内的行内表单项：label 与其控件左右排布 */
+.virt-table-controls > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dm-text-2);
+  white-space: nowrap;
+}
+
+.virt-table-control-group {
+  display: flex;
+  flex-direction: column;
+  margin-right: 12px;
+}
+
+.virt-table-control-group label {
+  font-size: 12px;
+  color: var(--dm-text-2);
+  margin-bottom: 5px;
+}
+
+.virt-table-control-group input,
+.virt-table-controls input:not([type='checkbox'], [type='radio']),
+.virt-table-controls select {
+  padding: 6px 10px;
+  border: 1px solid var(--dm-border-strong);
+  border-radius: var(--dm-radius-md);
+  background: var(--dm-bg);
+  color: var(--dm-text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition:
+    border-color var(--dm-transition) linear,
+    box-shadow var(--dm-transition) linear;
+}
+
+.virt-table-control-group input {
+  width: 100px;
+  margin-bottom: 6px;
+}
+
+.virt-table-control-group input:focus,
+.virt-table-controls input:focus,
+.virt-table-controls select:focus {
+  border-color: var(--dm-primary);
+  box-shadow: 0 0 0 3px var(--dm-primary-soft);
+}
+
+/* ---- 按钮 ----
+   .virt-table-btn 单独使用为次级（描边）按钮；
+   加 -primary / -success / -warning / -danger 得到实心强调按钮。
+   工具栏内的原生 <button> 用 :where() 兜底同款外观（特异性 0，
+   不会盖过显式写在按钮上的 -primary 等修饰类） */
+.virt-table-btn,
+:where(.virt-table-controls) button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--dm-border-strong);
+  border-radius: var(--dm-radius-md);
+  background: var(--dm-bg);
+  color: var(--dm-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  box-shadow: var(--dm-shadow-sm);
+  transition:
+    background-color var(--dm-transition) linear,
+    border-color var(--dm-transition) linear,
+    color var(--dm-transition) linear,
+    box-shadow var(--dm-transition) var(--dm-ease);
+}
+
+.virt-table-btn:hover,
+:where(.virt-table-controls) button:hover {
+  background: var(--dm-bg-mute);
+  border-color: var(--dm-border-strong);
+  color: var(--dm-text);
+}
+
+.virt-table-btn:active,
+:where(.virt-table-controls) button:active {
+  transform: translateY(0.5px);
+}
+
+.virt-table-btn:focus-visible,
+:where(.virt-table-controls) button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--dm-primary-soft);
+}
+
+.virt-table-btn:disabled,
+:where(.virt-table-controls) button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.virt-table-btn-primary,
+.virt-table-btn-success,
+.virt-table-btn-warning,
+.virt-table-btn-danger,
+.virt-table-btn-secondary {
+  border-color: transparent;
+  color: var(--dm-text-inverse);
+}
+
+.virt-table-btn-primary,
+.virt-table-btn-primary:hover {
+  color: var(--dm-text-inverse);
+}
+
+.virt-table-btn-primary {
+  background: var(--dm-primary);
+}
+
+.virt-table-btn-primary:hover {
+  background: var(--dm-primary-hover);
+  border-color: transparent;
+}
+
+.virt-table-btn-primary:active {
+  background: var(--dm-primary-active);
+}
+
+.virt-table-btn-secondary {
+  background: var(--dm-bg-mute);
+  color: var(--dm-text);
+  border-color: var(--dm-border);
+}
+
+.virt-table-btn-secondary:hover {
+  background: var(--dm-border);
+  color: var(--dm-text);
+}
+
+.virt-table-btn-success,
+.virt-table-btn-success:hover {
+  color: var(--dm-text-inverse);
+}
+
+.virt-table-btn-success {
+  background: var(--dm-success);
+}
+
+.virt-table-btn-success:hover {
+  background: var(--dm-success);
+  border-color: transparent;
+  filter: brightness(1.08);
+}
+
+.virt-table-btn-warning,
+.virt-table-btn-warning:hover {
+  color: var(--dm-text-inverse);
+}
+
+.virt-table-btn-warning {
+  background: var(--dm-warning);
+}
+
+.virt-table-btn-warning:hover {
+  background: var(--dm-warning);
+  border-color: transparent;
+  filter: brightness(1.08);
+}
+
+.virt-table-btn-danger,
+.virt-table-btn-danger:hover {
+  color: var(--dm-text-inverse);
+}
+
+.virt-table-btn-danger {
+  background: var(--dm-danger);
+}
+
+.virt-table-btn-danger:hover {
+  background: var(--dm-danger);
+  border-color: transparent;
+  filter: brightness(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .virt-table-btn,
+  :where(.virt-table-controls) button {
+    transition: none;
+  }
+
+  .virt-table-btn:active,
+  :where(.virt-table-controls) button:active {
+    transform: none;
+  }
+}

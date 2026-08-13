@@ -1,0 +1,1066 @@
+/* ==========================================================================
+ * 首页（docs/index.md）专用样式层
+ *
+ * 全部挂在 `.vth-*`（vt-home）命名空间下，令牌复用 design.css 的 `--vtd-*`，
+ * 所以换主色 / 切暗色不需要动这个文件。
+ *
+ * 【硬约束：本文件不得出现能命中裸 table / thead / tbody / tr / th / td 的选择器】
+ * 首页 hero 里嵌的是**真实的 VirtTable 实例**（components/home/HomeLiveTable.vue），
+ * 它渲染真正的 `<table>/<th>/<td>`。裸元素选择器会静默命中它并破坏虚拟滚动的行高账本
+ * —— 与示例页那条隔离契约是同一个坑，由 styles-contract.test.ts 守着。
+ *
+ * 首页正文容器刻意**没有** `.vp-doc`（index.md 的 `markdownStyles: false`），
+ * 否则 VitePress 自带的 `.vp-doc table`(0,1,1) 会压过 `.vt-table`(0,1,0)。
+ * ========================================================================== */
+
+.vth {
+  --vth-max: 1200px;
+  --vth-gutter: 24px;
+
+  padding-bottom: 8px;
+  color: var(--vtd-text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+@media (min-width: 768px) {
+  .vth {
+    --vth-gutter: 40px;
+  }
+}
+
+.vth-wrap {
+  margin: 0 auto;
+  width: 100%;
+  max-width: var(--vth-max);
+  padding: 0 var(--vth-gutter);
+}
+
+/* ==========================================================================
+ * 通用：区块 / 标题 / 卡片
+ * ========================================================================== */
+.vth-sec {
+  padding: 56px 0;
+  border-top: 1px solid var(--vtd-border-light);
+}
+
+@media (min-width: 768px) {
+  .vth-sec {
+    padding: 76px 0;
+  }
+}
+
+.vth-sec--soft {
+  background: var(--vtd-bg-soft);
+}
+
+.vth-eyebrow {
+  margin: 0 0 10px;
+  color: var(--vtd-primary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vth-h2 {
+  margin: 0;
+  font-size: clamp(24px, 3.4vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.vth-lead {
+  margin: 14px 0 0;
+  max-width: min(68ch, 100%);
+  color: var(--vtd-text-2);
+  font-size: 15px;
+}
+
+.vth-sec-head {
+  margin-bottom: 32px;
+}
+
+.vth-card {
+  padding: 20px 22px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-xl);
+  background: var(--vtd-bg);
+  transition:
+    border-color var(--vtd-transition) var(--vtd-ease),
+    box-shadow var(--vtd-transition) var(--vtd-ease),
+    transform var(--vtd-transition) var(--vtd-ease);
+}
+
+.vth-card:hover {
+  border-color: var(--vtd-primary-border);
+  box-shadow: var(--vtd-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ==========================================================================
+ * Hero
+ * ========================================================================== */
+.vth-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 44px 0 56px;
+}
+
+/* 背景：主色径向光晕 + 极淡网格，暗示「表格」而不画表格 */
+.vth-hero::before,
+.vth-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.vth-hero::before {
+  background:
+    radial-gradient(
+      620px 380px at 12% -8%,
+      var(--vtd-primary-soft),
+      transparent 70%
+    ),
+    radial-gradient(520px 340px at 88% 4%, rgb(34 211 238 / 12%), transparent 70%);
+}
+
+.vth-hero::after {
+  background-image:
+    linear-gradient(to right, var(--vtd-border-light) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--vtd-border-light) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(680px 420px at 30% 0%, #000 0%, transparent 72%);
+  opacity: 0.85;
+}
+
+/**
+ * `minmax(0, 1fr)` 而不是 `1fr` —— 后者的最小值是 **min-content**，而右列那张卡里装的是
+ * 一张 1746px 宽的真实表格（`.vth-live` 的 `overflow: hidden` 并不会削减 min-content
+ * 贡献）。写 `1fr` 时窄屏下这一列会被撑到 1686px，整页出现横向滚动。
+ * 同理 `> *` 要 `min-width: 0`，否则 flex/grid 子项自己又把最小宽度顶回去。
+ */
+.vth-hero-inner {
+  position: relative;
+  display: grid;
+  gap: 40px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.vth-hero-inner > * {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .vth-hero-inner {
+    gap: 48px;
+    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  }
+}
+
+.vth-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.vth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--vtd-primary-border);
+  border-radius: var(--vtd-radius-full);
+  background: var(--vtd-primary-softer);
+  color: var(--vtd-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vth-badge--plain {
+  border-color: var(--vtd-border);
+  background: var(--vtd-bg-soft);
+  color: var(--vtd-text-2);
+}
+
+.vth-title {
+  margin: 0;
+  font-size: clamp(40px, 6.2vw, 62px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+}
+
+.vth-title-name {
+  background: linear-gradient(
+    120deg,
+    var(--vtd-primary) 18%,
+    var(--vtd-primary-hover) 58%,
+    #22d3ee
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.vth-title-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: clamp(21px, 2.9vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--vtd-text);
+}
+
+.vth-tagline {
+  margin: 20px 0 0;
+  max-width: min(46ch, 100%);
+  color: var(--vtd-text-2);
+  font-size: 16.5px;
+  line-height: 1.65;
+}
+
+.vth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.vth-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: var(--vtd-radius-lg);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--vtd-transition) var(--vtd-ease),
+    border-color var(--vtd-transition) var(--vtd-ease),
+    transform var(--vtd-transition-fast) var(--vtd-ease);
+}
+
+.vth-btn:active {
+  transform: translateY(1px);
+}
+
+.vth-btn--brand {
+  background: var(--vtd-primary);
+  color: var(--vtd-text-inverse);
+}
+
+.vth-btn--brand:hover {
+  background: var(--vtd-primary-hover);
+}
+
+.vth-btn--alt {
+  border-color: var(--vtd-border);
+  background: var(--vtd-bg);
+  color: var(--vtd-text);
+}
+
+.vth-btn--alt:hover {
+  border-color: var(--vtd-primary);
+  color: var(--vtd-primary);
+}
+
+/* 安装命令 */
+.vth-install {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 10px 14px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-lg);
+  background: var(--vtd-bg-soft);
+  font-family: var(--vp-font-family-mono);
+  font-size: 13.5px;
+  overflow-x: auto;
+}
+
+.vth-install-dollar {
+  color: var(--vtd-text-3);
+  user-select: none;
+}
+
+.vth-install-cmd {
+  color: var(--vtd-text);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+ * Hero 右侧：真实表格卡片 + HUD
+ * ========================================================================== */
+.vth-live {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-xl);
+  background: var(--vtd-bg-elevated);
+  box-shadow: var(--vtd-shadow-lg);
+  overflow: hidden;
+}
+
+.vth-live-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--vtd-border-light);
+  background: var(--vtd-bg-soft);
+}
+
+.vth-live-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.vth-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--vtd-radius-full);
+  background: var(--vtd-border-strong);
+}
+
+.vth-live-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--vtd-text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.vth-live-tools {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.vth-live-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-md);
+  background: var(--vtd-bg);
+  color: var(--vtd-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--vtd-transition-fast) linear,
+    color var(--vtd-transition-fast) linear;
+}
+
+.vth-live-btn:hover {
+  border-color: var(--vtd-primary);
+  color: var(--vtd-primary);
+}
+
+.vth-live-btn[aria-pressed='true'] {
+  border-color: var(--vtd-primary-border);
+  background: var(--vtd-primary-soft);
+  color: var(--vtd-primary);
+}
+
+/* 表格宿主：给一个确定高度，虚拟滚动依赖它 */
+.vth-live-host {
+  position: relative;
+  height: 396px;
+}
+
+.vth-live-host > .vth-live-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.vth-live-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--vtd-bg);
+  color: var(--vtd-text-3);
+  font-size: 13px;
+}
+
+.vth-live-spin {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--vtd-border-strong);
+  border-top-color: var(--vtd-primary);
+  border-radius: var(--vtd-radius-full);
+  animation: vth-spin 700ms linear infinite;
+}
+
+@keyframes vth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* HUD：实时读数 */
+.vth-hud {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--vtd-border-light);
+  background: var(--vtd-bg-soft);
+}
+
+@media (min-width: 560px) {
+  .vth-hud {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.vth-hud-cell {
+  padding: 11px 14px;
+  min-width: 0;
+}
+
+/* 2 列时第 3、4 格还要补上边框；4 列时只需要格与格之间的竖线 */
+.vth-hud-cell:nth-child(2n) {
+  border-left: 1px solid var(--vtd-border-light);
+}
+
+.vth-hud-cell:nth-child(n + 3) {
+  border-top: 1px solid var(--vtd-border-light);
+}
+
+@media (min-width: 560px) {
+  .vth-hud-cell + .vth-hud-cell {
+    border-left: 1px solid var(--vtd-border-light);
+  }
+
+  .vth-hud-cell:nth-child(n + 3) {
+    border-top: 0;
+  }
+}
+
+.vth-hud-k {
+  color: var(--vtd-text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.vth-hud-v {
+  margin-top: 3px;
+  color: var(--vtd-text);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.vth-hud-v small {
+  margin-left: 2px;
+  color: var(--vtd-text-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.vth-hud-v--live {
+  color: var(--vtd-success);
+}
+
+.vth-live-hint {
+  margin: 12px 2px 0;
+  color: var(--vtd-text-3);
+  font-size: 12.5px;
+}
+
+/* ==========================================================================
+ * 合并 × 双向虚拟化专区（components/home/HomeMergeTable.vue）
+ *
+ * 又一个真实 VirtTable 实例，比 hero 那张更宽（约 2.6k px、25 个叶子列）。
+ * HUD 直接复用上面的 `.vth-hud-*`，这里只补差异：标签更长、值里有两段读数。
+ * ========================================================================== */
+.vth-mg {
+  display: flex;
+  flex-direction: column;
+  /**
+   * `overflow: hidden` + `min-width: 0` 是**功能性的**，不是修边角。
+   * 里面那张表的 min-content 宽度是全部列宽之和（约 2.6k px），会顺着容器链往上顶，
+   * 把整页撑出横向滚动条 —— hero 踩过同一个坑（见上方 `.vth-hero-inner` 的注释）。
+   */
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-xl);
+  background: var(--vtd-bg-elevated);
+  box-shadow: var(--vtd-shadow-lg);
+}
+
+.vth-mg-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--vtd-border-light);
+  background: var(--vtd-bg-soft);
+}
+
+.vth-mg-title {
+  color: var(--vtd-text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.vth-mg-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.vth-mg-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-md);
+  background: var(--vtd-bg);
+  color: var(--vtd-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--vtd-transition-fast) linear,
+    color var(--vtd-transition-fast) linear;
+}
+
+.vth-mg-btn:hover {
+  border-color: var(--vtd-primary);
+  color: var(--vtd-primary);
+}
+
+.vth-mg-btn[aria-pressed='true'] {
+  border-color: var(--vtd-primary-border);
+  background: var(--vtd-primary-soft);
+  color: var(--vtd-primary);
+}
+
+/**
+ * 宿主高度比 hero 的 396px 高一档：要让「2 万行长段的重锚格」与「每 20 行一条的
+ * 跨列汇总带」同屏出现，可视数据区至少得装下十几行。
+ */
+.vth-mg-host {
+  position: relative;
+  height: 520px;
+}
+
+.vth-mg-host > .vth-mg-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.vth-mg-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--vtd-bg);
+  color: var(--vtd-text-3);
+  font-size: 13px;
+}
+
+.vth-mg-spin {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--vtd-border-strong);
+  border-top-color: var(--vtd-primary);
+  border-radius: var(--vtd-radius-full);
+  animation: vth-spin 700ms linear infinite;
+}
+
+/* 第一格的标签与读数都比 hero 长，放开 nowrap 并把字号收一点 */
+.vth-mg-hud .vth-hud-k {
+  white-space: normal;
+}
+
+.vth-mg-hud .vth-hud-v {
+  font-size: 16px;
+}
+
+.vth-mg-arrow,
+.vth-mg-sep {
+  margin: 0 5px;
+  color: var(--vtd-text-3);
+  font-weight: 600;
+}
+
+.vth-mg-hint {
+  margin: 12px 2px 0;
+  color: var(--vtd-text-3);
+  font-size: 12.5px;
+}
+
+.vth-mg-hint b {
+  color: var(--vtd-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.vth-mg-notes {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.vth-mg-note-h {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.vth-mg-note-p {
+  margin: 8px 0 0;
+  color: var(--vtd-text-2);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+/* ==========================================================================
+ * 指标带
+ * ========================================================================== */
+/* 六项刻意排成 2×3 / 3×2 —— auto-fit 在 1200px 版心下会算出 5 列，第 6 项孤零零掉一行 */
+.vth-metrics {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-xl);
+  background: var(--vtd-border);
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .vth-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.vth-metric {
+  padding: 22px;
+  background: var(--vtd-bg);
+}
+
+.vth-metric-v {
+  color: var(--vtd-text);
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.vth-metric-v em {
+  margin-left: 2px;
+  color: var(--vtd-text-3);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.vth-metric-k {
+  margin-top: 8px;
+  color: var(--vtd-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.vth-metric-note {
+  margin-top: 5px;
+  color: var(--vtd-text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.vth-foot {
+  margin: 18px 2px 0;
+  color: var(--vtd-text-3);
+  font-size: 12.5px;
+}
+
+.vth-foot a {
+  color: var(--vtd-text-2);
+  text-decoration: underline;
+  text-decoration-color: var(--vtd-border-strong);
+  text-underline-offset: 2px;
+}
+
+.vth-foot a:hover {
+  color: var(--vtd-primary);
+}
+
+/* ==========================================================================
+ * 机制卡（问题 → 做法 → 实测）
+ * ========================================================================== */
+.vth-mech {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.vth-mech-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--vtd-radius-md);
+  background: var(--vtd-primary-soft);
+  color: var(--vtd-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vth-mech-h {
+  margin: 12px 0 0;
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.vth-mech-p {
+  margin: 8px 0 0;
+  color: var(--vtd-text-2);
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+/**
+ * 正文里的行内 `code` 胶囊。**逐处列举，不写 `.vth code`** —— 那样会把
+ * `.vth-code`（代码块的 `<pre><code>`）整块套上胶囊底色。
+ *
+ * `overflow-wrap: anywhere` 是必要的：`synthesizeScrollGesture` 这类长标识符在
+ * 300px 宽的卡片里无处可断，不给它断点就会把卡片撑破、连带整页出现横向滚动。
+ */
+.vth-mech-p code,
+.vth-eng-p code,
+.vth-cap-list code,
+.vth-mg-note-p code,
+.vth-sec-head .vth-lead code,
+.vth-cta code {
+  padding: 1px 5px;
+  border-radius: var(--vtd-radius-sm);
+  background: var(--vtd-primary-softer);
+  color: var(--vtd-primary);
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.vth-mech-proof {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--vtd-border);
+  color: var(--vtd-text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.vth-mech-proof b {
+  color: var(--vtd-success);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+ * 三端代码切换
+ * ========================================================================== */
+.vth-fw {
+  display: grid;
+  gap: 24px;
+  /* 同 .vth-hero-inner：代码块虽然自带 overflow-x，min-content 仍会撑破网格列 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 960px) {
+  .vth-fw {
+    gap: 40px;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+}
+
+.vth-fw-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.vth-fw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-lg);
+  background: var(--vtd-bg);
+  color: var(--vtd-text-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--vtd-transition-fast) linear,
+    color var(--vtd-transition-fast) linear,
+    background-color var(--vtd-transition-fast) linear;
+}
+
+.vth-fw-tab:hover {
+  border-color: var(--vtd-border-strong);
+}
+
+.vth-fw-tab[aria-selected='true'] {
+  border-color: var(--vtd-primary-border);
+  background: var(--vtd-primary-soft);
+  color: var(--vtd-primary);
+}
+
+.vth-fw-tab-ico {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.vth-code {
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-lg);
+  background: var(--vtd-bg-soft);
+  box-shadow: var(--vtd-shadow-sm);
+  color: var(--vtd-text);
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  line-height: 1.72;
+  overflow-x: auto;
+}
+
+.vth-fw-note {
+  margin: 14px 2px 0;
+  color: var(--vtd-text-3);
+  font-size: 12.5px;
+}
+
+.vth-fw-note a {
+  color: var(--vtd-primary);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+ * 能力全景
+ * ========================================================================== */
+/* 四组能力：窄屏 1 列 → 2 列 → 宽屏一行摆齐。auto-fit 在 1200px 版心下只算出 3 列，
+   第 4 组会孤零零掉一行 */
+.vth-caps {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 640px) {
+  .vth-caps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .vth-caps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.vth-cap-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.vth-cap-count {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: var(--vtd-radius-full);
+  background: var(--vtd-bg-mute);
+  color: var(--vtd-text-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.vth-cap-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vth-cap-list li {
+  position: relative;
+  padding: 4px 0 4px 17px;
+  color: var(--vtd-text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.vth-cap-list li::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--vtd-radius-full);
+  background: var(--vtd-primary);
+  opacity: 0.55;
+}
+
+/* ==========================================================================
+ * 工程可信度
+ * ========================================================================== */
+.vth-eng {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+}
+
+.vth-eng-v {
+  color: var(--vtd-primary);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.vth-eng-h {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.vth-eng-p {
+  margin: 7px 0 0;
+  color: var(--vtd-text-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 分层图 */
+.vth-layers {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vth-layer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 13px 18px;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-lg);
+  background: var(--vtd-bg);
+}
+
+.vth-layer-n {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vtd-primary);
+}
+
+.vth-layer-d {
+  color: var(--vtd-text-2);
+  font-size: 13px;
+}
+
+.vth-layer-t {
+  margin-left: auto;
+  color: var(--vtd-text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vth-layer--core {
+  border-color: var(--vtd-primary-border);
+  background: var(--vtd-primary-softer);
+}
+
+/* ==========================================================================
+ * CTA
+ * ========================================================================== */
+.vth-cta {
+  padding: 60px 0 20px;
+  border-top: 1px solid var(--vtd-border-light);
+  text-align: center;
+}
+
+.vth-cta .vth-h2 {
+  margin-bottom: 12px;
+}
+
+.vth-cta .vth-lead {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.vth-cta .vth-actions {
+  justify-content: center;
+  margin-top: 26px;
+}
+
+/* ==========================================================================
+ * 降级动画
+ * ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .vth-card,
+  .vth-btn {
+    transition: none;
+  }
+
+  .vth-card:hover,
+  .vth-btn:active {
+    transform: none;
+  }
+
+  .vth-live-spin {
+    animation: none;
+  }
+}

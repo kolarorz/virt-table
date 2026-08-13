@@ -1,11 +1,57 @@
 {
   "name": "@virt-table/react",
   "version": "0.0.1",
-  "description": "React wrapper for @virt-table/vanilla virtual table",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "description": "virt-table 的 React 封装：行列双向虚拟化的高性能表格组件",
+  "type": "module",
+  "license": "MIT",
+  "author": "keno-lee <keno.lee@foxmail.com>",
+  "homepage": "https://keno-lee.github.io/virt-table/react/guide/started",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keno-lee/virt-table.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/keno-lee/virt-table/issues"
+  },
+  "keywords": [
+    "react",
+    "react-table",
+    "virtual-table",
+    "virtual-scroll",
+    "virtualization",
+    "table",
+    "datagrid",
+    "data-grid",
+    "grid",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json && node ../../scripts/emit-dcts.mjs dist",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
   "dependencies": {
-    "@virt-table/vanilla": "workspace:*"
+    "@virt-table/vanilla": "workspace:^"
   },
   "peerDependencies": {
     "react": ">=18",
@@ -13,10 +59,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
-  },
-  "scripts": {},
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "@types/react-dom": "^19.0.0",
+    "vite": "^7.3.1"
+  }
 }

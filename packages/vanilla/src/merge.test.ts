@@ -9,6 +9,12 @@ import {
   calcMergeRowCount,
   buildMergeCoveredSet,
   planRowCells,
+  buildMergeRuns,
+  findMergeRun,
+  clampMergeRunsToWindow,
+  mergeRunsInRange,
+  buildMergesFromSpan,
+  type MergeRuns,
 } from './merge';
 
 /** Sum of colSpan across all cells in a plan */
@@ -1622,4 +1628,291 @@ describe('generateMergeCells vs vue-virt-grid reference', () => {
       // 不用 expect 断言，仅对比记录差异（vue-virt-grid 原版有已知 bug）
     });
   }
+});
+
+// ============================================================================
+// 按值自动合并：分段索引 + 窗口裁剪
+// ============================================================================
+
+/** 从一列值造分段索引，默认 colIndex 0 */
+function runsOf(values: unknown[], opts: Partial<Parameters<typeof buildMergeRuns>[0]> = {}): MergeRuns {
+  return buildMergeRuns({
+    colIndex: 0,
+    rowCount: values.length,
+    keyOf: (i) => values[i],
+    ...opts,
+  });
+}
+
+const startsOf = (runs: MergeRuns): number[] => Array.from(runs.starts);
+
+describe('buildMergeRuns', () => {
+  it('相邻同值成段', () => {
+    // A A A B B C
+    expect(startsOf(runsOf(['A', 'A', 'A', 'B', 'B', 'C']))).toEqual([0, 3, 5]);
+  });
+
+  it('全同值 → 一段；全不同 → 每行一段', () => {
+    expect(startsOf(runsOf(['A', 'A', 'A', 'A']))).toEqual([0]);
+    expect(startsOf(runsOf(['A', 'B', 'C']))).toEqual([0, 1, 2]);
+  });
+
+  it('空列表不报错', () => {
+    const runs = runsOf([]);
+    expect(startsOf(runs)).toEqual([]);
+    expect(findMergeRun(runs, 0)).toBeNull();
+  });
+
+  it('undefined 键表示该行不参与合并，且会打断两侧', () => {
+    // A A undefined A A —— 中间那行自成一段，前后两段不能连起来
+    expect(startsOf(runsOf(['A', 'A', undefined, 'A', 'A']))).toEqual([0, 2, 3]);
+  });
+
+  it('null 与 0 / 空串都是正常键，不当作「不参与」', () => {
+    expect(startsOf(runsOf([null, null, 0, 0, '', '']))).toEqual([0, 2, 4]);
+  });
+
+  it('键用 !== 比较，不做深比较（对象每行都断）', () => {
+    const a = { v: 1 };
+    expect(startsOf(runsOf([{ v: 1 }, { v: 1 }]))).toEqual([0, 1]);
+    expect(startsOf(runsOf([a, a]))).toEqual([0]);
+  });
+
+  it('isBoundary 强制断开（分组行 / 树层级变化）', () => {
+    // 值全同，但第 2 行是结构边界
+    const runs = runsOf(['A', 'A', 'A', 'A'], { isBoundary: (i) => i === 2 });
+    expect(startsOf(runs)).toEqual([0, 2]);
+  });
+
+  it('maxSpan 限制单段跨度', () => {
+    // 7 行同值，maxSpan=3 → 0-2 / 3-5 / 6
+    expect(startsOf(runsOf(Array(7).fill('A'), { maxSpan: 3 }))).toEqual([0, 3, 6]);
+  });
+
+  it('maxSpan 为 0 或负数视为不限', () => {
+    expect(startsOf(runsOf(Array(5).fill('A'), { maxSpan: 0 }))).toEqual([0]);
+  });
+});
+
+describe('findMergeRun', () => {
+  const runs = runsOf(['A', 'A', 'A', 'B', 'B', 'C']);
+
+  it('段内任意一行都能定位到同一段', () => {
+    expect(findMergeRun(runs, 0)).toEqual({ start: 0, end: 2 });
+    expect(findMergeRun(runs, 1)).toEqual({ start: 0, end: 2 });
+    expect(findMergeRun(runs, 2)).toEqual({ start: 0, end: 2 });
+    expect(findMergeRun(runs, 3)).toEqual({ start: 3, end: 4 });
+    expect(findMergeRun(runs, 5)).toEqual({ start: 5, end: 5 });
+  });
+
+  it('越界返回 null', () => {
+    expect(findMergeRun(runs, -1)).toBeNull();
+    expect(findMergeRun(runs, 6)).toBeNull();
+  });
+
+  it('大数据下二分定位正确（抽样对比线性扫描）', () => {
+    const rows = 100_000;
+    const big = buildMergeRuns({
+      colIndex: 0,
+      rowCount: rows,
+      keyOf: (i) => (i / 7) | 0,
+    });
+    for (const r of [0, 1, 6, 7, 50_000, 99_998, 99_999]) {
+      const got = findMergeRun(big, r)!;
+      const expectStart = ((r / 7) | 0) * 7;
+      expect(got.start).toBe(expectStart);
+      expect(got.end).toBe(Math.min(expectStart + 6, rows - 1));
+    }
+  });
+});
+
+describe('clampMergeRunsToWindow', () => {
+  it('段完整落在窗口内 → 原样产出', () => {
+    const runs = runsOf(['A', 'A', 'A', 'B', 'B', 'C']);
+    expect(clampMergeRunsToWindow([runs], 0, 5)).toEqual([
+      { rowIndex: 0, colIndex: 0, rowspan: 3, colspan: 1 },
+      { rowIndex: 3, colIndex: 0, rowspan: 2, colspan: 1 },
+      // 单行段 C 不产出
+    ]);
+  });
+
+  it('跨窗口上沿的段被抬到窗口起点（重锚）', () => {
+    // 0-99 一整段，窗口 50-60 → 起点抬到 50，跨度 11
+    const runs = runsOf(Array(100).fill('A'));
+    expect(clampMergeRunsToWindow([runs], 50, 60)).toEqual([
+      { rowIndex: 50, colIndex: 0, rowspan: 11, colspan: 1 },
+    ]);
+  });
+
+  it('产出的起点永不早于窗口起点（这是虚拟滚动不被打穿的前提）', () => {
+    const runs = runsOf(Array(50_000).fill('A'));
+    for (const begin of [0, 1, 999, 25_000, 49_990]) {
+      const cells = clampMergeRunsToWindow([runs], begin, begin + 20);
+      for (const c of cells) {
+        expect(c.rowIndex).toBeGreaterThanOrEqual(begin);
+        expect(c.rowIndex + c.rowspan - 1).toBeLessThanOrEqual(begin + 20);
+      }
+    }
+  });
+
+  it('裁剪后只剩 1 行的段不产出', () => {
+    const runs = runsOf(['A', 'A', 'A', 'A']);
+    // 窗口只盖到段的最后一行
+    expect(clampMergeRunsToWindow([runs], 3, 3)).toEqual([]);
+    // 窗口盖到段的最后两行 → 跨度 2
+    expect(clampMergeRunsToWindow([runs], 2, 3)).toEqual([
+      { rowIndex: 2, colIndex: 0, rowspan: 2, colspan: 1 },
+    ]);
+  });
+
+  it('窗口超出数据尾部时按 rowCount 收口', () => {
+    const runs = runsOf(Array(10).fill('A'));
+    expect(clampMergeRunsToWindow([runs], 5, 999)).toEqual([
+      { rowIndex: 5, colIndex: 0, rowspan: 5, colspan: 1 },
+    ]);
+  });
+
+  it('多列各自独立产出，colIndex 跟着列走', () => {
+    const colA = runsOf(['A', 'A', 'B', 'B'], { colIndex: 0 });
+    const colB = runsOf(['X', 'Y', 'Y', 'Y'], { colIndex: 2 });
+    expect(clampMergeRunsToWindow([colA, colB], 0, 3)).toEqual([
+      { rowIndex: 0, colIndex: 0, rowspan: 2, colspan: 1 },
+      { rowIndex: 2, colIndex: 0, rowspan: 2, colspan: 1 },
+      { rowIndex: 1, colIndex: 2, rowspan: 3, colspan: 1 },
+    ]);
+  });
+
+  it('空段列表 / 反向窗口不报错', () => {
+    expect(clampMergeRunsToWindow([], 0, 10)).toEqual([]);
+    expect(clampMergeRunsToWindow([runsOf(['A', 'A'])], 5, 1)).toEqual([]);
+  });
+
+  it('产出数量以窗口大小为界，与数据规模无关', () => {
+    // 50 万行，每 2 行一段；窗口 40 行 → 至多 20 个
+    const runs = buildMergeRuns({
+      colIndex: 0,
+      rowCount: 500_000,
+      keyOf: (i) => (i / 2) | 0,
+    });
+    expect(clampMergeRunsToWindow([runs], 250_000, 250_039).length).toBeLessThanOrEqual(20);
+  });
+
+  it('与 getMergeInfo 契合：裁剪结果能被现有管线正确解释', () => {
+    const runs = runsOf(Array(100).fill('A'));
+    const cells = clampMergeRunsToWindow([runs], 50, 60);
+    // 段首是 primary，段内其余行查到的是同一个合并块
+    expect(getMergeInfo(cells, 50, 0)).toEqual(cells[0]);
+    expect(getMergeInfo(cells, 55, 0)).toEqual(cells[0]);
+    expect(getMergeInfo(cells, 60, 0)).toEqual(cells[0]);
+    expect(getMergeInfo(cells, 61, 0)).toBeNull();
+  });
+});
+
+describe('mergeRunsInRange', () => {
+  it('返回真实段起止，不做裁剪（与 clamp 版对照）', () => {
+    const runs = runsOf(Array(100).fill('A'));
+    // 窗口 50-60：clamp 版抬到 50、跨度 11；真实版给完整的 0-99
+    expect(clampMergeRunsToWindow([runs], 50, 60)).toEqual([
+      { rowIndex: 50, colIndex: 0, rowspan: 11, colspan: 1 },
+    ]);
+    expect(mergeRunsInRange([runs], 50, 60)).toEqual([
+      { rowIndex: 0, colIndex: 0, rowspan: 100, colspan: 1 },
+    ]);
+  });
+
+  it('只返回与区间有交集的段', () => {
+    // 0-2 / 3-5 / 6-8 三段
+    const runs = runsOf(['A', 'A', 'A', 'B', 'B', 'B', 'C', 'C', 'C']);
+    expect(mergeRunsInRange([runs], 4, 4)).toEqual([
+      { rowIndex: 3, colIndex: 0, rowspan: 3, colspan: 1 },
+    ]);
+    expect(mergeRunsInRange([runs], 2, 3).map((m) => m.rowIndex)).toEqual([0, 3]);
+  });
+
+  it('跨度 1 的段不产出', () => {
+    expect(mergeRunsInRange([runsOf(['A', 'B', 'C'])], 0, 2)).toEqual([]);
+  });
+
+  it('反向区间 / 空段返回空', () => {
+    expect(mergeRunsInRange([runsOf(['A', 'A'])], 5, 1)).toEqual([]);
+    expect(mergeRunsInRange([], 0, 10)).toEqual([]);
+  });
+});
+
+describe('buildMergesFromSpan', () => {
+  const list = Array.from({ length: 6 }, (_, i) => ({ id: i, v: 'v' + i }));
+  const cols = [{ key: 'a' }, { key: 'b' }, { key: 'c' }];
+
+  it('el-table 的经典写法：偶数行首列纵向合并 2 行', () => {
+    // 对齐 el-table 文档里的例子：primary 返回 [2,1]，被覆盖的格返回 [0,0]
+    expect(
+      buildMergesFromSpan(list, cols, ({ rowIndex, columnIndex }) => {
+        if (columnIndex !== 0) return;
+        return rowIndex % 2 === 0 ? [2, 1] : [0, 0];
+      }),
+    ).toEqual([
+      { rowIndex: 0, colIndex: 0, rowspan: 2, colspan: 1 },
+      { rowIndex: 2, colIndex: 0, rowspan: 2, colspan: 1 },
+      { rowIndex: 4, colIndex: 0, rowspan: 2, colspan: 1 },
+    ]);
+  });
+
+  it('对象写法与数组写法等价', () => {
+    const arr = buildMergesFromSpan(list, cols, ({ rowIndex }) =>
+      rowIndex === 0 ? [2, 3] : undefined,
+    );
+    const obj = buildMergesFromSpan(list, cols, ({ rowIndex }) =>
+      rowIndex === 0 ? { rowspan: 2, colspan: 3 } : undefined,
+    );
+    expect(arr).toEqual(obj);
+    // 三列都会被问到，但只有 columnIndex 0 产出（1、2 也返回了同样的跨度）
+    expect(arr.length).toBe(3);
+  });
+
+  it('跳过 [1,1]（普通格）与 [0,0]（被覆盖）', () => {
+    expect(buildMergesFromSpan(list, cols, () => [1, 1])).toEqual([]);
+    expect(buildMergesFromSpan(list, cols, () => [0, 0])).toEqual([]);
+    expect(buildMergesFromSpan(list, cols, () => undefined)).toEqual([]);
+    expect(buildMergesFromSpan(list, cols, () => null)).toEqual([]);
+  });
+
+  it('负数 / NaN 跨度视为不产出', () => {
+    expect(buildMergesFromSpan(list, cols, () => [-1, 2])).toEqual([]);
+    expect(buildMergesFromSpan(list, cols, () => [NaN, 2])).toEqual([]);
+  });
+
+  it('横向合并（colspan）也支持 —— 这正是 mergeKey 表达不了的部分', () => {
+    expect(
+      buildMergesFromSpan(list, cols, ({ rowIndex, columnIndex }) =>
+        rowIndex === 1 && columnIndex === 0 ? [1, 3] : undefined,
+      ),
+    ).toEqual([{ rowIndex: 1, colIndex: 0, rowspan: 1, colspan: 3 }]);
+  });
+
+  it('ctx 带上 row / column / 两个索引', () => {
+    const seen: string[] = [];
+    buildMergesFromSpan(list.slice(0, 2), cols.slice(0, 2), (ctx) => {
+      seen.push(`${ctx.rowIndex},${ctx.columnIndex},${(ctx.row as any).v},${(ctx.column as any).key}`);
+    });
+    expect(seen).toEqual(['0,0,v0,a', '0,1,v0,b', '1,0,v1,a', '1,1,v1,b']);
+  });
+
+  it('columnIndex 与 MergeCell.colIndex 同坐标系（可直接喂 getMergeInfo）', () => {
+    const merges = buildMergesFromSpan(list, cols, ({ rowIndex, columnIndex }) =>
+      rowIndex === 0 && columnIndex === 2 ? [3, 1] : undefined,
+    );
+    expect(getMergeInfo(merges, 1, 2)).toEqual(merges[0]);
+    expect(getMergeInfo(merges, 1, 0)).toBeNull();
+  });
+
+  it('空列表 / 空列不报错', () => {
+    expect(buildMergesFromSpan([], cols, () => [2, 2])).toEqual([]);
+    expect(buildMergesFromSpan(list, [], () => [2, 2])).toEqual([]);
+  });
+
+  it('回调次数正好是 行数 × 列数（代价可预期）', () => {
+    let n = 0;
+    buildMergesFromSpan(list, cols, () => { n++; });
+    expect(n).toBe(list.length * cols.length);
+  });
 });

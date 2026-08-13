@@ -1,0 +1,53 @@
+/* ==========================================================================
+ * vtAIColumn 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量。
+ * 按项目约定：不写字面颜色/圆角/间距，一律引用变量。
+ * ========================================================================== */
+
+/* 计算中：文字压淡 + 一道扫光，表示这格还在长 */
+.vt-ai-cell--computing {
+  color: var(--vt-text-placeholder);
+  position: relative;
+  overflow: hidden;
+}
+
+.vt-ai-cell--computing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vt-fill-color) 50%,
+    transparent 100%
+  );
+  opacity: 0.7;
+  animation: vt-ai-cell-sweep 1.4s var(--vt-ease) infinite;
+  pointer-events: none;
+}
+
+.vt-ai-cell--error {
+  color: var(--vt-color-danger);
+  cursor: pointer;
+}
+
+.vt-ai-cell--error:hover {
+  text-decoration: underline;
+}
+
+@keyframes vt-ai-cell-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-ai-cell--computing::after {
+    animation: none !important;
+    opacity: 0;
+  }
+}

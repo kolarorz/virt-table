@@ -1,4 +1,3 @@
-import React from 'react';
 import { VirtTableReact, type ReactTableColumn } from '@virt-table/react';
 import { faker } from '@faker-js/faker';
 
@@ -53,20 +52,20 @@ const columns: ReactTableColumn<Row>[] = [
     key: 'name',
     title: '姓名',
     width: 180,
-    render: (value) => <span style={{ fontWeight: 500, color: '#1d2129' }}>{value}</span>,
+    render: ({ value }) => <span style={{ fontWeight: 500, color: '#1d2129' }}>{value}</span>,
   },
   { key: 'age', title: '年龄', width: 80 },
   {
     key: 'city',
     title: '城市',
     width: 120,
-    render: (value) => <CityTag text={value} />,
+    render: ({ value }) => <CityTag text={value} />,
   },
   {
     key: 'score',
     title: '分数',
     width: 160,
-    render: (value) => <RatingBar value={value} />,
+    render: ({ value }) => <RatingBar value={value} />,
   },
 ];
 
@@ -80,7 +79,7 @@ export default function RenderDemo() {
       <div style={{ width: 800, height: 500, border: '1px solid #e5e6eb' }}>
         <VirtTableReact
           columns={columns}
-          options={{ list, itemKey: 'id', itemPreSize: 40, buffer: 4, border: true }}
+          options={{ list, itemKey: 'id', estimatedSize: 40, buffer: 4, border: true }}
         />
       </div>
     </div>

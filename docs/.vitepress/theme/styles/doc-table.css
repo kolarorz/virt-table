@@ -1,0 +1,115 @@
+/* ==========================================================================
+ * Markdown 表格 —— 与 virt-table 同一外观，但与它的样式彻底隔离
+ *
+ * 【为什么单独成文件】
+ * demo 是 qiankun **同文档挂载**（非 iframe，见 components/PlaygroundHost.vue），
+ * 而 virt-table 渲染的是真实的 `<table>/<thead>/<th>/<td>/<tr>`。
+ * 只要文档样式里出现裸元素选择器（`.vp-doc table` 之类），就会无差别命中
+ * demo 里的表格 —— 那不是"外观微调"，而是功能性损坏：
+ *   · `display: block` 会顶掉 `.vt-table{display:table}` → colgroup 列宽体系与
+ *     固定列 sticky 参照系一起崩
+ *   · `padding: 8px 16px` 会顶掉 `--vt-cell-padding-*`(9px/14px) → 行高与虚拟滚动
+ *     的账本 `estimatedSize` 脱钩 → 滚动偏移漂移、表头错位
+ *   · `tr:nth-child(2n)` 按 **DOM 下标**产生斑马纹，而虚拟滚动下 DOM 下标 ≠ 逻辑行号
+ *     → 条纹随滚动跳动闪烁
+ * 所以文档表格样式一律挂在自己的 class 上，本文件**不得出现任何能命中裸
+ * table/thead/tbody/tr/th/td 的选择器**（有契约测试守着，见 styles-contract.test.ts）。
+ *
+ * 【`.vtd-table` 从哪来】
+ * .vitepress/config.ts 的 `markdown.config` 覆盖了 markdown-it 的 table_open。
+ * 在 md 里手写 HTML 表格的话拿不到这个 class，需要自己写 `class="vtd-table"`。
+ *
+ * 【为什么选择器要重复写两遍 class】
+ * `.vtd-table.vtd-table` 的特异性是 (0,2,0)，用来稳压 VitePress 自带的
+ * theme-default/styles/components/vp-doc.css：
+ *   `.vp-doc table` / `.vp-doc tr` / `.vp-doc th, .vp-doc td` / `.vp-doc th`  (0,1,1)
+ *   `.vp-doc tr:nth-child(2n)`                                              (0,2,1)
+ * 单写一遍是 (0,1,0)，**会输给 (0,1,1)**。重复一遍后全线取胜，不必赌 CSS 源序。
+ * （另有一条改不掉的 base.css `table{border-collapse:collapse}`，特异性 (0,0,1)，
+ *   任何 class 选择器都压得住，无害。）
+ *
+ * 【为什么不带 .vp-doc / [data-vp-example] 前缀】
+ * 示例页会被 Layout.vue 摘掉 `.vp-doc`（那是隔离 VitePress 自带 vp-doc 规则的唯一
+ * 手段，别删）。不带前缀，两种页面才都能生效 —— 这正是示例页表格此前完全失样的原因。
+ * ========================================================================== */
+
+.vtd-table.vtd-table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 20px 0;
+  overflow-x: auto;
+  border: 1px solid var(--vtd-border);
+  border-radius: var(--vtd-radius-lg);
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--vtd-shadow-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--vtd-border-strong) transparent;
+}
+
+.vtd-table.vtd-table th,
+.vtd-table.vtd-table td {
+  border: none;
+  border-bottom: 1px solid var(--vtd-border-light);
+  padding: 9px 14px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.vtd-table.vtd-table thead th {
+  position: relative;
+  background: var(--vtd-bg-soft);
+  border-bottom: 1px solid var(--vtd-border-strong);
+  color: var(--vtd-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* 去掉 VitePress 默认斑马纹，换成更轻的一档 */
+.vtd-table.vtd-table tr {
+  background: transparent;
+  border-top: none;
+  transition: background-color var(--vtd-transition-fast) linear;
+}
+
+.vtd-table.vtd-table tbody tr:nth-child(2n) {
+  background: var(--vtd-stripe-bg);
+}
+
+.vtd-table.vtd-table tbody tr:hover {
+  background: var(--vtd-row-hover-bg);
+}
+
+.vtd-table.vtd-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vtd-table.vtd-table code {
+  white-space: nowrap;
+}
+
+/* ---- 滚动条（与表格同一观感，原 design.css §8 的 .vp-doc table 部分） ---- */
+.vtd-table.vtd-table::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.vtd-table.vtd-table::-webkit-scrollbar-thumb {
+  background-color: var(--vtd-border-strong);
+  border: 2px solid transparent;
+  border-radius: var(--vtd-radius-full);
+  background-clip: padding-box;
+}
+
+.vtd-table.vtd-table::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vtd-text-3);
+}
+
+.vtd-table.vtd-table::-webkit-scrollbar-track {
+  background: transparent;
+}

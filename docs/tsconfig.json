@@ -2,8 +2,15 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node"],
-    "baseUrl": ".",
-    "paths": {}
+    /**
+     * 这里**刻意不写 `baseUrl` / `paths`** —— `@virt-table/*` 的映射统一由
+     * tsconfig.base.json 提供（继承来的 paths 按声明它的那个配置文件所在目录解析，
+     * 所以 `./packages/...` 指的是仓库根，正确）。
+     *
+     * 之前这里有一个空的 `"paths": {}`，它会把 base 的映射整个覆盖掉；首页 hero 直接
+     * import `@virt-table/vanilla` 建真实实例（theme/components/home/HomeLiveTable.vue）
+     * 之后就暴露成 TS2307 —— 那个包没装进 docs/node_modules，只有构建期 vite alias。
+     */
   },
   "include": [
     ".vitepress/**/*.ts",

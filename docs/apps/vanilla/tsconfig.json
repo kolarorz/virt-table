@@ -1,0 +1,26 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@virt-table/vanilla": ["../../../packages/vanilla/dist/index.d.ts"],
+      "@virt-table/vanilla/plugins": ["../../../packages/vanilla/dist/plugins/index.d.ts"],
+      "@virt-table/vanilla/plugins/*": ["../../../packages/vanilla/dist/plugins/*"],
+      "@virt-table/vanilla/components": ["../../../packages/vanilla/dist/components/index.d.ts"],
+      "@virt-table/vanilla/components/*": ["../../../packages/vanilla/dist/components/*"]
+    },
+    "strict": false
+  },
+  "include": ["src"]
+}

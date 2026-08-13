@@ -1,0 +1,26 @@
+{
+  // 只出类型声明（JS 产物由 vite 出）。
+  //
+  // 刻意**不** extends 根 `tsconfig.base.json`：那份里的 `paths` 把
+  // `@virt-table/vanilla` 指向 `packages/vanilla/src`，用它出声明会让产物里的类型
+  // 引用落到源码相对路径上（发出去就是死链）。这里不配 paths，走真实的包解析，
+  // 读的是 vanilla 的 `dist/index.d.ts` —— 所以**必须先构建 vanilla**，
+  // 根 `pnpm build` 已保证了这个顺序。
+  //
+  // 顺带这也让本包的声明产出成为 vanilla `exports` 映射的一道校验：子路径写错，
+  // 这一步就会报 "Cannot find module"。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    // @types/react 是 `export =` 形态，`import React from 'react'` 需要它
+    "esModuleInterop": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"]
+}

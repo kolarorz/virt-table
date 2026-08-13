@@ -1,6 +1,45 @@
-# React 指南
+# 项目介绍
 
-`@virt-table/react` 是 `@virt-table/vanilla` 的 React 封装，支持 hooks + ref 的方式调用表格实例 API。
+**virt-table** 是一个高性能虚拟表格组件库，基于原生 DOM 实现纵向与横向双维度虚拟滚动，支持合并单元格、固定列、树形/分组/展开行等高级能力。
 
-- 包名：`@virt-table/react`
-- 示例入口：[基础表格](/react/examples/basic)
+## 核心特性
+
+- **双维度虚拟滚动** — 纵向行虚拟化 + 横向列虚拟化，轻松渲染万级行列
+- **合并单元格** — 支持表头、表身、表尾的任意合并，配合 Rect 补全算法保证虚拟滚动下的正确渲染
+- **固定列** — 通过 CSS `position: sticky` 实现左右冻结列，无额外 DOM 开销
+- **树形 / 分组 / 展开行** — 灵活的数据展示方式，内部统一为扁平化列表 + 虚拟滚动
+- **单元格选区 & 剪贴板** — 类电子表格的选区拖拽、复制粘贴
+- **框架无关** — 核心基于原生 DOM，同时提供 Vue 3 和 React 适配层
+
+## 包结构
+
+```
+@virt-list/core          → 一维虚拟列表引擎（行窗口计算、尺寸测量）
+@virt-table/vanilla      → 表格核心实现（列管理、合并、固定列、横向虚拟化、选区、剪贴板）
+@virt-table/vue          → Vue 3 适配层
+@virt-table/react        → React 适配层
+```
+
+## React 适配层
+
+`@virt-table/react` 在 vanilla 核心之上提供 React 组件封装：
+
+- 列配置使用 `ReactTableColumn`，render 函数支持返回 `ReactNode`
+- 通过 `ref` 暴露表格实例方法（`VirtTableRef`）
+- 自动在 `useEffect` 中同步 `options` 变化到核心
+- 组件卸载时自动销毁内部实例
+
+## 设计理念
+
+| 层级 | 职责 | 设计考量 |
+|------|------|----------|
+| VirtListCore | 纵向滚动窗口计算 | 可复用的列表引擎，表格在其上构建 2D 能力 |
+| VirtTable (vanilla) | 表格 DOM + 算法 | 单一实现跨框架共享，避免三套代码维护虚拟化逻辑 |
+| React 适配 | 渲染桥接 | React 用户得到 JSX 渲染，核心保持命令式高性能 |
+
+## 适用场景
+
+- 大数据量表格展示（万行 × 百列）
+- 需要合并单元格的复杂报表
+- 类 Excel 的电子表格应用
+- 需要高度定制渲染的业务表格

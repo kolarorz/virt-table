@@ -18,7 +18,12 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@virt-table/react": ["../../../packages/react/src/index.ts"]
+      "@virt-table/react": ["../../../packages/react/src/index.ts"],
+      "@virt-table/vanilla": ["../../../packages/vanilla/dist/index.d.ts"],
+      "@virt-table/vanilla/plugins": ["../../../packages/vanilla/dist/plugins/index.d.ts"],
+      "@virt-table/vanilla/plugins/*": ["../../../packages/vanilla/dist/plugins/*"],
+      "@virt-table/vanilla/components": ["../../../packages/vanilla/dist/components/index.d.ts"],
+      "@virt-table/vanilla/components/*": ["../../../packages/vanilla/dist/components/*"]
     },
 
     /* Linting */

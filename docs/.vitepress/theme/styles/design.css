@@ -1,0 +1,476 @@
+/* ==========================================================================
+ * virt-table 文档站设计层
+ *
+ * 与表格组件（packages/vanilla/src/index.css）共用同一套设计语言：
+ *   同源调色板 / 同一圆角梯度 / 同一阴影梯度 / 同一动效曲线。
+ *
+ * 做法：
+ *   1. 先声明 `--vtd-*`（vt-docs）令牌，与表格的 `--vt-*` 数值一一对应；
+ *   2. 再把 VitePress 自带的 `--vp-*` 变量映射到 `--vtd-*`，
+ *      这样导航、侧栏、代码块、提示块、按钮等自带组件自动同步；
+ *   3. 最后只对少数需要额外打磨的组件写规则。
+ *
+ * 换肤：改 `--vtd-primary` 一处即可（派生色由 color-mix 推导）。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 1. 令牌（亮色）
+ * ========================================================================== */
+:root {
+  /* ---- 品牌色（与 --vt-color-primary 同源） ---- */
+  --vtd-primary: #2563eb;
+  --vtd-primary-hover: #3b82f6;
+  --vtd-primary-active: #1d4ed8;
+  --vtd-primary-soft: rgb(37 99 235 / 12%);
+  --vtd-primary-softer: rgb(37 99 235 / 6%);
+
+  /* ---- 语义色（soft = 浅底，border = 描边） ---- */
+  --vtd-danger: #ef4444;
+  --vtd-danger-soft: rgb(239 68 68 / 10%);
+  --vtd-danger-border: rgb(239 68 68 / 26%);
+  --vtd-warning: #f59e0b;
+  --vtd-warning-soft: rgb(245 158 11 / 12%);
+  --vtd-warning-border: rgb(245 158 11 / 28%);
+  --vtd-success: #10b981;
+  --vtd-success-soft: rgb(16 185 129 / 12%);
+  --vtd-primary-border: rgb(37 99 235 / 26%);
+
+  /* ---- 表面 ---- */
+  --vtd-bg: #ffffff;
+  --vtd-bg-soft: #f8fafc;
+  --vtd-bg-mute: #f1f3f7;
+  --vtd-bg-elevated: #ffffff;
+  --vtd-stripe-bg: #fafbfc;
+  --vtd-row-hover-bg: #f2f6fd;
+
+  /* ---- 边框 ---- */
+  --vtd-border: #e8ecf1;
+  --vtd-border-light: #f1f4f8;
+  --vtd-border-strong: #d5dae2;
+
+  /* ---- 文字 ---- */
+  --vtd-text: #1f2937;
+  --vtd-text-2: #5b6472;
+  --vtd-text-3: #98a2b3;
+  --vtd-text-inverse: #ffffff;
+
+  /* ---- 圆角（与表格一致） ---- */
+  --vtd-radius-sm: 4px;
+  --vtd-radius-md: 6px;
+  --vtd-radius-lg: 10px;
+  --vtd-radius-xl: 14px;
+  --vtd-radius-full: 999px;
+
+  /* ---- 阴影 ---- */
+  --vtd-shadow-rgb: 15 23 42;
+  --vtd-shadow-sm: 0 1px 2px rgb(var(--vtd-shadow-rgb) / 8%);
+  --vtd-shadow-md:
+    0 4px 12px rgb(var(--vtd-shadow-rgb) / 10%), 0 1px 3px rgb(var(--vtd-shadow-rgb) / 6%);
+  --vtd-shadow-lg:
+    0 12px 32px rgb(var(--vtd-shadow-rgb) / 14%), 0 2px 8px rgb(var(--vtd-shadow-rgb) / 8%);
+
+  /* ---- 动效 ---- */
+  --vtd-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --vtd-transition-fast: 120ms;
+  --vtd-transition: 200ms;
+}
+
+/* 派生色：改主色即整体联动 */
+@supports (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --vtd-primary-soft: color-mix(in srgb, var(--vtd-primary) 12%, transparent);
+    --vtd-primary-softer: color-mix(in srgb, var(--vtd-primary) 6%, transparent);
+    --vtd-row-hover-bg: color-mix(in srgb, var(--vtd-primary) 6%, var(--vtd-bg));
+  }
+}
+
+/* ==========================================================================
+ * 2. 令牌（暗色）
+ * ========================================================================== */
+.dark {
+  --vtd-primary: #4c8dff;
+  --vtd-primary-hover: #6ba3ff;
+  --vtd-primary-active: #3b7ce0;
+  --vtd-primary-soft: rgb(76 141 255 / 18%);
+  --vtd-primary-softer: rgb(76 141 255 / 10%);
+
+  --vtd-danger: #f87171;
+  --vtd-danger-soft: rgb(248 113 113 / 16%);
+  --vtd-danger-border: rgb(248 113 113 / 32%);
+  --vtd-warning: #fbbf24;
+  --vtd-warning-soft: rgb(251 191 36 / 16%);
+  --vtd-warning-border: rgb(251 191 36 / 32%);
+  --vtd-success: #34d399;
+  --vtd-success-soft: rgb(52 211 153 / 16%);
+  --vtd-primary-border: rgb(76 141 255 / 34%);
+
+  --vtd-bg: #17181c;
+  --vtd-bg-soft: #1e2026;
+  --vtd-bg-mute: #262931;
+  --vtd-bg-elevated: #22242b;
+  --vtd-stripe-bg: #1b1d22;
+  --vtd-row-hover-bg: #1f2532;
+
+  --vtd-border: #2e3138;
+  --vtd-border-light: #262931;
+  --vtd-border-strong: #3b4048;
+
+  --vtd-text: #e6e8ec;
+  --vtd-text-2: #a2a9b4;
+  --vtd-text-3: #7b828d;
+
+  --vtd-shadow-rgb: 0 0 0;
+  --vtd-shadow-sm: 0 1px 2px rgb(var(--vtd-shadow-rgb) / 32%);
+  --vtd-shadow-md:
+    0 4px 12px rgb(var(--vtd-shadow-rgb) / 44%), 0 1px 3px rgb(var(--vtd-shadow-rgb) / 32%);
+  --vtd-shadow-lg:
+    0 14px 36px rgb(var(--vtd-shadow-rgb) / 56%), 0 2px 8px rgb(var(--vtd-shadow-rgb) / 40%);
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .dark {
+    --vtd-primary-soft: color-mix(in srgb, var(--vtd-primary) 20%, transparent);
+    --vtd-primary-softer: color-mix(in srgb, var(--vtd-primary) 10%, transparent);
+    --vtd-row-hover-bg: color-mix(in srgb, var(--vtd-primary) 12%, var(--vtd-bg));
+  }
+}
+
+/* ==========================================================================
+ * 3. 映射到 VitePress 变量（自带组件自动同步）
+ * ========================================================================== */
+:root,
+.dark {
+  /* 品牌色 */
+  --vp-c-brand-1: var(--vtd-primary);
+  --vp-c-brand-2: var(--vtd-primary-hover);
+  --vp-c-brand-3: var(--vtd-primary-active);
+  --vp-c-brand-soft: var(--vtd-primary-soft);
+  /* 兼容旧变量名 */
+  --vp-c-brand: var(--vtd-primary);
+  --vp-c-brand-light: var(--vtd-primary-hover);
+  --vp-c-brand-dark: var(--vtd-primary-active);
+
+  /* 语义色 */
+  --vp-c-tip-1: var(--vtd-primary);
+  --vp-c-tip-soft: var(--vtd-primary-soft);
+  --vp-c-warning-1: var(--vtd-warning);
+  --vp-c-danger-1: var(--vtd-danger);
+
+  /* 表面 */
+  --vp-c-bg: var(--vtd-bg);
+  --vp-c-bg-alt: var(--vtd-bg-soft);
+  --vp-c-bg-soft: var(--vtd-bg-soft);
+  --vp-c-bg-mute: var(--vtd-bg-mute);
+  --vp-c-bg-elv: var(--vtd-bg-elevated);
+
+  /* 中性交互底色（菜单 hover、代码分组 tab 等） */
+  --vp-c-default-soft: var(--vtd-bg-mute);
+  --vp-c-gray-soft: var(--vtd-bg-mute);
+
+  /* 分隔线 */
+  --vp-c-border: var(--vtd-border-strong);
+  --vp-c-divider: var(--vtd-border);
+  --vp-c-gutter: var(--vtd-border);
+
+  /* 文字 */
+  --vp-c-text-1: var(--vtd-text);
+  --vp-c-text-2: var(--vtd-text-2);
+  --vp-c-text-3: var(--vtd-text-3);
+
+  /* 阴影 */
+  --vp-shadow-1: var(--vtd-shadow-sm);
+  --vp-shadow-2: var(--vtd-shadow-sm);
+  --vp-shadow-3: var(--vtd-shadow-md);
+  --vp-shadow-4: var(--vtd-shadow-lg);
+  --vp-shadow-5: var(--vtd-shadow-lg);
+
+  /* 字体（与表格同一字体栈） */
+  --vp-font-family-base:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+
+  /* 代码 */
+  --vp-code-block-bg: var(--vtd-bg-soft);
+  --vp-code-bg: var(--vtd-primary-softer);
+  --vp-code-color: var(--vtd-primary);
+  --vp-code-copy-code-bg: var(--vtd-bg-mute);
+  --vp-code-copy-code-hover-bg: var(--vtd-bg-mute);
+  --vp-code-copy-code-border-color: var(--vtd-border);
+  --vp-code-copy-code-hover-border-color: var(--vtd-border-strong);
+
+  /* 按钮 */
+  --vp-button-brand-bg: var(--vtd-primary);
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: var(--vtd-text-inverse);
+  --vp-button-brand-hover-bg: var(--vtd-primary-hover);
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: var(--vtd-text-inverse);
+  --vp-button-brand-active-bg: var(--vtd-primary-active);
+  --vp-button-brand-active-border: transparent;
+  --vp-button-alt-bg: var(--vtd-bg-soft);
+  --vp-button-alt-border: var(--vtd-border);
+  --vp-button-alt-hover-bg: var(--vtd-bg-mute);
+  --vp-button-alt-hover-border: var(--vtd-border-strong);
+
+  /* 首页 hero */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    120deg,
+    var(--vtd-primary) 20%,
+    var(--vtd-primary-hover) 60%,
+    #22d3ee
+  );
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    var(--vtd-primary) 30%,
+    #22d3ee
+  );
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.dark {
+  /* 暗色下代码块比页面底色略亮，层次更清楚 */
+  --vp-code-block-bg: #1b1d22;
+}
+
+/* 暗色的原生控件（滚动条 / 日期选择器等）同步 */
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+ * 4. 排版
+ * ========================================================================== */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 示例页那三条带 `:not(.playground-shell *)` —— demo 内部的标题不吃文档排版，
+   理由同 playground.css 的 Headings 段 */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+[data-vp-example] h1:not(.playground-shell *),
+[data-vp-example] h2:not(.playground-shell *),
+[data-vp-example] h3:not(.playground-shell *) {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc h2 {
+  margin-top: 40px;
+  padding-top: 22px;
+  border-top: 1px solid var(--vtd-border);
+}
+
+.vp-doc blockquote {
+  margin: 16px 0;
+  padding: 10px 16px;
+  border-left: 3px solid var(--vtd-primary);
+  border-radius: 0 var(--vtd-radius-lg) var(--vtd-radius-lg) 0;
+  background: var(--vtd-primary-softer);
+}
+
+.vp-doc blockquote > p {
+  margin: 0;
+  color: var(--vtd-text-2);
+  font-size: 14px;
+}
+
+/* ==========================================================================
+ * 5. Markdown 表格 —— 已迁至 styles/doc-table.css
+ *
+ * 【本文件不得再出现能命中裸 table / thead / tbody / tr / th / td 的选择器】
+ * 原因：demo 是 qiankun 同文档挂载，virt-table 用的是真实 <table>/<th>/<td>，
+ * `.vp-doc table` 这类选择器会连带命中它并破坏虚拟滚动的行高账本。
+ * 文档表格现在挂在自己的 `.vtd-table` 上（由 config.ts 的 markdown.config 注入），
+ * 与组件表格结构性隔离。有契约测试守着这条约束。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 6. 代码块 / 行内代码 / 提示块
+ * ========================================================================== */
+.vp-doc div[class*='language-'],
+[data-vp-example] div[class*='language-'],
+.vp-doc .vp-block,
+[data-vp-example] .vp-block {
+  border: 1px solid var(--vtd-border-light);
+  box-shadow: var(--vtd-shadow-sm);
+}
+
+@media (min-width: 640px) {
+  .vp-doc div[class*='language-'],
+  [data-vp-example] div[class*='language-'],
+  .vp-doc .vp-block,
+  [data-vp-example] .vp-block {
+    border-radius: var(--vtd-radius-lg);
+  }
+}
+
+.dark .vp-doc div[class*='language-'],
+.dark [data-vp-example] div[class*='language-'] {
+  border-color: var(--vtd-border);
+}
+
+.vp-doc [class*='language-'] > button.copy,
+[data-vp-example] [class*='language-'] > button.copy {
+  border-radius: var(--vtd-radius-md);
+}
+
+.vp-doc :not(pre) > code,
+[data-vp-example] :not(pre) > code:not(.playground-shell *) {
+  border-radius: var(--vtd-radius-sm);
+  font-weight: 500;
+}
+
+.custom-block {
+  border-radius: var(--vtd-radius-lg);
+  border-width: 1px;
+}
+
+.custom-block.details {
+  background: var(--vtd-bg-soft);
+  border-color: var(--vtd-border);
+}
+
+.custom-block summary {
+  font-weight: 600;
+}
+
+/* ==========================================================================
+ * 7. 导航 / 侧栏
+ * ========================================================================== */
+.VPNavBar:not(.home) {
+  backdrop-filter: saturate(150%) blur(10px);
+}
+
+.VPNavBar .divider-line {
+  background-color: var(--vtd-border);
+}
+
+/* 侧栏条目：胶囊态 hover / 选中 */
+.VPSidebarItem.is-link > .item > .link {
+  margin: 0 -8px;
+  padding: 0 8px;
+  border-radius: var(--vtd-radius-md);
+  transition: background-color var(--vtd-transition-fast) linear;
+}
+
+.VPSidebarItem.is-link > .item > .link:hover {
+  background: var(--vtd-bg-mute);
+}
+
+.VPSidebarItem.is-link.is-active > .item > .link {
+  background: var(--vtd-primary-soft);
+}
+
+.VPSidebarItem.is-active > .item .link .text {
+  font-weight: 600;
+}
+
+.VPSidebarItem.level-0 > .item > .text {
+  letter-spacing: 0.01em;
+}
+
+/* 大纲（右侧 aside） */
+.VPDocAsideOutline .outline-link:hover,
+.VPDocAsideOutline .outline-link.active {
+  color: var(--vtd-primary);
+}
+
+/* 上一页 / 下一页 */
+.pager-link {
+  border-radius: var(--vtd-radius-lg) !important;
+  border: 1px solid var(--vtd-border) !important;
+  transition:
+    border-color var(--vtd-transition) var(--vtd-ease),
+    box-shadow var(--vtd-transition) var(--vtd-ease),
+    transform var(--vtd-transition) var(--vtd-ease) !important;
+}
+
+.pager-link:hover {
+  border-color: var(--vtd-primary) !important;
+  box-shadow: var(--vtd-shadow-md);
+  transform: translateY(-1px);
+}
+
+/* 首页特性卡片 */
+.VPFeature {
+  border-radius: var(--vtd-radius-xl) !important;
+  border-color: var(--vtd-border) !important;
+  transition:
+    border-color var(--vtd-transition) var(--vtd-ease),
+    box-shadow var(--vtd-transition) var(--vtd-ease),
+    transform var(--vtd-transition) var(--vtd-ease);
+}
+
+.VPFeature:hover {
+  border-color: var(--vtd-primary) !important;
+  box-shadow: var(--vtd-shadow-md);
+  transform: translateY(-2px);
+}
+
+.VPButton {
+  border-radius: var(--vtd-radius-lg) !important;
+  font-weight: 600 !important;
+  transition:
+    background-color var(--vtd-transition) var(--vtd-ease),
+    transform var(--vtd-transition) var(--vtd-ease) !important;
+}
+
+.VPButton:active {
+  transform: translateY(1px);
+}
+
+/* ==========================================================================
+ * 8. 滚动条（与表格同一观感）
+ * 表格自己那份在 doc-table.css —— 这里不能出现 `.vp-doc table`，见 §5 说明
+ * ========================================================================== */
+.VPSidebar,
+.vp-doc div[class*='language-'] pre,
+[data-vp-example] div[class*='language-'] pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vtd-border-strong) transparent;
+}
+
+.VPSidebar::-webkit-scrollbar,
+[class*='language-'] pre::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.VPSidebar::-webkit-scrollbar-thumb,
+[class*='language-'] pre::-webkit-scrollbar-thumb {
+  background-color: var(--vtd-border-strong);
+  border: 2px solid transparent;
+  border-radius: var(--vtd-radius-full);
+  background-clip: padding-box;
+}
+
+.VPSidebar::-webkit-scrollbar-thumb:hover,
+[class*='language-'] pre::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vtd-text-3);
+}
+
+.VPSidebar::-webkit-scrollbar-track,
+[class*='language-'] pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPFeature,
+  .pager-link,
+  .VPButton {
+    transition: none !important;
+    transform: none !important;
+  }
+}

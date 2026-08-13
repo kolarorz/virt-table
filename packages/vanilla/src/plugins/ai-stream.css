@@ -1,0 +1,66 @@
+/* ==========================================================================
+ * vtAIStream 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量。
+ * 按项目约定：不写字面颜色/圆角/间距，一律引用变量。
+ * ========================================================================== */
+
+.vt-stream-indicator {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 18;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: var(--vt-font-size-xs);
+  color: var(--vt-text-secondary);
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-full);
+  box-shadow: var(--vt-shadow-lg);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 呼吸点：表示还在收 */
+.vt-stream-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-color-primary);
+  animation: vt-stream-pulse 1.2s var(--vt-ease) infinite;
+}
+
+/* 用户上滚脱离跟随：点不再呼吸，提示「新行还在往下加，只是没跟着走」 */
+.vt-stream-indicator--paused::before {
+  animation: none;
+  background: var(--vt-text-placeholder);
+}
+
+.vt-stream-indicator--error {
+  color: var(--vt-color-danger);
+}
+
+.vt-stream-indicator--error::before {
+  animation: none;
+  background: var(--vt-color-danger);
+}
+
+@keyframes vt-stream-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-stream-indicator::before {
+    animation: none !important;
+  }
+}

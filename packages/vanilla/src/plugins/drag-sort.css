@@ -1,0 +1,64 @@
+/* ==========================================================================
+ * vtColumnDrag / vtRowDrag 插件样式
+ *
+ * 依赖核心 index.css（产物 core.css）提供的 `--vt-*` 变量，因此下面所有元素都
+ * **必须挂在 `.vt-root` 子树里**——变量只声明在 `.vt-root` / `.vt-fb` 上，挂到
+ * body 会让整批 `var()` 声明失效（ghost 曾经就是这样，见 drag-sort.ts 的注释）。
+ *
+ * 注：`.vt-drag-handle`（type:'drag' 列里的手柄图标）留在核心——它是列内容，
+ *     不装本插件时手柄依然渲染（只是拖不动）。
+ * ========================================================================== */
+
+.vt-th--draggable {
+  cursor: grab;
+  /*
+   * 触屏：横向手势交给我们（列拖拽本来就是横向的），纵向留给浏览器滚动。
+   *
+   * 不能用 `none` —— 那会连纵向滚动一起吃掉。用 `pan-y` 的代价是「在表头上横滑
+   * 滚动表格」失效，但装了 vtColumnDrag 就等于声明了「拖表头 = 换列序」，两个横向
+   * 手势本来就冲突，只能选一个；表体上横滑照旧可用。
+   */
+  touch-action: pan-y;
+}
+
+.vt-col-drag-ghost,
+.vt-row-drag-ghost {
+  position: fixed;
+  z-index: 999;
+  pointer-events: none;
+  padding: 5px 12px;
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+  font-size: var(--vt-font-size-xs);
+  font-weight: var(--vt-font-weight-medium);
+  border-radius: var(--vt-radius-md);
+  box-shadow: var(--vt-shadow-md);
+  opacity: 0.94;
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vt-col-drop-line {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--vt-color-primary);
+  box-shadow: 0 0 0 1px var(--vt-color-primary-soft);
+  z-index: 40;
+  pointer-events: none;
+}
+
+.vt-row-drop-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--vt-color-primary);
+  box-shadow: 0 0 0 1px var(--vt-color-primary-soft);
+  z-index: 40;
+  pointer-events: none;
+  display: none;
+}

@@ -1,0 +1,419 @@
+/* ==========================================================================
+ * VtFilterBuilder 样式（表格外部的 AND/OR 条件构建器）
+ *
+ * 层级不靠背景色堆叠，而是靠「左侧括号线 + 线上的且/或胶囊」表达：
+ * 胶囊既是当前逻辑的回显，也是点击切换的选择器。
+ *
+ * 依赖核心 `core.css` 的 `--vt-*` 变量；面板项 / 勾选项走共享的 _panel.css。
+ * ========================================================================== */
+@import '../plugins/_panel.css';
+
+.vt-fb {
+  --vt-fb-gutter: 30px; /* 括号线 + 胶囊占用的左侧留白 */
+  --vt-fb-line-x: 12px; /* 括号线的水平位置（胶囊在此居中） */
+  --vt-fb-control-h: 28px;
+
+  box-sizing: border-box;
+  font-family: var(--vt-font-family);
+  font-size: var(--vt-font-size-sm);
+  line-height: 1.5;
+  color: var(--vt-text-color);
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-panel);
+  box-shadow: var(--vt-shadow-sm);
+  padding: 12px 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.vt-fb *,
+.vt-fb *::before,
+.vt-fb *::after {
+  box-sizing: border-box;
+}
+
+/* 根组容器（供使用方自定义滚动/高度上限的钩子） */
+.vt-fb-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- 条件组 ---- */
+.vt-fb-group {
+  position: relative;
+  padding-left: var(--vt-fb-gutter);
+}
+
+/* 括号线：颜色随逻辑变化（且=主色 / 或=警示色），一眼看出层级与逻辑 */
+.vt-fb-group::before {
+  content: '';
+  position: absolute;
+  left: var(--vt-fb-line-x);
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-color-primary);
+  opacity: 0.35;
+}
+
+.vt-fb-group[data-logic='or']::before {
+  background: var(--vt-color-warning);
+  opacity: 0.45;
+}
+
+.vt-fb-group--nested {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 且/或胶囊：压在括号线中点上（不透明底色打断线条） */
+.vt-fb-logic {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  min-width: 25px;
+  height: 21px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--vt-border-width) solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-bg-elevated);
+  color: var(--vt-color-primary);
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  font-weight: var(--vt-font-weight-semibold);
+  cursor: pointer;
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear;
+}
+
+.vt-fb-logic:hover {
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+}
+
+.vt-fb-logic:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+.vt-fb-logic--or {
+  border-color: var(--vt-color-warning);
+  color: var(--vt-color-warning);
+}
+
+.vt-fb-logic--or:hover {
+  background: var(--vt-color-warning);
+  color: var(--vt-text-inverse);
+}
+
+.vt-fb-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vt-fb-node {
+  display: flex;
+  min-width: 0;
+}
+
+/* ---- 条件行 ---- */
+.vt-fb-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 4px;
+  border-radius: var(--vt-radius-md);
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-fb-row:hover,
+.vt-fb-row:focus-within {
+  background: var(--vt-color-primary-softer);
+}
+
+.vt-fb-row--invalid > .vt-fb-select:first-of-type {
+  border-color: var(--vt-color-danger);
+  color: var(--vt-color-danger);
+}
+
+/* ---- 表单控件 ---- */
+.vt-fb-select,
+.vt-fb-input {
+  height: var(--vt-fb-control-h);
+  padding: 0 8px;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  outline: none;
+  min-width: 0;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-fb-select {
+  max-width: 168px;
+  padding-right: 4px;
+  cursor: pointer;
+}
+
+.vt-fb-select--op {
+  max-width: 116px;
+  color: var(--vt-text-secondary);
+}
+
+.vt-fb-input {
+  width: 132px;
+}
+
+.vt-fb-input::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-fb-select:hover,
+.vt-fb-input:hover {
+  border-color: var(--vt-border-color-strong);
+}
+
+.vt-fb-select:focus,
+.vt-fb-input:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 2px var(--vt-focus-ring-color);
+}
+
+.vt-fb-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.vt-fb-value--range .vt-fb-input {
+  width: 104px;
+}
+
+.vt-fb-sep {
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-xs);
+}
+
+/* 无值算子（为空 / 不为空）的占位说明 */
+.vt-fb-value-none {
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-xs);
+  font-style: normal;
+}
+
+/* 枚举多选：勾选项做成 chip */
+.vt-fb-enum {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: var(--vt-fb-control-h);
+}
+
+.vt-fb-enum-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-bg);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  cursor: pointer;
+  transition:
+    color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+}
+
+.vt-fb-enum-item:hover {
+  border-color: var(--vt-color-primary);
+  color: var(--vt-color-primary);
+}
+
+.vt-fb-enum-item--checked {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary-soft);
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+.vt-fb-enum-item .vt-filter-checkbox {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- 按钮 ---- */
+.vt-fb-btn {
+  height: 24px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: var(--vt-border-width) solid transparent;
+  border-radius: var(--vt-radius-control);
+  background: transparent;
+  color: var(--vt-color-primary);
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  cursor: pointer;
+  transition:
+    color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear,
+    opacity var(--vt-transition-fast) linear;
+}
+
+.vt-fb-btn:hover {
+  background: var(--vt-color-primary-soft);
+}
+
+.vt-fb-btn:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+.vt-fb-btn--add::before {
+  content: '+';
+  font-size: 13px;
+  line-height: 1;
+  font-weight: var(--vt-font-weight-semibold);
+}
+
+.vt-fb-btn--danger {
+  color: var(--vt-text-secondary);
+}
+
+.vt-fb-btn--danger:hover {
+  color: var(--vt-color-danger);
+  background: var(--vt-color-danger-soft);
+}
+
+/* 行内删除按钮：常态隐形，指针悬停或键盘聚焦到该行时才浮现 */
+.vt-fb-btn--icon {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  justify-content: center;
+  margin-left: auto;
+  color: var(--vt-text-disabled);
+  opacity: 0;
+}
+
+.vt-fb-row:hover .vt-fb-btn--icon,
+.vt-fb-row:focus-within .vt-fb-btn--icon,
+.vt-fb-btn--icon:focus-visible {
+  opacity: 1;
+}
+
+.vt-fb-btn--icon:hover {
+  color: var(--vt-color-danger);
+  background: var(--vt-color-danger-soft);
+}
+
+.vt-fb-btn--icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.vt-fb-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.vt-fb-empty {
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-xs);
+  padding: 2px 4px;
+}
+
+/* ---- 底部操作栏 ---- */
+.vt-fb-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-fb-summary {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color-light);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+}
+
+.vt-fb-summary--active {
+  background: var(--vt-color-primary-soft);
+  color: var(--vt-color-primary);
+}
+
+/* 底部主次按钮 */
+.vt-fb-action {
+  height: 28px;
+  padding: 0 12px;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-secondary);
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  cursor: pointer;
+  transition:
+    color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+}
+
+.vt-fb-action:hover {
+  color: var(--vt-color-primary);
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary-softer);
+}
+
+.vt-fb-action:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+.vt-fb-action--primary {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+.vt-fb-action--primary:hover {
+  border-color: var(--vt-color-primary-hover);
+  background: var(--vt-color-primary-hover);
+  color: var(--vt-text-inverse);
+}

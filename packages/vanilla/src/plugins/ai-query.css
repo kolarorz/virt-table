@@ -1,0 +1,195 @@
+/* ==========================================================================
+ * vtAIQuery 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量与 `vt-pop-in` keyframes。
+ * 按项目约定：不写字面颜色/圆角/间距，一律引用变量。
+ * ========================================================================== */
+
+.vt-ai-panel {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 输入条比搜索框宽：一句话查询比关键词长得多 */
+  width: min(560px, calc(100% - 36px));
+  padding: 8px;
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-panel);
+  box-shadow: var(--vt-shadow-lg);
+  animation: vt-pop-in var(--vt-transition) var(--vt-ease);
+}
+
+.vt-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vt-ai-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  color: var(--vt-text-color);
+  background: var(--vt-bg);
+  outline: none;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-ai-input::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+/* 请求在途：输入框设了 readOnly，视觉上也得跟上，否则看着像还能改 */
+.vt-ai-panel--busy .vt-ai-input {
+  color: var(--vt-text-secondary);
+  background: var(--vt-fill-color);
+}
+
+.vt-ai-input:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-ai-submit {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--vt-radius-control);
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  color: var(--vt-text-inverse);
+  background: var(--vt-color-primary);
+  cursor: pointer;
+  transition: opacity var(--vt-transition-fast) linear;
+}
+
+.vt-ai-submit:hover {
+  opacity: 0.88;
+}
+
+.vt-ai-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.vt-ai-submit:focus-visible,
+.vt-ai-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--vt-font-size);
+  padding: 0 5px;
+  color: var(--vt-text-secondary);
+  border-radius: var(--vt-radius-control);
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-ai-btn:hover {
+  background: var(--vt-fill-color);
+  color: var(--vt-text-color);
+}
+
+/* ---- 反馈区（模型复述 + 诊断 + 撤销）---- */
+
+/* 无内容时不占位，输入条保持紧凑 */
+.vt-ai-feedback:empty {
+  display: none;
+}
+
+.vt-ai-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--vt-font-size-xs);
+  color: var(--vt-text-secondary);
+  line-height: 1.6;
+}
+
+.vt-ai-feedback--error {
+  color: var(--vt-color-danger);
+}
+
+.vt-ai-explanation {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.vt-ai-issues {
+  flex: 0 0 auto;
+}
+
+.vt-ai-issues > summary {
+  cursor: pointer;
+  color: var(--vt-color-warning);
+  user-select: none;
+}
+
+.vt-ai-issues > ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.vt-ai-issue--error {
+  color: var(--vt-color-danger);
+}
+
+.vt-ai-issue--warn {
+  color: var(--vt-color-warning);
+}
+
+.vt-ai-undo {
+  flex: 0 0 auto;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  padding: 2px 10px;
+  font-family: inherit;
+  font-size: var(--vt-font-size-xs);
+  color: var(--vt-text-color);
+  background: var(--vt-bg);
+  cursor: pointer;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-ai-undo:hover {
+  background: var(--vt-fill-color);
+}
+
+.vt-ai-undo:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-ai-panel {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

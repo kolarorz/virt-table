@@ -1,0 +1,1145 @@
+/* ==========================================================================
+ * 内置单元格组件样式（`@virt-table/vanilla/components` 的轻 DOM 外观）
+ *
+ * 由 components/shared.ts 引入，随 `@virt-table/vanilla/components` 入口产出
+ * `dist/components/index.css`。依赖核心 `core.css` 的 `--vt-*` 变量。
+ *
+ * 分节：
+ *   §1 编辑控件（input / select / clear / 日期范围 / 校验错误态）
+ *   §2 展示型组件的公共外层 `.vt-comp-cell`
+ *   §3 开关 VtSwitch
+ *   §4 操作列 VtActions
+ *   §5 进度条 VtProgress
+ *   §6 星级 VtRate
+ *   §7 链接 VtLink
+ *   §8 文本域 VtTextarea
+ *   §9 自绘浮层 VtMultiSelect / VtAutocomplete / VtCascader
+ *   §10 人员 VtPerson（头像胶囊 + 选人面板 + 悬停名片）
+ *   §11 日历面板 VtDatePicker / VtDateRangePicker（自绘双月区间日历）
+ *
+ * ⚠️ 两条硬约束，改这个文件前先看 AGENTS.md §7.5 末两条与 §7.11：
+ *   1. **展示元素的高度必须锁在 `var(--vt-line-height)` 上**，不能靠 padding +
+ *      line-height 自然撑。撑出 22px 就把 40px 的行高顶成 42，`estimatedSize` 立刻
+ *      与实际行高对不上（十万行量级会滚不到底）。
+ *   2. **锁高之后还要 `vertical-align: top`**：inline-flex 参与基线对齐，底部
+ *      descender 空间照样把行盒顶高；`middle` 无效（它仍以基线为参照）。
+ *   两条都由 `components-contract.test.ts` 守着。
+ *
+ * 面板皮肤（`.vt-filter-panel` / `.vt-filter-list` / `.vt-filter-item`）从共享的
+ * `_panel.css` 内联进来，于是内置组件的下拉与列头筛选下拉长得一模一样 —— 走 CSS
+ * `@import` 而不是 JS import 的理由见 AGENTS.md §3.1 最后一条。
+ * ========================================================================== */
+@import '../plugins/_panel.css';
+
+/* ==========================================================================
+ * §1 编辑控件
+ * ========================================================================== */
+/* `×` 的留白扣在**外壳**上，不是扣在输入框的 `padding-right` 上：输入框的 padding 来自
+ * 内联的 `INPUT_CSS`（见 shared.ts），样式表压不过它。外壳收窄 22px 之后，输入框的
+ * content box 右缘也跟着左移，于是 `input[type=date|time]` 的原生指示器（日历/时钟）
+ * 与 `input[type=number]` 的 spinner —— 它们都钉在 content box 右端 —— 自然落到 `×`
+ * 左边，不再和 `×` 叠在一起。`.vt-comp-clear` 是绝对定位，包含块是外壳的 padding box，
+ * 所以它照旧贴在最右，位置和其它 clearable 控件对齐。 */
+.vt-comp-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding-right: 22px; /* `×` 自身 18px + `right: 6px` 里的一半，另留 ~4px 间隙 */
+}
+
+.vt-comp-wrap > .vt-comp-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 原生日期/时间控件的指示器尺寸随浏览器默认样式浮动（Chrome 还给它带一圈 padding），
+ * 定死一个点击区，上面那 22px 留白才算得准。 */
+.vt-comp-date::-webkit-calendar-picker-indicator,
+.vt-comp-time::-webkit-calendar-picker-indicator {
+  box-sizing: content-box;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.vt-comp-date::-webkit-calendar-picker-indicator:hover,
+.vt-comp-time::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+
+.vt-comp-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size);
+}
+
+.vt-comp-input::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-comp-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--vt-text-disabled);
+  cursor: pointer;
+  border-radius: var(--vt-radius-full);
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.vt-comp-clear:hover {
+  color: var(--vt-text-secondary);
+  background: var(--vt-fill-color-hover);
+}
+
+/* 下面两条服务 `VtDateRangePicker({ native: true })` 那一支（两个原生 date input 并排）。
+   默认支路走的是 §11 的自绘日历面板，所以这里看着像孤儿 —— 不是，别删。
+   上面 `.vt-comp-date::-webkit-calendar-picker-indicator` 同理，服务两个组件的 native 支路。 */
+.vt-comp-date-range {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.vt-comp-date-range-sep {
+  flex-shrink: 0;
+  padding: 0 4px;
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-sm);
+}
+
+
+.vt-comp-input--invalid {
+  box-shadow: inset 0 0 0 1px var(--vt-color-danger);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-color-danger-soft) !important;
+}
+
+/* ==========================================================================
+ * §2 展示型组件的公共外层
+ *
+ * `VtSwitch` / `VtActions` / `VtProgress` / `VtRate` / `VtLink` /
+ * `VtMultiSelect` 的常态全部套这一层，高度不变量就只有这一处要守（各组件的
+ * 修饰类只调宽度与内部排布，**不许再声明 height**）。
+ * ========================================================================== */
+.vt-comp-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  /* 见文件头 §2 那条：middle 不行，必须 top */
+  vertical-align: top;
+  height: var(--vt-line-height);
+  max-width: 100%;
+  line-height: 1;
+  font-size: var(--vt-font-size);
+}
+
+/* 撑满单元格宽度（进度条、多选标签行需要） */
+.vt-comp-cell--fill {
+  display: flex;
+  width: 100%;
+}
+
+/* ==========================================================================
+ * §3 开关 VtSwitch
+ * ========================================================================== */
+.vt-comp-switch {
+  --vt-switch-w: 34px;
+  --vt-switch-h: 18px;
+  --vt-switch-pad: 2px;
+}
+
+.vt-comp-switch-track {
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--vt-switch-w);
+  height: var(--vt-switch-h);
+  padding: 0;
+  border: none;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-border-color-strong);
+  cursor: pointer;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-comp-switch-track[aria-checked='true'] {
+  background: var(--vt-color-primary);
+}
+
+.vt-comp-switch-track:hover:not([disabled]) {
+  background: var(--vt-text-disabled);
+}
+
+.vt-comp-switch-track[aria-checked='true']:hover:not([disabled]) {
+  background: var(--vt-color-primary-hover);
+}
+
+.vt-comp-switch-track[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.vt-comp-switch-track:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-comp-switch-thumb {
+  position: absolute;
+  top: var(--vt-switch-pad);
+  left: var(--vt-switch-pad);
+  width: calc(var(--vt-switch-h) - var(--vt-switch-pad) * 2);
+  height: calc(var(--vt-switch-h) - var(--vt-switch-pad) * 2);
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-bg);
+  box-shadow: var(--vt-shadow-sm);
+  transition: transform var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vt-comp-switch-track[aria-checked='true'] > .vt-comp-switch-thumb {
+  transform: translateX(calc(var(--vt-switch-w) - var(--vt-switch-h)));
+}
+
+.vt-comp-switch-text {
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-sm);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+ * §4 操作列 VtActions
+ *
+ * 链接式按钮（不是实心按钮）：操作列一行里常有 2~4 个动作，实心按钮会把单元格塞满、
+ * 也会和行选中/悬停底色打架。语义色走 `--vt-comp-action-color`，由 JS 按 variant 写。
+ * ========================================================================== */
+.vt-comp-actions {
+  gap: 2px;
+}
+
+.vt-comp-action {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--vt-radius-control);
+  background: transparent;
+  color: var(--vt-comp-action-color, var(--vt-color-primary));
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  line-height: var(--vt-line-height);
+  white-space: nowrap;
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-comp-action:hover:not([disabled]) {
+  background: var(--vt-fill-color);
+}
+
+.vt-comp-action[disabled] {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+.vt-comp-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/* 二次确认气泡：外壳复用 .vt-filter-panel，底部按钮复用 .vt-filter-actions */
+.vt-comp-confirm-text {
+  max-width: 220px;
+  padding: 10px 12px;
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size-sm);
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+ * §5 进度条 VtProgress
+ * ========================================================================== */
+.vt-comp-progress {
+  --vt-progress-h: 6px;
+
+  gap: 8px;
+}
+
+.vt-comp-progress-track {
+  flex: 1;
+  min-width: 0;
+  height: var(--vt-progress-h);
+  overflow: hidden;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color-hover);
+}
+
+.vt-comp-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-comp-progress-color, var(--vt-color-primary));
+  transition: width var(--vt-transition) var(--vt-ease);
+}
+
+.vt-comp-progress-text {
+  flex-shrink: 0;
+  min-width: 36px;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  font-variant-numeric: var(--vt-font-numeric);
+  text-align: right;
+}
+
+/* ==========================================================================
+ * §6 星级 VtRate
+ *
+ * 半星靠「底层空心星 + 上层按百分比裁剪的实心星」实现，不用两套图标。
+ * ========================================================================== */
+.vt-comp-rate {
+  /* 顶到行内容高度（默认 21px、compact 19px）：见文件头 §2 那条硬约束，
+     不能比 --vt-line-height 更高，否则把 40px 行顶高、estimatedSize 就对不上了 */
+  --vt-rate-size: var(--vt-line-height);
+  --vt-comp-rate-color: var(--vt-color-warning);
+
+  gap: 1px;
+}
+
+.vt-comp-rate-star {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--vt-rate-size);
+  height: var(--vt-rate-size);
+  color: var(--vt-border-color-strong);
+}
+
+.vt-comp-rate--editable .vt-comp-rate-star {
+  cursor: pointer;
+}
+
+.vt-comp-rate-fill {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--vt-comp-rate-color);
+}
+
+.vt-comp-rate-icon {
+  display: block;
+  width: var(--vt-rate-size);
+  height: var(--vt-rate-size);
+  fill: currentcolor;
+}
+
+.vt-comp-rate-text {
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  font-variant-numeric: var(--vt-font-numeric);
+}
+
+/* ==========================================================================
+ * §7 链接 VtLink
+ *
+ * ⚠️ 这里的 `vertical-align: top` + 锁高不是可选项：`overflow: hidden` 的
+ * inline-block **以底边缘（而不是内部基线）参与基线对齐**，默认 baseline 下会把
+ * 行盒顶高 —— 与 §7.5 里 `.vt-cell-option` 踩的是同一个坑（那次实测 21px 的标签
+ * 让行高从 40 变 41.8）。链接是纯文本，锁 21px 正好装一行。
+ * ========================================================================== */
+.vt-comp-link {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: var(--vt-line-height);
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  background: none;
+  color: var(--vt-color-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+  text-align: inherit;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+  transition: color var(--vt-transition-fast) linear;
+}
+
+.vt-comp-link:hover {
+  color: var(--vt-color-primary-hover);
+}
+
+.vt-comp-link--underline-always {
+  text-decoration: underline;
+}
+
+.vt-comp-link--underline-hover:hover {
+  text-decoration: underline;
+}
+
+.vt-comp-link:focus-visible {
+  outline: none;
+  border-radius: var(--vt-radius-control);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/*
+ * 可编辑链接（`editable: true`）的下拉面板：两栏「文案 / 链接」+ 底部取消/确定。
+ *
+ * 外壳、输入框、按钮全部复用 `_panel.css`（`.vt-filter-panel` / `.vt-filter-text` /
+ * `.vt-filter-actions` / `.vt-filter-btn`）—— 这里只补「两栏怎么排」，所以这个面板与
+ * 列头筛选下拉、条件构建器长得一样，不用维护第二套面板外观。
+ */
+.vt-comp-link-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.vt-comp-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 共享输入框自带 `margin: 6px 0`（那边是竖排堆叠的筛选项）。这里的间距由 gap 给，
+   两者叠加会让标签与输入框离得比两栏之间还远 */
+.vt-comp-link-field .vt-filter-text {
+  margin: 0;
+}
+
+.vt-comp-link-label {
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+}
+
+/* ==========================================================================
+ * §8 文本域 VtTextarea
+ *
+ * 编辑框**盖住单元格**（`_popup.ts` 的 `cover` 模式）：左上角对齐、宽度取齐单元格、
+ * 高度随内容长。它是 `.vt-cell-cover` 的**同级兄弟**（都挂 `.vt-client`，定位公式同一套），
+ * 而不是 cover 的子节点 —— 后者高度恒等于单元格且 `> * { height: 100% }`，塞进去就长不高。
+ *
+ * 边框/阴影刻意与 `.vt-cell-cover` 一致（2px 主色边 + focus 环），这样点开的瞬间
+ * 看起来就是「这个单元格被激活了」，而不是「弹出了一个新面板」。
+ * `z-index` 也要高过 cover（那边是 5），否则会被它盖住。
+ * ========================================================================== */
+.vt-comp-popup--cover {
+  box-sizing: border-box;
+  border: 2px solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-bg);
+  box-shadow:
+    var(--vt-shadow-md),
+    0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/* 探针元素：只用来判定「编辑是否已关闭」，不显示任何东西（真正的输入框在浮层里） */
+.vt-comp-textarea-anchor {
+  width: 100%;
+  height: 100%;
+}
+
+.vt-comp-textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  /* 与 .vt-td 的内边距对齐，文字不会在点开编辑的瞬间跳位 */
+  padding: calc(var(--vt-cell-padding-y) - 2px) calc(var(--vt-cell-padding-x) - 2px);
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+  /* 高度由 JS 逐帧算（autoGrow），手柄会和它打架 */
+  resize: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vt-scrollbar-thumb) var(--vt-scrollbar-track);
+}
+
+.vt-comp-textarea::placeholder {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-comp-textarea::-webkit-scrollbar {
+  width: var(--vt-scrollbar-size);
+}
+
+.vt-comp-textarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full);
+  background-color: var(--vt-scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+/* ==========================================================================
+ * §9 自绘浮层（VtMultiSelect / VtAutocomplete / VtCascader）
+ *
+ * 外壳、列表、列表项全部复用 `_panel.css` 的 `.vt-filter-panel` / `.vt-filter-list` /
+ * `.vt-filter-item` —— 于是内置组件的下拉与列头筛选下拉是同一套外观，换主题只改一处。
+ * 这里只加「面板皮肤没有」的那几件：定位由 JS 写，键盘高亮态，级联的分栏，
+ * 以及单元格内那个锚点。
+ * ========================================================================== */
+.vt-comp-popup {
+  /* top/left/width/min-width/max-height 由 _popup.ts 写在 style 上。
+   * border-box 是必需的：`.vt-filter-panel` 有 1px 边框，content-box 下
+   * `min-width: 单元格宽` 会让面板比单元格宽出 2px（左右各一条边框）。 */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 面板外壳（底色/边框/阴影/圆角）来自 `.vt-filter-panel`，只有 below 模式套那个类；
+ * cover 模式是「盖住单元格的内联编辑框」，外观在 §8 单独给 */
+.vt-comp-popup--cover {
+  position: absolute;
+  z-index: 30;
+}
+
+/* 键盘高亮：与 hover 同色，但键盘移动时鼠标并不在项上，需要独立的状态类 */
+.vt-comp-popup .vt-filter-item.is-active {
+  background: var(--vt-fill-color-hover);
+}
+
+.vt-comp-popup .vt-filter-item[aria-disabled='true'] {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+.vt-comp-popup .vt-filter-item[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+/* 空态 */
+.vt-comp-popup-empty {
+  padding: 10px 12px;
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-sm);
+  white-space: nowrap;
+}
+
+/* 单元格内的锚点：一个「看起来就是下拉控件」的东西 —— 左边回显当前选择，右边小箭头。
+ * VtSelect / VtMultiSelect / VtCascader 共用（JS 侧是 shared.ts 的 makeAnchor）。 */
+.vt-comp-anchor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  /* 左右各扣掉 `.vt-cell-cover` 的 2px 边框（锚点在边框内侧）：直接给
+   * `--vt-cell-padding-x` 会让回显内容比常态右移 2px —— 点一下单元格，文字/头像胶囊
+   * 跳一下。与 §8 `.vt-comp-textarea` 那条同源，四个面板类组件一起受益。 */
+  padding: 0 calc(var(--vt-cell-padding-x) - 2px);
+  overflow: hidden;
+  outline: none;
+  color: var(--vt-text-color);
+  cursor: pointer;
+  font-size: var(--vt-font-size);
+  white-space: nowrap;
+}
+
+/* 锚点里的「×」：复用输入类组件那颗清除按钮的外观（尺寸/悬停底色/圆角/过渡都在
+ * §1 的 `.vt-comp-clear` 里），只把定位从「绝对定位钉在输入框右侧」改成
+ * 「锚点这条 flex 行里的一个项」，排在文案与箭头之间。
+ * 它此刻是 flex 项（display 被 blockify），所以 §2 那条「inline 级盒子要
+ * vertical-align: top」对它不适用。 */
+.vt-comp-anchor > .vt-comp-clear {
+  position: static;
+  transform: none;
+}
+
+/* 文案占满剩余宽度并自己截断，箭头永远贴在右侧不被挤走 */
+.vt-comp-anchor-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vt-comp-anchor-caret {
+  /* 是 .vt-comp-anchor（flex 容器）的项 —— flex 项的 display 会被 blockify，
+   * 写 inline-flex 没有意义，也就不在「inline 级盒子必须 vertical-align: top」那条约束里 */
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--vt-text-placeholder);
+  /* CHEVRON_SVG 画的是朝右的 `›`，转 90° 变成朝下 */
+  font-size: var(--vt-font-size-xs);
+  transform: rotate(90deg);
+}
+
+.vt-comp-anchor--placeholder > .vt-comp-anchor-text {
+  color: var(--vt-text-placeholder);
+}
+
+/* 单选面板里的选中标记。选中态不能只靠颜色表达（色觉障碍不友好），
+ * 所以给一个对勾；未选中时元素仍在，占位保证文案不因勾选而左右跳动。 */
+.vt-comp-check {
+  /* 同样是 flex 项（`.vt-filter-item` 是 flex 容器），用 flex 而不是 inline-flex */
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  margin-left: 8px;
+  color: var(--vt-color-primary);
+  font-size: var(--vt-font-size-sm);
+}
+
+/* 单选面板的项：文案与对勾分列两端 */
+.vt-comp-popup .vt-filter-item[role='option'] {
+  justify-content: space-between;
+}
+
+.vt-comp-popup .vt-filter-item.is-selected {
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+/* 多选：标签行 + 折叠计数 */
+.vt-comp-tags {
+  gap: 4px;
+  overflow: hidden;
+}
+
+.vt-comp-tag-more {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: var(--vt-line-height);
+  padding: 0 6px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+/* 级联：一列一栏，栏内独立滚动 */
+.vt-comp-cascader {
+  flex-direction: row;
+}
+
+.vt-comp-cascader-col {
+  min-width: 132px;
+  max-height: 248px;
+  overflow-y: auto;
+  padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vt-scrollbar-thumb) var(--vt-scrollbar-track);
+}
+
+.vt-comp-cascader-col + .vt-comp-cascader-col {
+  border-left: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-comp-cascader-col::-webkit-scrollbar {
+  width: var(--vt-scrollbar-size);
+}
+
+.vt-comp-cascader-col::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full);
+  background-color: var(--vt-scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+.vt-comp-cascader .vt-filter-item {
+  justify-content: space-between;
+}
+
+.vt-comp-cascader-arrow {
+  flex-shrink: 0;
+  margin-left: 8px;
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-xs);
+}
+
+.vt-comp-cascader .vt-filter-item.is-selected {
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+/* ==========================================================================
+ * §10 人员 VtPerson
+ *
+ * 常态是「头像 + 姓名」的一串，编辑态是带搜索框的选人面板（面板皮肤仍来自
+ * `_panel.css`，这里只加头像色块、两行文案、固定在顶部的搜索框这几件）。
+ *
+ * 头像的尺寸刻意取 `var(--vt-line-height)`：与行内容区**等高**，于是它既是最大的
+ * 可用圆形，又一定不会把 40px 的行顶高（文件头那条不变量）。同时跟着密度档走。
+ * ========================================================================== */
+.vt-comp-persons {
+  /* 人与人之间的间距要**明显大于**胶囊内部的 5px，否则一排人读起来是
+   * 「一排头像 + 一排名字」而不是「几个人」 */
+  gap: 8px;
+  overflow: hidden;
+}
+
+/**
+ * 一个人 = 一枚胶囊：头像就是胶囊的左端（贴边、没有左内边距），姓名在右侧。
+ *
+ * 第一版是头像 + 姓名裸排，头像↔姓名 6px、人↔人 8px —— 两个间距几乎相等，视觉上
+ * 分不出「哪个名字属于哪个头像」，多人列尤其割裂。底色 + 全圆角把这一对圈成一块，
+ * 与 `.vt-cell-option` 标签同一门语言（同样的 `--vt-fill-color` 底 + `--vt-radius-full`）。
+ *
+ * 是 `.vt-comp-cell`（flex 容器）的项 —— flex 项的 display 会被 blockify，写 inline-flex
+ * 没有意义，也就不在「inline 级盒子必须 vertical-align: top」那条约束里。
+ */
+.vt-comp-person {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  /* 头像等于行内容区高度，胶囊也就锁在这个高度上（见 §10 头注那条不变量） */
+  height: var(--vt-line-height);
+  /* 名字长了让这个人整体压缩（内部姓名再截断），而不是把后面的人挤出单元格 */
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 8px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color);
+  /* 比正文小一档：胶囊里的名字不该和普通单元格文本抢视觉重量 */
+  font-size: var(--vt-font-size-sm);
+}
+
+/* avatarOnly：没有姓名要圈起来，胶囊退化成一个光头像 ——
+ * 留着底色和右内边距会得到一枚右边空 8px 的怪胶囊 */
+.vt-comp-person--bare {
+  padding-right: 0;
+  background: transparent;
+}
+
+.vt-comp-person-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 头像色块：有图就把图盖在上面（JS 里图加载失败会把 <img> 摘掉，露出首字）。
+ * 主色走 --vt-avatar-color，底色由它 color-mix 派生 —— 与 `.vt-cell-option` 同一套做法，
+ * 换主题 / 换主色都不用改这里。 */
+.vt-comp-avatar {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--vt-line-height);
+  height: var(--vt-line-height);
+  overflow: hidden;
+  border-radius: var(--vt-radius-full);
+  /* 不支持 color-mix 时的兜底底色 */
+  background: var(--vt-fill-color);
+  color: var(--vt-avatar-color, var(--vt-color-primary));
+  font-size: var(--vt-font-size-xs);
+  font-weight: var(--vt-font-weight-medium);
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-comp-avatar {
+    background: color-mix(
+      in srgb,
+      var(--vt-avatar-color, var(--vt-color-primary)) 16%,
+      transparent
+    );
+  }
+}
+
+.vt-comp-avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 编辑态锚点里的回显：和常态是同一串胶囊，所以容器要横排（默认的
+ * `.vt-comp-anchor-text` 是给纯文本用的 inline 容器，块级 flex 的胶囊会竖着堆叠） */
+.vt-comp-anchor-text--nodes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- 选人面板 ---- */
+
+/**
+ * 面板项**左对齐**，对勾用 `margin-left: auto` 顶到右边。
+ *
+ * 不能吃 §9 里 `.vt-filter-item[role='option'] { justify-content: space-between }` 那条：
+ * `VtSelect` 的项只有「文案 + 对勾」两个子元素，space-between 正好把它们分列两端；
+ * 而人员项有**三个**（头像 / 姓名块 / 对勾），space-between 会把中间的姓名块推到行
+ * 中央 —— 名字长短不同，起始位置就参差不齐，看起来「没有左对齐」。
+ */
+.vt-comp-person-item {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.vt-comp-person-item .vt-comp-check {
+  margin-left: auto;
+  /* 上一行的 auto 已经把它顶到最右，再留 8px 是与姓名块的最小间距 */
+  padding-left: 8px;
+}
+
+.vt-comp-person-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.vt-comp-person-desc {
+  overflow: hidden;
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 选中的人不只染色，还加粗（`.vt-comp-popup .vt-filter-item.is-selected` 已给主色）；
+ * 副标题保持次要色，否则整行都变主色反而看不出哪个是姓名 */
+.vt-comp-person-item.is-selected .vt-comp-person-name {
+  font-weight: var(--vt-font-weight-medium);
+}
+
+.vt-comp-person-item.is-selected .vt-comp-person-desc {
+  color: var(--vt-text-placeholder);
+}
+
+/* 搜索框固定在面板顶部：它在 `.vt-filter-list` 外面，所以列表滚动时它不动
+ * （`.vt-comp-popup` 是 flex column + overflow hidden，见 §9） */
+.vt-comp-search {
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+/* ---- 悬停名片 ----
+ *
+ * 外壳仍是 `.vt-filter-panel`（底色/边框/圆角/阴影一处维护），这里只给内部排版。
+ *
+ * 名片**可以把指针移进去**（为了选中复制里面的邮箱/电话），所以不能设
+ * `pointer-events: none`。代价是「还在 hover 吗」得按「胶囊 ∪ 名片」两块区域算，
+ * 并且离开后要留一段宽限期才收 —— 逻辑在 `vt-person.ts` 的 `attachHoverCard`。 */
+.vt-comp-card-popup {
+  /* 表体里不少元素是 user-select: none（排序表头、分组开关…），名片里要能划选 */
+  user-select: text;
+  cursor: default;
+}
+
+.vt-comp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  font-size: var(--vt-font-size-sm);
+}
+
+.vt-comp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 名片里的头像不受行高不变量约束（它不在表格行里），放大到能看清脸的尺寸 */
+.vt-comp-avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: var(--vt-font-size);
+}
+
+.vt-comp-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vt-comp-card-name {
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size);
+  font-weight: var(--vt-font-weight-semibold);
+  /* 名片的存在意义之一就是看全被列宽截断的名字 —— 这里不许再截断 */
+  white-space: normal;
+  word-break: break-word;
+}
+
+.vt-comp-card-desc {
+  color: var(--vt-text-secondary);
+}
+
+.vt-comp-card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-comp-card-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* 标签列定宽，多行字段的值才会左侧对齐成一列 */
+.vt-comp-card-label {
+  flex-shrink: 0;
+  width: 40px;
+  color: var(--vt-text-placeholder);
+}
+
+.vt-comp-card-value {
+  min-width: 0;
+  color: var(--vt-text-color);
+  word-break: break-word;
+}
+
+/* ==========================================================================
+ * §11 日历面板（VtDatePicker / VtDateRangePicker 的自绘面板）
+ *
+ * DOM 由 `_calendar.ts` 的 `createCalendar` 造，挂进 `_popup` 的面板里：
+ *
+ *   .vt-filter-panel.vt-comp-popup.vt-comp-calendar-popup   ← 外壳（皮肤全在 .vt-filter-panel）
+ *     └ .vt-comp-calendar
+ *         ├ -head        ‹ + -titles（1~2 个 -title） + ›
+ *         ├ -months      1~2 个 -month（各含 -weekdays 与 -grid）
+ *         └ -foot        快捷按钮（复用 .vt-filter-btn） + -value 回显
+ *
+ * 三条与契约测试相关的自觉：
+ *   1. **不用 inline-flex / inline-block**，全 flex / grid —— 那两个要配 `vertical-align: top`
+ *      才不顶高行盒（§7.5），块级盒子天然不参与基线对齐，绕开整类问题；
+ *   2. 颜色全走 `--vt-*`，`transition` 只写 `var(--vt-transition-fast)`；
+ *   3. 底色/边框/阴影/圆角**一个都不声明** —— 那是 `.vt-filter-panel` 的活，面板长得与列头
+ *      筛选下拉一致就是靠这条。
+ *
+ * 区间带子怎么连起来的：`--in-range` 是**方角**、格子之间 `gap: 0`，于是相邻格的底色拼成
+ * 一条连续的带；只有两个端点（`--start` / `--end`）各圆外侧两角。单天区间两个类同时在，
+ * 两边都圆。
+ * ========================================================================== */
+.vt-comp-calendar {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 8px;
+  /* 格子尺寸收在两个变量里：双月宽度 = 7 × cell-w × 2 + gap，JS 的 relayout() 反推外壳
+     开销时依赖「格子宽度可量」这一点，写死在各处规则里就不好改了 */
+  --vt-comp-cal-cell-w: 30px;
+  --vt-comp-cal-cell-h: 28px;
+}
+
+.vt-comp-calendar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vt-comp-calendar-titles {
+  display: flex;
+  flex: 1;
+  justify-content: space-around;
+  min-width: 0;
+}
+
+.vt-comp-calendar-title {
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size-sm);
+  font-weight: var(--vt-font-weight-semibold);
+  white-space: nowrap;
+}
+
+/* 翻月按钮：外观复用 .vt-filter-btn，这里只收紧内边距并给禁用态 */
+.vt-comp-calendar-nav {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.vt-comp-calendar-nav:disabled {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+.vt-comp-calendar-months {
+  display: flex;
+  gap: 12px; /* 与 _calendar.ts 的 MONTH_GAP 对齐 */
+  /* `.vt-comp-popup` 是 flex column + overflow hidden，_popup 会按可用空间写 max-height。
+     不给 min-height: 0 的话这个 flex 子项拒绝收缩，矮容器里被裁掉的会是头部与底部按钮，
+     而不是网格自己内滚 */
+  min-height: 0;
+  margin-top: 6px;
+  overflow: auto;
+}
+
+.vt-comp-calendar-month {
+  flex: none;
+  width: calc(var(--vt-comp-cal-cell-w) * 7);
+}
+
+.vt-comp-calendar-weekdays,
+.vt-comp-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  /* gap 必须是 0：区间带子靠相邻格底色相接，有缝就断成一节一节 */
+  gap: 0;
+}
+
+.vt-comp-calendar-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--vt-comp-cal-cell-h);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+}
+
+.vt-comp-calendar-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--vt-comp-cal-cell-h);
+  border-radius: var(--vt-radius-sm);
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size-sm);
+  font-variant-numeric: var(--vt-font-numeric);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-comp-calendar-cell:hover {
+  background: var(--vt-fill-color-hover);
+}
+
+/* 上/下月补位格：仍可点（是真实日期），只是弱化 */
+.vt-comp-calendar-cell--outside {
+  color: var(--vt-text-disabled);
+}
+
+.vt-comp-calendar-cell--today {
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+/* 区间内部：方角 + 淡底，相邻格拼成连续带 */
+.vt-comp-calendar-cell--in-range {
+  border-radius: 0;
+  background: var(--vt-color-primary-softer);
+  color: var(--vt-text-color);
+}
+
+/* 两个端点：实心底色。选中态不只靠颜色 —— 端点是实心块、区间是淡底，形状上也能分辨 */
+.vt-comp-calendar-cell--start,
+.vt-comp-calendar-cell--end {
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+/* 端点各圆外侧两角，朝向区间的那侧保持方角好接上带子 */
+.vt-comp-calendar-cell--start {
+  border-radius: var(--vt-radius-sm) 0 0 var(--vt-radius-sm);
+}
+
+.vt-comp-calendar-cell--end {
+  border-radius: 0 var(--vt-radius-sm) var(--vt-radius-sm) 0;
+}
+
+/* 单天区间（起止同一天）：两个类同时在，四角都圆 */
+.vt-comp-calendar-cell--start.vt-comp-calendar-cell--end {
+  border-radius: var(--vt-radius-sm);
+}
+
+.vt-comp-calendar-cell--start:hover,
+.vt-comp-calendar-cell--end:hover {
+  background: var(--vt-color-primary);
+}
+
+/* 键盘光标。用描边而不是底色 —— 底色已经被选中/区间态占满了 */
+.vt-comp-calendar-cell--cursor {
+  box-shadow: inset 0 0 0 1px var(--vt-color-primary);
+}
+
+.vt-comp-calendar-cell--disabled,
+.vt-comp-calendar-cell--disabled:hover {
+  background: transparent;
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+/* 底部条：外观来自 .vt-filter-actions（顶边框 + 浅底），这里只改排布 ——
+   那边是 space-between，快捷项一多就被撑得七零八落 */
+.vt-comp-calendar-foot {
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+  margin-top: 8px;
+  /* 只占位、不撑宽。面板没有外部宽度约束（`minWidth: 0`），宽度按内容的 max-content 算，
+     而 max-content 会把 `flex-wrap` 摊平 —— 7 颗快捷按钮排成一行，实测把面板从 448px
+     拉到 679px（CDP 量的）。`width: 0` 让这一行对内在宽度的贡献归零，`min-width: 100%`
+     再让它渲染时占满，于是按钮真的会换行、面板宽度回归由日历网格决定。 */
+  width: 0;
+  min-width: 100%;
+}
+
+.vt-comp-calendar-shortcut {
+  padding: 3px 8px;
+}
+
+/* 当前选择回显，推到最右 */
+.vt-comp-calendar-value {
+  margin-left: auto;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  font-variant-numeric: var(--vt-font-numeric);
+  white-space: nowrap;
+}

@@ -479,3 +479,248 @@ export function buildMergeCoveredSet(merges: MergeCell[]): Set<string> {
   }
   return covered;
 }
+
+// ============================================================================
+// 按值自动合并：相邻同键成段
+//
+// 为什么不直接把「相邻同值」展开成 MergeCell[] 塞进 options.merges：
+//
+//   1. `buildRowMergeIndex` 按**覆盖到的每一行**建 Map，成本跟 Σrowspan 成正比
+//      而不是跟 merge 个数成正比。实测 100 万覆盖行 = 64.8ms + 巨额 heap，而且
+//      WeakMap 是按数组身份缓存的，每次排序/筛选换数组就得全额重建。
+//   2. `calcRenderRect` 会把渲染起点拉回合并块的起始行。相邻同值天然产出巨大
+//      rowspan（3 个取值的状态列在 10 万行上就是 3 万行一段），实测 rowspan=50000
+//      时滚到中间会 materialize 50000 个 <tr>，虚拟滚动直接失效。
+//
+// 所以这里只存**段起点索引**（Int32Array，100 万行约 781KB、建一次 3.3ms），
+// 每帧再按渲染窗口裁剪出至多「窗口行数」个 MergeCell 交给现有管线 —— 裁剪后的
+// 起点永远 ≥ 窗口起点，上面两个问题同时消失，下游 planRowCells / getMergeInfo /
+// 固定列偏移一行都不用改。
+// ============================================================================
+
+/** 一个自动合并列的分段索引 */
+export interface MergeRuns {
+  /** 中间列（非固定列）索引，与 MergeCell.colIndex 同坐标系 */
+  colIndex: number;
+  /** 段起点，升序；第 k 段为 [starts[k], starts[k+1] - 1]，末段到 rowCount - 1 */
+  starts: Int32Array;
+  /** 建索引时的总行数 */
+  rowCount: number;
+}
+
+export interface BuildMergeRunsOptions {
+  colIndex: number;
+  rowCount: number;
+  /** 取比较键；返回 `undefined` 表示该行不参与合并（自成一段） */
+  keyOf: (rowIndex: number) => unknown;
+  /** 结构边界：true 表示 rowIndex 与 rowIndex-1 之间必须断开（分组行 / 树层级变化） */
+  isBoundary?: (rowIndex: number) => boolean;
+  /** 单段最大跨度，超出则强制断开（不传则不限） */
+  maxSpan?: number;
+}
+
+/**
+ * 一次 O(rowCount) 扫描建出分段索引。
+ *
+ * 键用 `!==` 比较（不做深比较）：键应当是原始值。需要按对象合并时请在 `keyOf`
+ * 里自己拼成字符串 —— 深比较会让这趟扫描从 O(n) 变成 O(n × 字段数)。
+ */
+export function buildMergeRuns(options: BuildMergeRunsOptions): MergeRuns {
+  const { colIndex, rowCount, keyOf, isBoundary, maxSpan } = options;
+  const cap = maxSpan && maxSpan > 0 ? maxSpan : Infinity;
+  // 最坏情况每行一段
+  const starts = new Int32Array(rowCount);
+  let n = 0;
+  let prevKey: unknown;
+  let runStart = 0;
+
+  for (let i = 0; i < rowCount; i++) {
+    const key = keyOf(i);
+    const broken =
+      i === 0 ||
+      key === undefined ||
+      prevKey === undefined ||
+      key !== prevKey ||
+      i - runStart >= cap ||
+      (isBoundary !== undefined && isBoundary(i));
+    if (broken) {
+      starts[n++] = i;
+      runStart = i;
+    }
+    prevKey = key;
+  }
+
+  return { colIndex, rowCount, starts: starts.subarray(0, n) };
+}
+
+/**
+ * 二分定位 `rowIndex` 所属的段，返回闭区间 `[start, end]`。
+ *
+ * 单行段（没有邻居同键）也会返回，由调用方判断要不要产出 MergeCell —— 判断
+ * 「这一格有没有被合并覆盖」的地方需要这个信息。
+ */
+export function findMergeRun(
+  runs: MergeRuns,
+  rowIndex: number,
+): { start: number; end: number } | null {
+  const { starts, rowCount } = runs;
+  if (rowIndex < 0 || rowIndex >= rowCount || starts.length === 0) return null;
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= rowIndex) lo = mid;
+    else hi = mid - 1;
+  }
+  const start = starts[lo];
+  const end = lo + 1 < starts.length ? starts[lo + 1] - 1 : rowCount - 1;
+  return { start, end };
+}
+
+/**
+ * 把分段索引裁剪到渲染窗口 `[rowBegin, rowEnd]`，产出可直接喂给现有管线的
+ * `MergeCell[]`。
+ *
+ * 裁剪意味着**重锚**：滚进一个长段的中间时，合并格的起点被抬到窗口起点，内容
+ * 锚在可视区顶部而不是段的真实起点（AG Grid 的 Cell Span 同样如此）。换来的是
+ * 渲染区间不被拉宽 —— 这正是让自动合并在虚拟滚动下成立的关键。
+ *
+ * 跨度裁剪后只剩 1 行的段不产出 MergeCell（无需合并）。
+ */
+export function clampMergeRunsToWindow(
+  runsList: MergeRuns[],
+  rowBegin: number,
+  rowEnd: number,
+): MergeCell[] {
+  return collectRuns(runsList, rowBegin, rowEnd, true);
+}
+
+/**
+ * 与 `clampMergeRunsToWindow` 相反：返回与 `[rowBegin, rowEnd]` **有交集的段的真实
+ * 起止**，不做裁剪（跨度可能超出区间两端）。
+ *
+ * 给「需要知道真实合并块」的场景用 —— 选区要按合并块扩张成完整矩形，而选区可以
+ * 超出渲染窗口，用裁剪结果会把选区截断。跨度 1 的段同样不产出。
+ */
+export function mergeRunsInRange(
+  runsList: MergeRuns[],
+  rowBegin: number,
+  rowEnd: number,
+): MergeCell[] {
+  return collectRuns(runsList, rowBegin, rowEnd, false);
+}
+
+/** 沿 starts 走出与 [rowBegin, rowEnd] 有交集的段；clamp 决定裁不裁 */
+function collectRuns(
+  runsList: MergeRuns[],
+  rowBegin: number,
+  rowEnd: number,
+  clamp: boolean,
+): MergeCell[] {
+  const out: MergeCell[] = [];
+  if (rowEnd < rowBegin) return out;
+
+  for (const runs of runsList) {
+    const { starts, rowCount, colIndex } = runs;
+    if (starts.length === 0) continue;
+    const first = findMergeRun(runs, Math.max(0, Math.min(rowBegin, rowCount - 1)));
+    if (!first) continue;
+
+    // 从区间起点所属的那一段开始，沿 starts 前走到区间末尾
+    let k = 0;
+    {
+      let lo = 0;
+      let hi = starts.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (starts[mid] <= first.start) lo = mid;
+        else hi = mid - 1;
+      }
+      k = lo;
+    }
+
+    for (; k < starts.length && starts[k] <= rowEnd; k++) {
+      const runStart = starts[k];
+      const runEnd = k + 1 < starts.length ? starts[k + 1] - 1 : rowCount - 1;
+      const s = clamp && runStart < rowBegin ? rowBegin : runStart;
+      const e = clamp && runEnd > rowEnd ? rowEnd : runEnd;
+      if (e > s) {
+        out.push({ rowIndex: s, colIndex, rowspan: e - s + 1, colspan: 1 });
+      }
+    }
+  }
+  return out;
+}
+
+// ============================================================================
+// 从 el-table / vxe 的 spanMethod 迁移
+// ============================================================================
+
+/** `spanMethod` 的返回值，两种写法都吃（对齐 el-table / vxe） */
+export type SpanResult =
+  | [rowspan: number, colspan: number]
+  | { rowspan: number; colspan: number }
+  | null
+  | undefined
+  | void;
+
+export interface SpanMethodContext<T, C> {
+  row: T;
+  column: C;
+  rowIndex: number;
+  /** **中间列**索引，与 `MergeCell.colIndex` 同坐标系 */
+  columnIndex: number;
+}
+
+/**
+ * 把 el-table / vxe 风格的逐格 `spanMethod` 求值成一份静态 `MergeCell[]`。
+ *
+ * ```ts
+ * import { buildMergesFromSpan } from '@virt-table/vanilla';
+ *
+ * table.setMerges(buildMergesFromSpan(list, centerColumns, ({ rowIndex, columnIndex }) => {
+ *   if (columnIndex === 0) return rowIndex % 2 === 0 ? [2, 1] : [0, 0];
+ * }));
+ * ```
+ *
+ * **为什么是一个要显式调用的函数，而不是 option。** 表格内建这个回调在虚拟滚动下
+ * 两条路都不成立：全量求值是 O(行 × 列) 次回调（50 万行 × 10 列 = 500 万次，秒级）；
+ * 只对窗口求值则拿不到窗口外的合并块起点，结果是错的。做成函数是为了把代价摊在
+ * 调用点上——你能看见它遍历了多少行，也能自己决定什么时候重算。
+ *
+ * 用它之前先想想 `mergeKey`：「相邻同值 / 同键成段」这类需求（`spanMethod` 的绝大
+ * 多数真实用法）用 `mergeKey` 表达是 O(1) 摊销的，而且不禁用排序。
+ *
+ * 三个约定：
+ * - `centerColumns` **只传非固定列**，顺序即 `colIndex` 的顺序（固定列不参与合并）。
+ * - 跨度 ≤ 1 或非正数的返回值一律跳过：`[1, 1]` 是普通格，`[0, 0]` 是「被别人覆盖」，
+ *   两者都不需要产出 `MergeCell`（覆盖关系由 primary 格的跨度推导）。
+ * - 产出的合并块**不能互相重叠**，且 `rowspan` 要自己控制在合理范围内 —— 巨大的
+ *   rowspan 会把渲染区间拉回合并块起始行（实测 `rowspan=50000` 时会 materialize
+ *   5 万个 `<tr>`）。这两点与直接写 `options.merges` 的约束完全一致。
+ */
+export function buildMergesFromSpan<T, C>(
+  list: readonly T[],
+  centerColumns: readonly C[],
+  spanMethod: (ctx: SpanMethodContext<T, C>) => SpanResult,
+): MergeCell[] {
+  const out: MergeCell[] = [];
+  for (let rowIndex = 0; rowIndex < list.length; rowIndex++) {
+    const row = list[rowIndex];
+    for (let columnIndex = 0; columnIndex < centerColumns.length; columnIndex++) {
+      const res = spanMethod({
+        row,
+        column: centerColumns[columnIndex],
+        rowIndex,
+        columnIndex,
+      });
+      if (!res) continue;
+      const rowspan = Array.isArray(res) ? res[0] : res.rowspan;
+      const colspan = Array.isArray(res) ? res[1] : res.colspan;
+      if (!(rowspan > 0) || !(colspan > 0)) continue; // [0,0]：被覆盖的格
+      if (rowspan === 1 && colspan === 1) continue; // 普通格
+      out.push({ rowIndex, colIndex: columnIndex, rowspan, colspan });
+    }
+  }
+  return out;
+}

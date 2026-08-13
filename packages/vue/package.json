@@ -1,17 +1,64 @@
 {
   "name": "@virt-table/vue",
   "version": "0.0.1",
-  "description": "Vue wrapper for @virt-table/vanilla virtual table",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "description": "virt-table 的 Vue 3 封装：行列双向虚拟化的高性能表格组件",
+  "type": "module",
+  "license": "MIT",
+  "author": "keno-lee <keno.lee@foxmail.com>",
+  "homepage": "https://keno-lee.github.io/virt-table/vue/guide/started",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keno-lee/virt-table.git",
+    "directory": "packages/vue"
+  },
+  "bugs": {
+    "url": "https://github.com/keno-lee/virt-table/issues"
+  },
+  "keywords": [
+    "vue",
+    "vue3",
+    "vue-table",
+    "virt-table",
+    "virtual-scroll",
+    "virtualization",
+    "table",
+    "datagrid",
+    "data-grid",
+    "grid",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json && node ../../scripts/emit-dcts.mjs dist",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
   "dependencies": {
-    "@virt-table/vanilla": "workspace:*"
+    "@virt-table/vanilla": "workspace:^"
   },
   "peerDependencies": {
     "vue": ">=3.0.0"
   },
-  "scripts": {},
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "devDependencies": {
+    "vite": "^7.3.1",
+    "vue": "^3.5.0"
+  }
 }

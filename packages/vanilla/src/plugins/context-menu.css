@@ -1,0 +1,57 @@
+/* ==========================================================================
+ * vtContextMenu 插件样式
+ *
+ * 依赖核心 index.css 提供的 `--vt-*` 变量与 `vt-pop-in` keyframes。
+ * 按项目约定：不写字面颜色/圆角/间距，一律引用变量。
+ * ========================================================================== */
+.vt-context-menu {
+  position: absolute;
+  z-index: 50;
+  min-width: 168px;
+  padding: 6px;
+  font-size: var(--vt-font-size-sm);
+  user-select: none;
+  background: var(--vt-bg-elevated);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-panel);
+  box-shadow: var(--vt-shadow-lg);
+  color: var(--vt-text-color);
+  animation: vt-pop-in var(--vt-transition) var(--vt-ease);
+}
+
+.vt-context-menu-item {
+  padding: 7px 12px;
+  border-radius: var(--vt-radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--vt-text-color);
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-context-menu-item:hover {
+  background: var(--vt-color-primary-soft);
+  color: var(--vt-color-primary);
+}
+
+.vt-context-menu-item--disabled,
+.vt-context-menu-item--disabled:hover {
+  background: transparent;
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+.vt-context-menu-divider {
+  height: 1px;
+  background: var(--vt-border-color-light);
+  margin: 5px 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-context-menu {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

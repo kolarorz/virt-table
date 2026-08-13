@@ -1,30 +1,456 @@
-.vt-root {
+/* ==========================================================================
+ * virt-table 核心样式表（构建产物 `dist/core.css`）
+ *
+ * 设计原则：
+ *   1. 所有颜色 / 圆角 / 间距 / 字号 / 阴影 / 动效时长全部抽离为 `--vt-*` 变量，
+ *      换肤只需覆盖 `.vt-root`（或任意祖先）上的变量，无需覆盖任何选择器。
+ *   2. 暗色主题只重定义变量，不重复写规则（见「2. 暗色主题」）。
+ *   3. 派生色（悬停底色、选区底色、focus 环等）默认由主色 `color-mix` 推导，
+ *      因此只改 `--vt-color-primary` 即可整体换色；同时提供静态兜底值，
+ *      在不支持 `color-mix()` 的旧浏览器下依然可用。
+ *   4. 本文件只放**核心表格**用得到的规则。可选层的样式随其模块单独成文件，
+ *      按需引入：`plugins/*.css`（插件）、`components/*.css`（内置表单组件 /
+ *      VtFilterBuilder）。它们都只依赖本文件提供的 `--vt-*` 变量与
+ *      `vt-pop-in` keyframes（见 §9 动效）。
+ *
+ * 目录：
+ *   1. 设计变量（亮色）      5. 固定列 / 固定行
+ *   2. 暗色主题              6. 高亮 / 选区
+ *   3. 骨架结构 / 滚动条     7. 表单控件（勾选框 / 单选）
+ *   4. 表头 / 表体 / 表尾    8. 排序 / 拖拽 / 列宽
+ *                            9. 加载 / 空态 / 树形 / 分组 / 动效
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 1. 设计变量（亮色）
+ * `.vt-fb`（筛选管理器）挂在表格之外，因此同样承载全套 token
+ * ========================================================================== */
+.vt-root,
+.vt-fb {
+  /* ---- 品牌色 ---- */
+  --vt-color-primary: #2563eb;
+  --vt-color-primary-hover: #3b82f6;
+  --vt-color-primary-active: #1d4ed8;
+
+  /* ---- 语义色 ---- */
+  --vt-color-danger: #ef4444;
+  --vt-color-danger-soft: rgb(239 68 68 / 8%);
+  --vt-color-warning: #f59e0b;
+  --vt-color-success: #10b981;
+
+  /* ---- 背景 ---- */
+  --vt-bg: #ffffff;
+  /* 浮层背景（筛选面板 / 右键菜单 / 搜索框） */
+  --vt-bg-elevated: #ffffff;
+  /* 溢出文本 tooltip：亮色下走反色，与「面板」区分开 */
+  --vt-tooltip-bg: #2f3542;
+  --vt-tooltip-text: var(--vt-text-inverse);
+  --vt-header-bg: #f8fafc;
+  --vt-header-bg-hover: #f1f5f9;
+  /* 多级分组表头的分组格底色（比叶子列表头略深，凸显层级） */
+  --vt-header-group-bg: #f1f5f9;
+  --vt-footer-bg: #f8fafc;
+  /* 多级分组表尾的分组小计格底色 */
+  --vt-footer-group-bg: #f1f5f9;
+  --vt-stripe-bg: #fafbfc;
+  --vt-mask-bg: rgb(255 255 255 / 68%);
+
+  /* ---- 边框 ---- */
+  --vt-border-width: 1px;
+  --vt-border-color: #e8ecf1;
+  /* 更浅的分隔线：面板内分割、次级边界 */
+  --vt-border-color-light: #f1f4f8;
+  /* 更重的分隔线：表头底边、表尾顶边、控件描边 */
+  --vt-border-color-strong: #d5dae2;
+
+  /* ---- 文字 ---- */
+  --vt-text-color: #1f2937;
+  --vt-text-secondary: #5b6472;
+  --vt-text-placeholder: #98a2b3;
+  --vt-text-disabled: #c2c9d4;
+  /* 主色块上的反色文字（按钮、拖拽提示） */
+  --vt-text-inverse: #ffffff;
+  --vt-header-text-color: #384250;
+
+  /* ---- 填充（次级底色） ---- */
+  --vt-fill-color: #f1f3f7;
+  --vt-fill-color-light: #f7f9fb;
+  --vt-fill-color-hover: #e8ebf1;
+
+  /* ---- 滚动条 ---- */
+  --vt-scrollbar-size: 10px;
+  /**
+   * 轨道底色。默认 `transparent`：自绘的两条是 **overlay 浮层**，添出后必须不留痕迹，
+   * 有底色就会在表格边缘留下一条常驻色带。想要「槽」的观感就覆盖成半透明色
+   * （如 `rgb(248 250 252 / 85%)`），但注意它会跟着滑块一起淡入淡出。
+   * 浮层面板里的原生滚动条也用这个值。
+   */
+  --vt-scrollbar-track: transparent;
+  --vt-scrollbar-thumb: #cdd3dd;
+  --vt-scrollbar-thumb-hover: #adb5c2;
+
+  /* ---- 圆角 ---- */
+  --vt-radius-sm: 4px;
+  --vt-radius-md: 6px;
+  --vt-radius-lg: 10px;
+  --vt-radius-full: 999px;
+  /* 表格容器圆角：默认仅 border 模式（卡片形态）生效，见 §3 */
+  --vt-radius-root: var(--vt-radius-lg);
+  /* 控件（勾选框 / 输入框 / 按钮）圆角 */
+  --vt-radius-control: var(--vt-radius-sm);
+  /* 浮层圆角 */
+  --vt-radius-panel: var(--vt-radius-lg);
+
+  /* ---- 阴影 ---- */
+  /* 阴影基色，以空格分隔的 RGB 通道，便于叠加不同透明度 */
+  --vt-shadow-rgb: 15 23 42;
+  --vt-shadow-sm: 0 1px 2px rgb(var(--vt-shadow-rgb) / 8%);
+  --vt-shadow-md:
+    0 4px 12px rgb(var(--vt-shadow-rgb) / 10%), 0 1px 3px rgb(var(--vt-shadow-rgb) / 6%);
+  --vt-shadow-lg:
+    0 12px 32px rgb(var(--vt-shadow-rgb) / 14%), 0 2px 8px rgb(var(--vt-shadow-rgb) / 8%);
+  /* 固定列阴影强度 */
+  --vt-fixed-shadow-color: rgb(var(--vt-shadow-rgb) / 14%);
+  --vt-fixed-shadow-size: 10px;
+  /* 兼容旧变量名 */
+  --vt-shadow: rgb(var(--vt-shadow-rgb) / 12%);
+
+  /* ---- 字体 ---- */
+  --vt-font-family:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --vt-font-size: var(--vt-density-font-size, 14px);
+  --vt-font-size-sm: 13px;
+  --vt-font-size-xs: 12px;
+  /**
+   * 行高用 **px 而不是无单位比例**，这不是风格偏好而是硬要求：
+   *
+   * 行的实际高度 = line-height + 上下内边距 + `.vt-td` 的 1px 下边框。用比例的话
+   * 14px × 1.55 = 21.7px，行高就成了 40.69px —— 而 `fixedSize: true` 模式按 `estimatedSize`
+   * (40) 建立滚动几何，模型比实际矮 0.69px/行。十万行量级下 `scrollTop` 就能超出模型总高，
+   * 而 `@virt-list/core` 的 `_calcRange()` 在 backward 分支里越界后**不 clamp、原地不动**，
+   * 窗口会永久冻结在半路，下方留下几百万 px 空白（详见 AGENTS.md §7.11）。
+   *
+   * 21px 是倒推出来的：21 + 9×2 + 1 = 40，正好等于默认 `estimatedSize`。
+   * ⚠️ 改 `--vt-font-size` / `--vt-cell-padding-y` 时必须一并调这个值，
+   *    并保证「line-height + padding-y×2 + 1」等于你传给 `estimatedSize` 的数。
+   */
+  --vt-line-height: var(--vt-density-line-height, 21px);
+  --vt-font-weight-medium: 500;
+  --vt-font-weight-semibold: 600;
+  /* 数字等宽，数据列纵向对齐更整齐；设为 normal 可关闭 */
+  --vt-font-numeric: tabular-nums;
+
+  /* ---- 间距（密度） ----
+     行高恰好落在 40px：line-height 21 + padding-y 9×2 + 下边框 1 = 40，
+     与默认 estimatedSize 一致（这个等式是 fixed 行高模式正确的前提，见上方 --vt-line-height） */
+  --vt-cell-padding-y: var(--vt-density-cell-padding-y, 9px);
+  --vt-cell-padding-x: var(--vt-density-cell-padding-x, 14px);
+  --vt-header-padding-y: var(--vt-density-header-padding-y, 10px);
+  --vt-header-padding-x: var(--vt-cell-padding-x);
+
+  /* ---- 内容类型（col.cellType）---- */
+  /**
+   * 图片格的最大高度。默认**必须等于 line-height**，否则图片会把行撑高：
+   * 实测给 28px 时行高从 40 变成 47（28 + padding 9×2 + 下边框 1），而 `fixedSize: true`
+   * 模式按 `estimatedSize` 建滚动几何，行一变高就重演 §7.11 那个「滚不到底」的坑。
+   * 要放大图就连着调 `--vt-line-height` / `--vt-cell-padding-y` 与 `estimatedSize`。
+   */
+  --vt-cell-image-max-h: var(--vt-line-height);
+  /* 标签格的默认主色（未给 color 时用主色） */
+  --vt-cell-option-color: var(--vt-color-primary);
+
+  /* ---- 控件尺寸 ---- */
+  --vt-control-size: 16px;
+  --vt-icon-btn-size: 20px;
+  --vt-indent-size: 20px;
+  /* 列设置面板里分组表头子列的层级缩进 */
+  --vt-panel-indent-size: 16px;
+  /* 树形开关与右侧文本之间的间距 */
+  --vt-tree-toggle-gap: 6px;
+
+  /* ---- 动效 ---- */
+  --vt-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --vt-transition-fast: 120ms;
+  --vt-transition: 200ms;
+
+  /* ---- 派生色兜底值（不支持 color-mix 时使用） ---- */
+  --vt-color-primary-soft: rgb(37 99 235 / 12%);
+  --vt-color-primary-softer: rgb(37 99 235 / 6%);
+  --vt-row-hover-bg: #f2f6fd;
+  --vt-row-selected-bg: #e8f0fe;
+  --vt-cell-selection-bg: rgb(37 99 235 / 10%);
+  --vt-focus-ring-color: rgb(37 99 235 / 24%);
+
+  /* ---- 分组行（兜底值，派生自主色，见下方 @supports） ---- */
+  --vt-group-bg: #eaf0fb;
+  --vt-group-bg-lv2: #f1f5fd;
+  --vt-group-bg-lv3: #f6f9fe;
+  --vt-group-bg-hover: #dfe9fa;
+  --vt-group-border: #c9d8f2;
+  --vt-group-accent: var(--vt-color-primary);
+  --vt-group-accent-width: 3px;
+  --vt-group-text: var(--vt-text-color);
+
+  /* ---- 搜索命中高亮 ---- */
+  --vt-highlight-bg: rgb(245 158 11 / 16%);
+  --vt-highlight-border: #f59e0b;
+
+  /* ---- 空态图标（尺寸设为 0 可隐藏内置图标） ---- */
+  --vt-empty-icon-size: 40px;
+  --vt-empty-icon: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 14h4l1.5 2.5h7L17 14h4'/%3E%3Cpath d='M3 14l2.2-7.4A2 2 0 0 1 7.1 5h9.8a2 2 0 0 1 1.9 1.6L21 14v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
+
   position: relative;
   overflow: hidden;
   width: 100%;
   height: 100%;
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: var(--vt-font-family);
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
 }
 
-/* ---- border mode ---- */
+/* 派生色：主色变更时整体联动 */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-root,
+  .vt-fb {
+    --vt-color-primary-soft: color-mix(in srgb, var(--vt-color-primary) 12%, transparent);
+    --vt-color-primary-softer: color-mix(in srgb, var(--vt-color-primary) 6%, transparent);
+    --vt-row-hover-bg: color-mix(in srgb, var(--vt-color-primary) 6%, var(--vt-bg));
+    --vt-row-selected-bg: color-mix(in srgb, var(--vt-color-primary) 11%, var(--vt-bg));
+    --vt-cell-selection-bg: color-mix(in srgb, var(--vt-color-primary) 10%, transparent);
+    --vt-focus-ring-color: color-mix(in srgb, var(--vt-color-primary) 24%, transparent);
+    --vt-group-bg: color-mix(in srgb, var(--vt-color-primary) 9%, var(--vt-bg));
+    --vt-group-bg-lv2: color-mix(in srgb, var(--vt-color-primary) 5.5%, var(--vt-bg));
+    --vt-group-bg-lv3: color-mix(in srgb, var(--vt-color-primary) 3%, var(--vt-bg));
+    --vt-group-bg-hover: color-mix(in srgb, var(--vt-color-primary) 15%, var(--vt-bg));
+    --vt-group-border: color-mix(in srgb, var(--vt-color-primary) 28%, var(--vt-border-color));
+  }
+}
+
+/* ---- 密度变体：类加在 .vt-root 上或任意祖先容器上均可（变量自然继承） ---- */
+/* 紧凑：行高正好 30px（19 + 5×2 + 1）→ 用这个变体时 estimatedSize 传 30 */
+/**
+ * 密度变体走 `--vt-density-*` 这层间接，而不是直接改 `--vt-cell-padding-y` 等。
+ *
+ * 原因是 CSS 变量的继承规则：元素**自己声明**的值胜过从祖先继承的，与特异度无关。
+ * `.vt-root` 自己声明了全套密度 token，所以把 `.vt-compact` 加在外层容器上曾经
+ * **完全无效**（实测：父元素上 --vt-line-height 是 19px，`.vt-root` 上仍是 21px，
+ * 行高照旧 40）—— 而 `.vt-root--compact` 又没有任何代码会加，等于这个功能是坏的。
+ *
+ * 改成 `.vt-root { --vt-cell-padding-y: var(--vt-density-cell-padding-y, 9px) }` 之后：
+ * 祖先设 `--vt-density-*` → root 解析时取到；root 自己也能加 `.vt-root--compact`；
+ * 使用方直接覆盖 `#x .vt-root { --vt-cell-padding-y: 8px }` 依然优先（同元素更高特异度）。
+ * 三种用法都成立。
+ */
+.vt-root--compact,
+.vt-compact {
+  --vt-density-cell-padding-y: 5px;
+  --vt-density-cell-padding-x: 10px;
+  --vt-density-header-padding-y: 6px;
+  --vt-density-font-size: 13px;
+  --vt-density-line-height: 19px;
+}
+
+/* 宽松：行高正好 50px（21 + 14×2 + 1，沿用默认 line-height）→ estimatedSize 传 50 */
+.vt-root--loose,
+.vt-loose {
+  --vt-density-cell-padding-y: 14px;
+  --vt-density-cell-padding-x: 18px;
+  --vt-density-header-padding-y: 15px;
+}
+
+/* ==========================================================================
+ * 2. 暗色主题
+ * 显式 `.vt-root--dark`，或处于 `.dark` / `[data-theme='dark']` 祖先下自动生效
+ * （兼容 VitePress / Tailwind / 常见暗色约定）；
+ * 需要在暗色容器内强制亮色时，给根节点加 `.vt-root--light`。
+ * ========================================================================== */
+.vt-root--dark,
+.vt-fb--dark,
+.dark .vt-root:not(.vt-root--light),
+.dark .vt-fb:not(.vt-fb--light),
+[data-theme='dark'] .vt-root:not(.vt-root--light),
+[data-theme='dark'] .vt-fb:not(.vt-fb--light) {
+  --vt-color-primary: #4c8dff;
+  --vt-color-primary-hover: #6ba3ff;
+  --vt-color-primary-active: #3b7ce0;
+
+  --vt-color-danger: #f87171;
+  --vt-color-danger-soft: rgb(248 113 113 / 14%);
+  --vt-color-warning: #fbbf24;
+  --vt-color-success: #34d399;
+
+  --vt-bg: #17181c;
+  --vt-bg-elevated: #22242b;
+  /* 暗色下反色会糊成一片，改成比 elevated 更亮一档来表达浮起 */
+  --vt-tooltip-bg: #3b4048;
+  --vt-tooltip-text: var(--vt-text-color);
+  --vt-header-bg: #1e2026;
+  --vt-header-bg-hover: #262931;
+  --vt-header-group-bg: #24272f;
+  --vt-footer-bg: #1e2026;
+  --vt-footer-group-bg: #24272f;
+  --vt-stripe-bg: #1b1d22;
+  --vt-mask-bg: rgb(23 24 28 / 64%);
+
+  --vt-border-color: #2e3138;
+  --vt-border-color-light: #262931;
+  --vt-border-color-strong: #3b4048;
+
+  --vt-text-color: #e6e8ec;
+  --vt-text-secondary: #a2a9b4;
+  --vt-text-placeholder: #7b828d;
+  --vt-text-disabled: #575d67;
+  --vt-text-inverse: #ffffff;
+  --vt-header-text-color: #cdd3dc;
+
+  --vt-fill-color: #262931;
+  --vt-fill-color-light: #1e2026;
+  --vt-fill-color-hover: #30343d;
+
+  --vt-scrollbar-thumb: #3b4048;
+  --vt-scrollbar-thumb-hover: #4e5560;
+
+  --vt-shadow-rgb: 0 0 0;
+  --vt-shadow-sm: 0 1px 2px rgb(var(--vt-shadow-rgb) / 32%);
+  --vt-shadow-md:
+    0 4px 12px rgb(var(--vt-shadow-rgb) / 44%), 0 1px 3px rgb(var(--vt-shadow-rgb) / 32%);
+  --vt-shadow-lg:
+    0 14px 36px rgb(var(--vt-shadow-rgb) / 56%), 0 2px 8px rgb(var(--vt-shadow-rgb) / 40%);
+  --vt-fixed-shadow-color: rgb(var(--vt-shadow-rgb) / 45%);
+  --vt-shadow: rgb(var(--vt-shadow-rgb) / 5%);
+
+  /* 派生色兜底（暗色） */
+  --vt-color-primary-soft: rgb(76 141 255 / 18%);
+  --vt-color-primary-softer: rgb(76 141 255 / 10%);
+  --vt-row-hover-bg: #1f2532;
+  --vt-row-selected-bg: #23304a;
+  --vt-cell-selection-bg: rgb(76 141 255 / 16%);
+  --vt-focus-ring-color: rgb(76 141 255 / 32%);
+
+  --vt-highlight-bg: rgb(251 191 36 / 20%);
+  --vt-highlight-border: #fbbf24;
+
+  /* 分组行（暗色兜底） */
+  --vt-group-bg: #1e2739;
+  --vt-group-bg-lv2: #1b2130;
+  --vt-group-bg-lv3: #191c25;
+  --vt-group-bg-hover: #243252;
+  --vt-group-border: #34415c;
+
+  color-scheme: dark;
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-root--dark,
+  .vt-fb--dark,
+  .dark .vt-root:not(.vt-root--light),
+  .dark .vt-fb:not(.vt-fb--light),
+  [data-theme='dark'] .vt-root:not(.vt-root--light),
+  [data-theme='dark'] .vt-fb:not(.vt-fb--light) {
+    --vt-color-primary-soft: color-mix(in srgb, var(--vt-color-primary) 20%, transparent);
+    --vt-color-primary-softer: color-mix(in srgb, var(--vt-color-primary) 10%, transparent);
+    --vt-row-hover-bg: color-mix(in srgb, var(--vt-color-primary) 12%, var(--vt-bg));
+    --vt-row-selected-bg: color-mix(in srgb, var(--vt-color-primary) 22%, var(--vt-bg));
+    --vt-cell-selection-bg: color-mix(in srgb, var(--vt-color-primary) 16%, transparent);
+    --vt-focus-ring-color: color-mix(in srgb, var(--vt-color-primary) 32%, transparent);
+    --vt-group-bg: color-mix(in srgb, var(--vt-color-primary) 18%, var(--vt-bg));
+    --vt-group-bg-lv2: color-mix(in srgb, var(--vt-color-primary) 11%, var(--vt-bg));
+    --vt-group-bg-lv3: color-mix(in srgb, var(--vt-color-primary) 6%, var(--vt-bg));
+    --vt-group-bg-hover: color-mix(in srgb, var(--vt-color-primary) 26%, var(--vt-bg));
+    --vt-group-border: color-mix(in srgb, var(--vt-color-primary) 34%, var(--vt-border-color));
+  }
+}
+
+/* ==========================================================================
+ * 3. 骨架结构 / 滚动条
+ * ========================================================================== */
+
+/* 边框模式：卡片形态（外框 + 圆角 + 纵向网格线） */
+.vt-root--border {
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-root);
+}
+
 .vt-root--border .vt-th,
 .vt-root--border .vt-td {
-  border-right: 1px solid #e8e8e8;
+  border-right: var(--vt-border-width) solid var(--vt-border-color-light);
 }
 
+.vt-root--border .vt-th {
+  border-right-color: var(--vt-border-color);
+}
+
+/**
+ * 滚动视口。**两个轴的分工完全不同**，这是整套滚动模型的地基：
+ *
+ * - `overflow-y: hidden` —— 纵向滚动位置归 JS 掌管（`@virt-list/core` 的偏移量），
+ *   内容靠 `.vt-table` 的残差 `top` 移动。浏览器不会在合成器线程上抢先把画面滚过去，
+ *   于是「已呈现的一帧落在没有 DOM 的位置上」这件事从根上不成立；
+ *   也没有任何元素的高度随行数增长，元素高度上限（Chrome 实测 33,554,428px）
+ *   与「fixed 行高误差累积到滚不动」（AGENTS.md §7.11）两个坑一并消失。
+ *
+ * - `overflow-x: auto` —— 横向**刻意保留原生 scrollport**。
+ *   `td.vt-fixed-left/right`、`.vt-group-label`、`.vt-merge-label` 三处
+ *   `position: sticky` 都以它为参照，横向一旦改成 JS 位移，这三套定位会同时失效。
+ *   自绘横条只是驱动 `scrollLeft`，不接管位移本身。
+ *
+ * `overflow-anchor: none` 必须显式关掉：`overflow: hidden` 依然是个 scrollport，
+ * 浏览器的滚动锚定照样会在内容高度变化时悄悄改 `scrollTop`（且不派发 scroll 事件），
+ * 与我们自己维护的偏移量打架。
+ *
+ * `touch-action: pan-x`：横向触摸平移仍交给浏览器（原生 scrollport），
+ * 纵向由 `InputController` 接管（含惯性），所以只让出 x 轴。
+ *
+ * 原生滚动条整体隐藏：两条都换成自绘的浮层轨道（见 §3.1），外观才统一。
+ */
 .vt-client {
+  position: relative;
   width: 100%;
   height: 100%;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
 }
 
-.vt-skeleton {
-  float: left;
+.vt-client::-webkit-scrollbar {
   width: 0;
+  height: 0;
 }
 
+/*
+ * 视口要能接收键盘事件，所以带 tabindex="0"。鼠标点击时不该出现焦点环
+ * （整张表被框起来很难看），键盘 Tab 进来时必须出现 —— :focus-visible 正好是这条界线。
+ */
+.vt-client:focus {
+  outline: none;
+}
+
+.vt-client:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: -2px;
+}
+
+/**
+ * 表体。`position: relative` + `top` 承载**纵向残差**（`_applyBodyOffset` 写入）。
+ *
+ * ⚠️ 不能改用 `transform`：`.vt-table` 是 `td.vt-fixed-left/right` 的祖先，
+ * transform 会给后代建立包含块，让固定列的 `position: sticky; left` 失去参照、
+ * 跟着内容一起被推走（实测横滚 500px 后偏差 −500px，见下方表头横向同步那段）。
+ * `top` 不建包含块，容器内的 sticky 照常工作。
+ */
 .vt-table {
   min-width: 100%;
   display: table;
+  position: relative;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -34,37 +460,121 @@
   outline: none;
 }
 
-.vt-thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: #fafafa;
+/* ==========================================================================
+ * 3.1 自绘滚动条
+ *
+ * DOM 与行为来自 `@virt-list/vanilla` 的 `Scrollbar`（轨道 `.virt-scrollbar`
+ * + 滑块 `.virt-scrollbar__thumb`），这里只把它的 `--virt-scrollbar-*` 变量映射到
+ * 表格自己的 `--vt-scrollbar-*` token —— 于是暗色主题、换肤都自动跟随，
+ * 不需要再引入 virt-list 的 scrollbar.css（那份的显形选择器绑在 `.virt-list__client` 上）。
+ *
+ * 轨道挂在 `.vt-root` 上而不是 `.vt-client` 里：`.vt-header` / `.vt-footer` 是
+ * `.vt-root` 的子节点且 `z-index: 10`，挂在视口内的轨道整棵子树都会被它们盖住。
+ * ========================================================================== */
+.vt-root .virt-scrollbar {
+  --virt-scrollbar-size: var(--vt-scrollbar-size);
+  --virt-scrollbar-track-bg: var(--vt-scrollbar-track);
+  --virt-scrollbar-thumb-bg: var(--vt-scrollbar-thumb);
+  --virt-scrollbar-thumb-bg-hover: var(--vt-scrollbar-thumb-hover);
+  --virt-scrollbar-thumb-bg-active: var(--vt-scrollbar-thumb-hover);
+  --virt-scrollbar-thumb-radius: var(--vt-radius-full);
+  --virt-scrollbar-thumb-inset: 2px;
+
+  position: absolute;
+  /* 高于表头表尾（z-index: 10）与固定列阴影（20），否则轨道在那几段里点不到 */
+  z-index: 30;
+  display: none;
+  background: var(--virt-scrollbar-track-bg);
+  opacity: 0;
+  transition: opacity var(--vt-transition) var(--vt-ease);
 }
 
-.vt-tfoot {
-  position: sticky;
+/* 内容长到需要滚动时 Scrollbar.update() 才加这个类 */
+.vt-root .virt-scrollbar.is-enabled {
+  display: block;
+}
+
+/**
+ * 纵向轨道只覆盖**表体带**，不横穿表头表尾。
+ *
+ * 两个变量由 `_syncGeometryVars()` 写入：
+ *   --vt-body-view-t = 表头高度（可见数据区上缘）
+ *   --vt-body-view-h = 可见数据区高度（已扣掉表头与表尾）
+ *
+ * ⚠️ 它们必须**实时**跟随表头表尾的高度，不能是离散时机的快照。多级分组表头的高度
+ * 由「多行 + rowSpan 自动分配」算出，会在刷新时机之外变化（横滚触发 colspan 裁剪重建、
+ * 字体加载后重排、首帧布局未完成），快照一旦过期轨道就停在错误高度上 —— 踩过。
+ * 现在由 `_initWidthResizeObserver()` 里的 ResizeObserver 观察两个 wrap 驱动。
+ */
+.vt-root .virt-scrollbar--vertical {
+  top: var(--vt-body-view-t, 0px);
+  height: var(--vt-body-view-h, 100%);
+  right: 0;
+  width: var(--virt-scrollbar-size);
+}
+
+/**
+ * 横向轨道贴容器底边，两端都不避让 —— 它代表整张表的横向位置。
+ * 右端不为竖条让位：轨道透明，两条在右下角交叠时只会看到两个滑块，
+ * 而滑块各自被 travel 限制，实际很少同时压到那个角。
+ */
+.vt-root .virt-scrollbar--horizontal {
+  left: 0;
+  right: 0;
   bottom: 0;
-  z-index: 10;
-  background: #fafafa;
+  height: var(--virt-scrollbar-size);
 }
 
-.vt-tfoot .vt-td {
-  border-top: 2px solid #e8e8e8;
-  font-weight: 600;
+/**
+ * 显形规则：常驻（`.is-persistent`，`scrollbarAutoHide: 0`）、滚动中（`.is-active`，
+ * 由 JS 加）、指针悬在表格上、正在拖拽。默认淡出是为了不遮挡内容，与 macOS 的
+ * 浮层滚动条一致。
+ *
+ * ⚠️ 选择器与 virt-list 那份**必须不同**：它写的是
+ * `.virt-list__client:hover > .virt-scrollbar`（轨道是视口的直接子节点），
+ * 而这里容器叫 `.vt-client`、轨道挂在 `.vt-root` 上，既不同名也不是父子关系。
+ * 悬停判定挂在 `.vt-root` 上，鼠标在表头上时滚动条也可见。
+ */
+.vt-root:hover > .virt-scrollbar.is-enabled,
+.vt-root .virt-scrollbar.is-enabled.is-persistent,
+.vt-root .virt-scrollbar.is-enabled.is-active,
+.vt-root .virt-scrollbar.is-enabled.is-dragging {
+  opacity: 1;
 }
 
-.vt-th {
-  display: table-cell;
-  margin: 0;
-  padding: 8px 12px;
-  box-sizing: border-box;
-  border-bottom: 2px solid #e8e8e8;
-  font-weight: 600;
-  text-align: left;
-  vertical-align: middle;
-  /* overflow: hidden; */
+.vt-root .virt-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--virt-scrollbar-thumb-bg);
+  border-radius: var(--virt-scrollbar-thumb-radius);
+  cursor: default;
+  /* 位置由 JS 每帧写 transform，这里绝不能加 transition：
+     加了就意味着滑块落后于它所代表的内容，快速拖拽时尤其明显 */
+  transition: background-color var(--vt-transition-fast) linear;
 }
 
+.vt-root .virt-scrollbar--vertical .virt-scrollbar__thumb {
+  right: var(--virt-scrollbar-thumb-inset);
+  left: var(--virt-scrollbar-thumb-inset);
+  width: auto;
+}
+
+.vt-root .virt-scrollbar--horizontal .virt-scrollbar__thumb {
+  top: var(--virt-scrollbar-thumb-inset);
+  bottom: var(--virt-scrollbar-thumb-inset);
+  height: auto;
+}
+
+.vt-root .virt-scrollbar__thumb:hover {
+  background: var(--virt-scrollbar-thumb-bg-hover);
+}
+
+.vt-root .virt-scrollbar.is-dragging .virt-scrollbar__thumb {
+  background: var(--virt-scrollbar-thumb-bg-active);
+}
+
+/* 结构性占位单元格：永不参与视觉 */
 .vt-padding {
   visibility: hidden;
   padding: 0 !important;
@@ -85,6 +595,214 @@
   overflow: hidden;
 }
 
+/* ==========================================================================
+ * 4. 表头 / 表体 / 表尾
+ * ========================================================================== */
+/**
+ * 表头 / 表尾容器：sticky 挂在**这一层**，而不是 `<thead>` / `<tfoot>` 上。
+ *
+ * 原来 thead 留在 body table 里做 sticky，位置是稳的（合成器处理，主线程卡死也不脱位，
+ * 有对照实验），但**绘制**保不住：`<table>` 是整体布局上下文，虚拟滚动每帧改 tbody
+ * （padding 行高度 / 行内容 / rowSpan）就让整个 table 失效，thead 内容没变也要重新
+ * paint + 光栅化，主线程忙时来不及提交 → 整条表头闪白。实测空白帧 **41% → 0%**。
+ *
+ * `width: max-content` 不能省：div 默认宽度 = 容器宽度，那横向滚动时它没有可滚动的部分、
+ * 压根不动，表头就跟内容错开了。设成内容宽度后它随内容被合成器平移，**零 JS 零滞后**
+ * （实测横滚 30 帧最大偏差 0.03px）。`min-width: 100%` 保证列很少时也铺满。
+ *
+ * 详见 AGENTS.md §7.10。
+ */
+/**
+ * 表头 / 表尾：`absolute` 挂在 `.vt-root`（滚动容器**外**），完全不参与滚动。
+ *
+ * 为什么不用 sticky：sticky 的粘性余量由主线程每帧算出的布局决定，主线程跟不上时
+ * 余量是旧值、元素被摆到半路。表尾方向尤其明显（余量直接来自 body table 高度，那正是
+ * 虚拟滚动每帧在改的）—— 染色抓帧实测 212 帧：sticky 下表尾只有 **4%** 贴底，
+ * **61% 跑到中间、8% 跑到顶部**；改 absolute 后 **99%** 贴底。
+ *
+ * 代价：横向要 JS 同步（`_syncSectionX` 改 `left`，不能用 transform —— 那会给后代建
+ * 包含块，固定列表头的 sticky 会失去参照），主线程卡顿时滞后一帧。横向慢半拍远比纵向乱跳可接受。
+ *
+ * `width: max-content` + `min-width: 100%`：内容宽度优先，列少时铺满容器。
+ */
+.vt-header,
+.vt-footer {
+  position: absolute;
+  left: 0;
+  /**
+   * ⚠️ 两条滚动条都是 **overlay 浮层**，不占布局空间，所以表头表尾**贴边、不让位**
+   * （`--vt-scrollbar-w/-h` 恒为 0，保留只为兼容使用方可能引用它们的样式）。
+   *
+   * 曾经让过位，那是个自相矛盾的组合：表头表尾被永久抬高 / 收窄 10px 留出一条空带，
+   * 而那条带的遮挡物（轨道）**会自动淡出** —— 横条一淡出，底部空带就露出下方仍在
+   * 滚动的行内容（拖竖条时横条淡出，穿透就发生在那一刻）。
+   * 要么两边都让位且常驻，要么都不让位；这里选了后者。
+   *
+   * `pointer-events: none` 与滚动条**无关**（轨道 `z-index: 30` 本就在这一层的 10 之上，
+   * 命中测试同样按层叠顺序走，滑块拿得到事件）。它留着是为原本的用途：让单元格之间的
+   * 空隙（右侧没有列的区域）以及使用方若改回原生滚动条时的那一条能穿透下去。
+   * 事件由内部 `<tr>` 收回（见下），排序 / 列宽拖拽 / 筛选都不受影响。
+   */
+  right: var(--vt-scrollbar-w, 0px);
+  pointer-events: none;
+  z-index: 10;
+  /* 裁掉超出可视区的表格；同时让本元素成为内部固定列 sticky 的参照容器 */
+  overflow: hidden;
+  background: var(--vt-header-bg);
+}
+
+/**
+ * 单元格把事件收回来：容器 `pointer-events: none` 只是为了让指针能穿透到滚动条，
+ * 表头本身的交互（排序、列宽拖拽、筛选、列拖拽）仍要正常工作。
+ *
+ * 只给 `<tr>` 开，不给容器开 —— 单元格之间的空隙（表格右侧没有列的区域，以及
+ * overlay 滚动条覆盖的那一条）仍然穿透。
+ */
+.vt-header > .vt-table > * > tr,
+.vt-footer > .vt-table > * > tr {
+  pointer-events: auto;
+}
+
+.vt-header {
+  top: 0;
+}
+
+/**
+ * 内层 table 承担横向偏移（外层被钉在可视区内，不能动）。
+ * 用 `left` 而不是 `transform`：transform 会给后代建立包含块，固定列表头的
+ * `position: sticky; left` 会失去参照、跟着一起被推走（实测偏差 = 横滚距离）。
+ */
+.vt-header > .vt-table,
+.vt-footer > .vt-table {
+  position: relative;
+}
+
+/**
+ * 表尾贴住容器底部。
+ *
+ * 它是 `absolute` 挂在 `.vt-root` 上的，所以「贴底」是无条件的，不再依赖任何余量 ——
+ * 早先用 `position: sticky; bottom: 0` 时，**内容撑不满容器**就会失效（sticky 只在元素
+ * 「会被滚出视口」时起作用，没有可粘余量就回落到紧跟末行下方：实测 3 行 + 400px 容器，
+ * 表尾停在 top=162，距容器底 198px，看起来像「表尾跑到中间去了」）。
+ *
+ * 文档流里也不再需要等高占位块（原来的 `.vt-header-spacer` / `.vt-footer-spacer`）：
+ * 表头表尾在账本里登记为 `stickyHeader` / `stickyFooter` 槽，`getSlotSize()` 计入它们，
+ * 于是 `getMaxOffset()` 自动为上下两段留出空间，表体的起始位置也是**算**出来的
+ * （见 `_applyBodyOffset`）。
+ */
+.vt-footer {
+  /* 贴底，不为横条让位 —— 它是不占布局空间的 overlay 浮层（见 .vt-header 那段） */
+  bottom: var(--vt-scrollbar-h, 0px);
+  background: var(--vt-footer-bg);
+}
+
+/* thead 自身不再 sticky（父容器承担），只留底色 */
+.vt-thead {
+  background: var(--vt-header-bg);
+}
+
+.vt-th {
+  display: table-cell;
+  margin: 0;
+  padding: var(--vt-header-padding-y) var(--vt-header-padding-x);
+  box-sizing: border-box;
+  background: var(--vt-header-bg);
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color-strong);
+  color: var(--vt-header-text-color);
+  font-size: var(--vt-font-size-sm);
+  font-weight: var(--vt-font-weight-semibold);
+  letter-spacing: 0.01em;
+  text-align: left;
+  vertical-align: middle;
+}
+
+/* ---- 多级分组表头：分组格（横跨若干叶子列，自身不承载数据） ---- */
+.vt-th--group {
+  background: var(--vt-header-group-bg);
+  font-weight: var(--vt-font-weight-semibold);
+}
+
+/**
+ * 分组格必须单行不折行。
+ *
+ * 横向虚拟化会把跨越视口边界的分组格 colspan 裁剪到视口内，于是它的渲染宽度随滚动变化；
+ * 若允许折行，宽度一窄内容就多占一行 → 行高变化 → sticky 的表头/表尾整体位移，
+ * 横向滚动时表现为高度抖动。锁成单行后高度与宽度解耦，不再抖。
+ *
+ * 完整内容通过 title 原生 tooltip 兜底（`text-overflow` 对 `display: table-cell`
+ * 无效，不会出现省略号，超出部分直接被裁掉）。
+ */
+.vt-th--group,
+.vt-tfoot .vt-td--group {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/**
+ * 中间段的分组格：内容交给 .vt-group-label（sticky 内层）承载。
+ *
+ * ⚠️ 这里必须 `overflow: visible`——祖先只要不是 visible 就会成为 sticky 的滚动容器，
+ * 内层的 sticky 会彻底失效。裁剪改由内层自己做。
+ */
+.vt-th--group.vt-group--sticky,
+.vt-tfoot .vt-td--group.vt-group--sticky {
+  overflow: visible;
+}
+
+/**
+ * 分组标签：横向滚动时在「可见中间区」内居中且平滑跟随。
+ *
+ * 由 CSS sticky 在合成器逐帧完成，因此不受列窗口整列取整的影响（DOM 只在列范围变化时
+ * 重建，逐像素的跟随全交给浏览器，主线程零开销）。
+ *   left  = 左冻结区宽度      → 内层左缘对齐可见中间区的左缘
+ *   width = min(本格宽, 可见中间区宽)
+ *           分组比可见区宽 → 取可见区宽，被钉住并在其中居中（标签稳定不动）
+ *           分组较窄       → 取本格宽，退化为格内居中（本来也不会被裁剪）
+ * sticky 天然被限制在本格内，所以分组右边界进入视口时标签会被推着平滑滑出，不会跳。
+ */
+.vt-group-label {
+  display: block;
+  position: sticky;
+  left: var(--vt-fixed-left-w, 0px);
+  width: min(100%, var(--vt-center-view-w, 100%));
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 分组格之间加纵向分隔线，层级关系更清晰（无 border 模式下也保留） */
+.vt-th--group + .vt-th--group,
+.vt-th--group + .vt-th {
+  border-left: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+/* tfoot 自身不再 sticky（`.vt-footer` 容器承担） */
+.vt-tfoot {
+  background: var(--vt-footer-bg);
+}
+
+.vt-tfoot .vt-td {
+  background: var(--vt-footer-bg);
+  border-top: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-bottom: none;
+  font-weight: var(--vt-font-weight-semibold);
+  color: var(--vt-header-text-color);
+}
+
+/* ---- 多级分组表尾：分组小计格（横跨若干叶子列） ---- */
+.vt-tfoot .vt-td--group {
+  background: var(--vt-footer-group-bg);
+}
+
+/* 分组表尾内部各行之间需要分隔线（.vt-tfoot .vt-td 默认去掉了 border-bottom） */
+.vt-tfoot-row + .vt-tfoot-row > .vt-td {
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-tfoot .vt-td--group + .vt-td--group,
+.vt-tfoot .vt-td--group + .vt-td {
+  border-left: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
 .vt-tr {
   border: none;
   box-sizing: border-box;
@@ -93,66 +811,245 @@
 .vt-td {
   display: table-cell;
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--vt-cell-padding-y) var(--vt-cell-padding-x);
   box-sizing: border-box;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color-light);
   min-width: 0;
   vertical-align: middle;
   text-align: left;
+  font-variant-numeric: var(--vt-font-numeric);
+  /* 注意：单元格不加 background 过渡——行会被虚拟滚动复用，
+     过渡会在快速滚动时把上一行的底色带过来造成闪烁 */
 }
 
-/* ---- text overflow ---- */
+/* 文本容器：内边距统一由 .vt-td 提供 */
+.vt-td-text {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+ * 内容类型（列上的 `cellType`）
+ * 这几条以前是 spreadsheet.ts 里拼在 HTML 字符串上的内联样式（硬编码 #2563eb / 12px /
+ * 30px），换主题不跟随、也没法覆盖。升进核心后一律走类 + `--vt-*` 变量。
+ * ========================================================================== */
+
+/* 图片：按最大高度收缩，不撑破行高 */
+.vt-cell-image {
+  display: block;
+  max-width: 100%;
+  max-height: var(--vt-cell-image-max-h);
+  object-fit: contain;
+}
+
+/**
+ * 标签：主色由 --vt-cell-option-color 决定，底色 color-mix 派生（旧浏览器回落浅灰底）。
+ *
+ * ⚠️ 高度**必须锁成 `var(--vt-line-height)`**，不能靠 padding + line-height 自然撑：
+ * 第一版写的是 `padding: 2px 8px` + `line-height: 1.5`，12px 字号算出 22~23px，
+ * 比行内容区（21px）高 —— demo 实测行高被从 40 顶到 42，正是 §7.11 那条不变量的破法。
+ * 锁高之后它还会跟着密度走（紧凑档自动变 19px）。
+ */
+.vt-cell-option {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  /**
+   * 必须是 `top`（或 bottom）而不是 `middle`：middle 仍以基线为参照（基线 + x-height/2），
+   * inline-flex 的基线取自内部文本，底下留出的 descender 空间会把行盒顶高 ——
+   * 实测 21px 的标签让 `.vt-td-text` 涨到 22.8px，行高从 40 变 41.8。
+   */
+  vertical-align: top;
+  height: var(--vt-line-height);
+  padding: 0 8px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color);
+  color: var(--vt-cell-option-color);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-cell-option {
+    background: color-mix(in srgb, var(--vt-cell-option-color) 14%, transparent);
+  }
+}
+
+/* 布尔：只读勾选框。同样锁高，免得 --vt-control-size 调大后撑破行高 */
+.vt-cell-bool {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: top;
+  height: var(--vt-line-height);
+}
+
+.vt-td-text--ellipsis,
 .vt-td--text-ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ---- stripe ---- */
-.vt-tr.is-striped > .vt-td {
-  background-color: #fafafa;
-}
-.vt-tr.is-striped > .vt-fixed-left,
-.vt-tr.is-striped > .vt-fixed-right {
-  background-color: #fafafa;
+/* ---- textOverflow: 'tooltip' 的自绘浮层 ----
+ * 挂在 `.vt-root` 内（`internal/tooltip.ts` 里有理由），所以 token / 明暗主题 /
+ * reduced-motion 降级都是继承来的；位置与箭头偏移由 JS 写在 style 上。
+ * `.vt-td-text--tooltip` 只是给事件委托用的标记，视觉全靠上面的 --ellipsis。
+ */
+.vt-tooltip {
+  --vt-tooltip-arrow-size: 5px;
+
+  position: absolute;
+  z-index: 60;
+  display: none;
+  /* 浮层可能正好落在指针下方，不能挡住 hover 判定 */
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: var(--vt-radius-md);
+  background: var(--vt-tooltip-bg);
+  color: var(--vt-tooltip-text);
+  box-shadow: var(--vt-shadow-md);
+  font-size: var(--vt-font-size-sm);
+  line-height: 1.5;
+  /* 文本本来就是被裁掉才弹的，宽度靠换行消化（max-width 由 JS 按 root 宽度给） */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  animation: vt-fade-in var(--vt-transition-fast) var(--vt-ease);
 }
 
-/* ---- highlight hover row ---- */
-.vt-client--highlight-hover-row .vt-tr:hover > .vt-td {
-  background-color: #e6f7ff;
-}
-
-/* ---- highlight select row ---- */
-.vt-client--highlight-select-row .current-row > .vt-td {
-  background-color: #e6f7ff;
-}
-
-/* ---- highlight select column ---- */
-.vt-client--highlight-select-col .current-column {
-  background-color: #e6f7ff;
-}
-
-/* ---- highlight select cell ---- */
-.vt-client--highlight-select-cell .current-row > .current-column {
-  position: relative;
-}
-.vt-client--highlight-select-cell .current-row > .current-column::after {
+/* 箭头：默认在下沿指向上方的单元格，翻转时挪到上沿 */
+.vt-tooltip::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: 2px solid #1890ff;
-  pointer-events: none;
+  top: 100%;
+  left: var(--vt-tooltip-arrow-x, 50%);
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border: var(--vt-tooltip-arrow-size) solid transparent;
+  border-top-color: var(--vt-tooltip-bg);
 }
 
-/* ---- fixed columns ---- */
-.vt-fixed-left,
-.vt-fixed-right {
+.vt-tooltip--below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: var(--vt-tooltip-bg);
+}
+
+/**
+ * 自动合并（列 `mergeKey`）的 primary 格：内容交给 .vt-merge-label（sticky 内层）承载。
+ *
+ * ⚠️ 必须 `overflow: visible`——祖先只要不是 visible 就会成为 sticky 的滚动容器，
+ * 内层的 sticky 会彻底失效。裁剪改由内层自己做。
+ * vertical-align 也要压成 top：内层高度自己算，交给 td 的 vAlign 会让静态位置飘。
+ */
+.vt-td--merge-sticky {
+  overflow: visible;
+  vertical-align: top;
+}
+
+/**
+ * 自动合并标签：纵向滚动时钉在「可见数据区」上缘，平滑跟随。
+ *
+ * 与横向的 .vt-group-label 同一套思路（见上方注释），但**刻意不做垂直居中**：
+ * 表格单元格里的百分比高度在 CSS 里是未定义的（内容决定高度的 td，其子元素
+ * `height: 100%` 按 auto 处理），所以 `min(本格高, 可见区高)` 这种写法算不出来
+ * —— 实测退化成一行文字的高度（21.7px）。横向那套能用是因为 `width: 100%`
+ * 在 `table-layout: fixed` 下能正常解析。
+ *
+ * 居中改用「自引用」写法，绕开百分比高度：
+ *   top       = 可见数据区上缘 + 高度的一半   → 标签的**上沿**落在可见区正中
+ *   translateY(-50%)                          → 再上移自身高度的一半 → 视觉居中
+ * 这样完全不需要知道格子高度或标签高度，也不碰任何百分比。
+ *
+ * sticky 天然被限制在本格内，所以段的下边界进入视口时标签会被推着平滑滑出，不会跳。
+ * 段首没被重锚时 JS 不套这层内层，保留格子自身的 vAlign 居中。
+ */
+.vt-merge-label {
+  display: block;
+  position: sticky;
+  top: calc(var(--vt-body-view-t, 0px) + var(--vt-body-view-h, 0px) / 2);
+  transform: translateY(-50%);
+  overflow: hidden;
+}
+
+/* ---- 功能列（序号 / 勾选 / 单选 / 拖拽 / 展开）居中且收窄内边距 ---- */
+.vt-th--index,
+.vt-th--checkbox,
+.vt-th--radio,
+.vt-th--drag,
+.vt-th--expand,
+.vt-td--index,
+.vt-td--checkbox,
+.vt-td--radio,
+.vt-td--drag,
+.vt-td--expand {
+  padding-left: 4px;
+  padding-right: 4px;
+  text-align: center;
+}
+
+.vt-td--index {
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 斑马纹 ---- */
+.vt-tr.is-striped > .vt-td,
+.vt-tr.is-striped > .vt-fixed-left,
+.vt-tr.is-striped > .vt-fixed-right {
+  background-color: var(--vt-stripe-bg);
+}
+
+/**
+ * **跨行合并格一律不带斑马纹**。两个独立的理由，同一个结论：
+ *
+ * 1. 对不齐（所有合并格）。斑马纹按行奇偶算，而跨 N 行的格子只属于起始行的 `<tr>`，
+ *    于是它整块染上起始行的颜色，横跨在「灰-白-灰」上，右边的数据列却照常交替 ——
+ *    合并区的底色和它覆盖的行完全对不上。行数为偶的段更明显（首尾同色）。
+ * 2. 闪烁（仅长段）。长段合并格会被「重锚」到当前渲染窗口的首行，primary 行号每滚
+ *    一行变一次 → 奇偶翻转 → 灰白频闪。它落在哪一行是裁剪的产物、不是数据事实。
+ *
+ * 所以抹平成「与非斑马行完全一致」，合并区呈现为一整块干净底色。
+ *
+ * 选择器为什么要排 `[rowspan='1']`：DOM 池复用分支无条件写 `td.rowSpan = cell.rowSpan`，
+ * 这会在**非**合并格上反射出 `rowspan="1"` 属性（实测一屏 34 个），只写 `[rowspan]`
+ * 会把整表的斑马纹误杀。`merge.dom.test.ts` 守着这个 DOM 契约，
+ * 特异度关系由 `css-contract.test.ts` 守。
+ *
+ * 为什么套 `:where()`：它的参数不贡献特异度，整条规则因此退回 (0,3,0)，与上面那条斑马纹
+ * 规则**同级**，只靠书写顺序压住它。裸写 `[rowspan]:not([rowspan='1'])` 会涨到 (0,5,0)，
+ * 反过来压过 hover 高亮的 (0,4,0) —— 实测后果是合并格的 hover 反馈「落在非斑马行时有、
+ * 落在斑马行时没有」，比原来的对不齐更糟。降级后 hover / 选中行等状态类高亮都自然赢，
+ * 语义也对：抹平斑马是「静态底色」层面的事，不该吃掉交互反馈。
+ *
+ * 用 `transparent` 而不是 `var(--vt-bg)`：非斑马行的格子本来就是 transparent（穿透到
+ * `.vt-root` 的底色），写成同一个值才能**证明**两种状态像素一致，而不是依赖「透明穿透
+ * 到的正好也是 --vt-bg」这个推断 —— 使用方给表体换底色时前者依然成立。
+ * 只针对 `.vt-td`：固定列不参与合并，且固定列必须保持不透明才能遮挡滚动内容。
+ */
+.vt-tr.is-striped > .vt-td:where([rowspan]:not([rowspan='1'])) {
+  background-color: transparent;
+}
+
+/* ==========================================================================
+ * 5. 固定列 / 固定行
+ * ========================================================================== */
+th.vt-fixed-left,
+th.vt-fixed-right {
   position: sticky;
   z-index: 4;
-  background-color: #fff;
+  background-color: var(--vt-header-bg);
+}
+
+td.vt-fixed-left,
+td.vt-fixed-right {
+  position: sticky;
+  z-index: 4;
+  background-color: var(--vt-bg);
 }
 
 .vt-thead .vt-fixed-left,
@@ -160,12 +1057,17 @@
   z-index: 11;
 }
 
-/* ---- fixed column shadows ---- */
+.vt-tfoot .vt-fixed-left,
+.vt-tfoot .vt-fixed-right {
+  background-color: var(--vt-footer-bg);
+}
+
+/* ---- 固定列阴影 ---- */
 .vt-fixed-shadow {
   position: absolute;
   top: 0;
   height: 100%;
-  z-index: 7;
+  z-index: 20;
   pointer-events: none;
 }
 
@@ -173,61 +1075,264 @@
   content: '';
   position: absolute;
   top: 0;
-  width: 10px;
+  width: var(--vt-fixed-shadow-size);
   bottom: -1px;
   overflow: hidden;
   touch-action: none;
   pointer-events: none;
   box-shadow: none;
-  transition: box-shadow 0.3s;
+  transition: box-shadow var(--vt-transition) var(--vt-ease);
 }
 
 .vt-fixed-shadow--left::before {
-  box-shadow: inset 10px 0 10px -10px rgba(0, 0, 0, 0.15);
+  box-shadow: inset var(--vt-fixed-shadow-size) 0 var(--vt-fixed-shadow-size)
+    calc(-1 * var(--vt-fixed-shadow-size)) var(--vt-fixed-shadow-color);
 }
 
 .vt-fixed-shadow--right::before {
-  box-shadow: inset -10px 0 10px -10px rgba(0, 0, 0, 0.15);
+  box-shadow: inset calc(-1 * var(--vt-fixed-shadow-size)) 0 var(--vt-fixed-shadow-size)
+    calc(-1 * var(--vt-fixed-shadow-size)) var(--vt-fixed-shadow-color);
 }
 
-/* ---- empty state ---- */
-.vt-empty {
+/* ---- 置顶 / 置底行 ---- */
+.vt-tr--pinned > .vt-td {
+  background: var(--vt-fill-color-light);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+.vt-tr--pinned-top > .vt-td {
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color);
+}
+
+.vt-tr--pinned-bottom > .vt-td {
+  border-top: var(--vt-border-width) solid var(--vt-border-color);
+  border-bottom: none;
+}
+
+/* ==========================================================================
+ * 6. 高亮 / 选区
+ * ========================================================================== */
+.vt-client--highlight-hover-row .vt-tr:hover > .vt-td {
+  background-color: var(--vt-row-hover-bg);
+}
+
+.vt-client--highlight-select-row .current-row > .vt-td {
+  background-color: var(--vt-row-selected-bg);
+}
+
+.vt-client--highlight-select-col .current-column {
+  background-color: var(--vt-row-hover-bg);
+}
+
+/* 当前单元格描边 */
+.vt-active-cell-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
+  box-sizing: border-box;
+  border: 2px solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 注：区域框选的 `.vt-cell-selection-overlay` 在 plugins/cell-selection.css。 */
+
+/* ==========================================================================
+ * 7. 表单控件（勾选框 / 单选）
+ *
+ * 注：内置编辑器组件（`.vt-comp-*`）样式随 `components/components.css` 迁出；
+ *     `.vt-filter-checkbox` 与勾选框共用一套规则，故留在此处——它由
+ *     `plugins/_panel.css` 的面板项复用，而核心样式表总是会被引入。
+ * ========================================================================== */
+.vt-checkbox,
+.vt-filter-checkbox,
+.vt-radio {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: var(--vt-control-size);
+  height: var(--vt-control-size);
+  margin: 0;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background-color: var(--vt-bg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-radio {
+  border-radius: var(--vt-radius-full);
+}
+
+.vt-checkbox:hover,
+.vt-filter-checkbox:hover,
+.vt-radio:hover {
+  border-color: var(--vt-color-primary);
+}
+
+.vt-checkbox:checked,
+.vt-filter-checkbox:checked {
+  background-color: var(--vt-color-primary);
+  border-color: var(--vt-color-primary);
+  /* 勾号使用固定白色描边（data URI 内无法引用变量） */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.4l3 3 5.8-6'/%3E%3C/svg%3E");
+}
+
+.vt-checkbox:indeterminate,
+.vt-filter-checkbox:indeterminate {
+  background-color: var(--vt-color-primary);
+  border-color: var(--vt-color-primary);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' d='M4 8h8'/%3E%3C/svg%3E");
+}
+
+.vt-radio:checked {
+  background-color: var(--vt-color-primary);
+  border-color: var(--vt-color-primary);
+  box-shadow: inset 0 0 0 3px var(--vt-bg);
+}
+
+.vt-checkbox:focus-visible,
+.vt-filter-checkbox:focus-visible,
+.vt-radio:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-radio:checked:focus-visible {
+  box-shadow:
+    inset 0 0 0 3px var(--vt-bg),
+    0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-checkbox:disabled,
+.vt-filter-checkbox:disabled,
+.vt-radio:disabled {
+  background-color: var(--vt-fill-color);
+  border-color: var(--vt-border-color);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 校验失败 */
+.vt-cell--invalid {
+  box-shadow: inset 0 0 0 1px var(--vt-color-danger);
+}
+
+/* ==========================================================================
+ * 8. 排序 / 拖拽 / 列宽
+ *
+ * 注：列头筛选漏斗图标（`.vt-filter-icon` / `.vt-th--filterable`）随
+ *     `plugins/column-filter.css` 迁出；`.vt-drag-handle` 是 `type:'drag'` 列
+ *     渲染的手柄图标（核心渲染），故留在此处。
+ * ========================================================================== */
+.vt-th--sortable {
+  position: relative;
+  user-select: none;
+  padding-right: 26px !important;
+}
+
+/* 排序只由图标触发，故 cursor / hover / focus 反馈都落在图标上 */
+.vt-sort-icon {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #999;
-  font-size: 14px;
-  pointer-events: none;
-  z-index: 5;
-}
-
-/* ---- checkbox ---- */
-.vt-checkbox {
+  width: var(--vt-icon-btn-size);
+  height: var(--vt-icon-btn-size);
+  border-radius: var(--vt-radius-control);
+  color: var(--vt-text-disabled);
   cursor: pointer;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  vertical-align: middle;
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
 }
 
-/* ---- column resize ---- */
+.vt-th--sortable:hover .vt-sort-icon {
+  color: var(--vt-text-secondary);
+}
+
+.vt-sort-icon:hover {
+  color: var(--vt-color-primary);
+  background: var(--vt-color-primary-soft);
+}
+
+.vt-sort-icon:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: -1px;
+}
+
+.vt-sort-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.vt-sort-icon--asc,
+.vt-sort-icon--desc,
+.vt-th--sortable:hover .vt-sort-icon--asc,
+.vt-th--sortable:hover .vt-sort-icon--desc {
+  color: var(--vt-color-primary);
+}
+
+.vt-sort-order {
+  position: absolute;
+  right: -4px;
+  top: -2px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+  font-weight: var(--vt-font-weight-semibold);
+}
+/* ---- 列宽拖拽 ---- */
 .vt-resize-trigger {
   position: absolute;
-  width: 6px;
-  right: -3px;
+  width: 8px;
+  right: -4px;
   top: 0;
   bottom: 0;
   cursor: col-resize;
   z-index: 1;
+  /* 触屏必须的一条：不让出这块区域，浏览器会把手指拖动当成滚动，
+     pointermove 就不再送到我们这里（`preventDefault` 拦不住滚动）。
+     手柄只有 8px 宽，让出去不影响表格滚动。 */
+  touch-action: none;
 }
 
-.vt-resize-trigger:hover {
-  background-color: rgba(24, 144, 255, 0.15);
+.vt-resize-trigger::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: var(--vt-radius-full);
+  background: transparent;
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vt-resize-trigger:hover::after {
+  background: var(--vt-color-primary);
 }
 
 .vt-resize-line {
@@ -237,332 +1342,587 @@
   bottom: 0;
   left: 0;
   width: 2px;
-  background-color: #1890ff;
+  background-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 1px var(--vt-color-primary-soft);
   z-index: 100;
 }
 
-/* ---- expand row ---- */
+/* ---- 行 / 列拖拽排序 ---- */
+.vt-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  cursor: grab;
+  color: var(--vt-text-disabled);
+  transition: color var(--vt-transition-fast) linear;
+  /* 同 .vt-resize-trigger：专用手柄，让出触摸手势换取触屏可拖 */
+  touch-action: none;
+}
+
+.vt-drag-handle:hover {
+  color: var(--vt-color-primary);
+}
+
+.vt-drag-handle:active {
+  cursor: grabbing;
+}
+
+.vt-drag-handle svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
+ * 9. 加载 / 空态 / 展开 / 树形 / 分组 / 动效
+ * ========================================================================== */
+.vt-loading-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vt-mask-bg);
+  backdrop-filter: blur(1.5px);
+  cursor: progress;
+  animation: vt-fade-in var(--vt-transition) var(--vt-ease);
+}
+
+.vt-loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--vt-color-primary);
+}
+
+.vt-loading-text {
+  font-size: var(--vt-font-size-sm);
+  color: var(--vt-text-secondary);
+}
+
+.vt-spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid var(--vt-color-primary-soft);
+  border-top-color: var(--vt-color-primary);
+  border-radius: var(--vt-radius-full);
+  animation: vt-spin 0.7s linear infinite;
+}
+
+/* ---- 空态 ---- */
+.vt-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-sm);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.vt-empty::before {
+  content: '';
+  width: var(--vt-empty-icon-size);
+  height: var(--vt-empty-icon-size);
+  background-color: currentColor;
+  opacity: 0.55;
+  -webkit-mask: var(--vt-empty-icon) center / contain no-repeat;
+  mask: var(--vt-empty-icon) center / contain no-repeat;
+}
+
+/* ---- 展开行 ---- */
 .vt-tr--expand > .vt-expand-content {
-  padding: 12px 16px;
-  background: #fafafa;
+  padding: 14px 18px;
+  background: var(--vt-fill-color-light);
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color);
 }
 
-.vt-expand-icon {
+/* ---- 折叠 / 展开开关（展开行 / 树形 / 分组通用外观） ---- */
+.vt-expand-icon,
+.vt-tree-toggle,
+.vt-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vt-indent-size);
+  height: var(--vt-indent-size);
+  flex-shrink: 0;
+  border-radius: var(--vt-radius-control);
+  color: var(--vt-text-secondary);
   cursor: pointer;
-  display: inline-block;
-  font-size: 12px;
-  transition: transform 0.2s;
   user-select: none;
-  width: 20px;
-  text-align: center;
-  color: #666;
+  vertical-align: middle;
+  transition:
+    transform var(--vt-transition) var(--vt-ease),
+    background-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
 }
 
-.vt-expand-icon--open {
+.vt-expand-icon:hover,
+.vt-tree-toggle:hover,
+.vt-group-toggle:hover {
+  background: var(--vt-fill-color-hover);
+  color: var(--vt-color-primary);
+}
+
+.vt-expand-icon svg,
+.vt-tree-toggle svg,
+.vt-group-toggle svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.vt-expand-icon--open,
+.vt-tree-toggle--open,
+.vt-group-toggle--open {
   transform: rotate(90deg);
 }
 
-/* ---- tree ---- */
-.vt-tree-indent {
-  display: inline-block;
-  width: 20px;
-}
-
+/* 树形开关与右侧文本留出间距（叶子节点的占位开关同样留，保证同级文本左对齐） */
 .vt-tree-toggle {
-  cursor: pointer;
-  display: inline-block;
-  width: 20px;
-  text-align: center;
-  font-size: 12px;
-  transition: transform 0.2s;
-  user-select: none;
-  color: #666;
-}
-
-.vt-tree-toggle--open {
-  transform: rotate(90deg);
+  margin-right: var(--vt-tree-toggle-gap);
 }
 
 .vt-tree-toggle--leaf {
   visibility: hidden;
 }
 
-/* ---- group ---- */
+/* 子节点懒加载在途：箭头位置换成小 spinner，禁掉旋转与 hover 反馈 */
+.vt-tree-toggle--loading {
+  cursor: progress;
+  transform: none;
+}
+
+.vt-tree-toggle--loading:hover {
+  background: none;
+  color: var(--vt-color-primary);
+}
+
+/* 极小号 spinner：与树形箭头同尺寸 */
+.vt-spinner--xs {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
+}
+
+/* 分组开关在 flex 容器中，间距由 .vt-group-content 的 gap 提供 */
+.vt-group-toggle {
+  margin-left: -2px;
+}
+
+/**
+ * 树形单元格的 flex 行：`td` 是 `table-cell`，直接在它里面排「缩进 + 箭头 + 文本」时
+ * 下面那两条 `flex-shrink: 0` 是死规则，文本也没法截断（inline 内容不给省略号一个
+ * 确定的宽度）。套一层 flex 后 `.vt-tree-content` 拿 `flex: 1 + min-width: 0`，
+ * 这是「前面有固定宽元素、后面文本要 ellipsis」的标准解法。
+ */
+.vt-tree-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* 内容区：撑满剩余宽度，min-width:0 是 ellipsis 能生效的关键（否则 flex item 不肯收缩） */
+.vt-tree-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- 缩进 ---- */
+.vt-tree-indent,
+.vt-group-indent {
+  display: inline-block;
+  width: var(--vt-indent-size);
+  flex-shrink: 0;
+}
+
+/* ---- 分组行 ----
+   目标：一眼能从数据行里区分出来。四重线索叠加：
+   主色调底色 + 上下强分隔线 + 左侧主色标记条 + 加粗标题与计数徽标。
+   内容包在 sticky 容器里，横向滚动时分组标题不会被滚走。 */
 .vt-tr--group {
-  background: #fafafa;
+  background: var(--vt-group-bg);
 }
 
 .vt-tr--group > .vt-group-cell {
-  font-weight: 600;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e8e8e8;
+  background: var(--vt-group-bg);
+  border-top: var(--vt-border-width) solid var(--vt-group-border);
+  border-bottom: var(--vt-border-width) solid var(--vt-group-border);
+  padding-left: 10px;
+  color: var(--vt-group-text);
+  font-weight: var(--vt-font-weight-semibold);
 }
 
-.vt-group-indent {
-  display: inline-block;
-  width: 20px;
-}
-
-.vt-group-toggle {
+.vt-group-cell--clickable {
   cursor: pointer;
-  display: inline-block;
-  width: 20px;
-  text-align: center;
-  font-size: 12px;
-  transition: transform 0.2s;
   user-select: none;
-  margin-right: 4px;
-  color: #666;
 }
 
-.vt-group-toggle--open {
-  transform: rotate(90deg);
+/* sticky 内容容器：--vt-group-depth 由 JS 写入，表示层级缩进层数 */
+.vt-group-content {
+  position: sticky;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--vt-group-depth, 0) * var(--vt-indent-size));
+  box-sizing: border-box;
+}
+
+/* 左侧主色标记条 */
+.vt-group-content::before {
+  content: '';
+  flex-shrink: 0;
+  width: var(--vt-group-accent-width);
+  height: 15px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-group-accent);
+}
+
+.vt-group-field {
+  flex-shrink: 0;
+  font-size: var(--vt-font-size-xs);
+  font-weight: var(--vt-font-weight-medium);
+  color: var(--vt-text-placeholder);
+  letter-spacing: 0.02em;
 }
 
 .vt-group-label {
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--vt-font-size);
+  letter-spacing: -0.01em;
 }
 
-/* ---- column filter ---- */
-.vt-th--filterable {
-  position: relative;
-  padding-right: 24px !important;
-}
-
-.vt-filter-icon {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
+/* 条数徽标 */
+.vt-group-count {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  color: #bfbfbf;
-  border-radius: 3px;
-  transition: color 0.2s, background 0.2s;
-}
-
-.vt-filter-icon svg {
-  width: 12px;
-  height: 12px;
-}
-
-.vt-filter-icon:hover {
-  color: #1890ff;
-  background: rgba(24, 144, 255, 0.08);
-}
-
-.vt-filter-icon--active {
-  color: #1890ff;
-}
-
-.vt-filter-panel {
-  position: absolute;
-  z-index: 30;
-  min-width: 150px;
-  background: #fff;
-  border: 1px solid #e8e8e8;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-}
-
-.vt-filter-list {
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.vt-filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.4;
-  white-space: nowrap;
-  transition: background 0.15s;
-}
-
-.vt-filter-item:hover {
-  background: #f5f7fa;
-}
-
-.vt-filter-checkbox {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: #1890ff;
-  flex-shrink: 0;
-}
-
-.vt-filter-actions {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 14px;
-  border-top: 1px solid #f0f0f0;
-  background: #fafafa;
-}
-
-.vt-filter-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 4px 12px;
-  border-radius: 4px;
-  color: #666;
-  transition: color 0.2s, background 0.2s;
-}
-
-.vt-filter-btn:hover {
-  color: #333;
-  background: #e8e8e8;
-}
-
-.vt-filter-btn--primary {
-  color: #fff;
-  background: #1890ff;
-}
-
-.vt-filter-btn--primary:hover {
-  background: #40a9ff;
-  color: #fff;
-}
-
-/* ---- cell cover overlay ---- */
-.vt-cell-cover {
-  position: absolute;
-  z-index: 5;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
   box-sizing: border-box;
-  overflow: hidden;
-  background: #fff;
-  border: 2px solid #1890ff;
-  display: flex;
-  align-items: center;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-color-primary-soft);
+  color: var(--vt-color-primary);
+  font-size: var(--vt-font-size-xs);
+  font-weight: var(--vt-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.vt-cell-cover > * {
-  width: 100%;
+/* 层级：越深越轻，避免多级分组时全都一样重 */
+.vt-tr--group-lv2 > .vt-group-cell {
+  background: var(--vt-group-bg-lv2);
+}
+
+.vt-tr--group-lv2 .vt-group-content::before {
+  height: 13px;
+  opacity: 0.75;
+}
+
+.vt-tr--group-lv2 .vt-group-label {
+  font-size: var(--vt-font-size-sm);
+}
+
+.vt-tr--group-lv3 > .vt-group-cell {
+  background: var(--vt-group-bg-lv3);
+}
+
+.vt-tr--group-lv3 .vt-group-content::before {
+  height: 11px;
+  opacity: 0.55;
+}
+
+.vt-tr--group-lv3 .vt-group-label {
+  font-size: var(--vt-font-size-sm);
+  font-weight: var(--vt-font-weight-medium);
+}
+
+/* 悬停：覆盖通用行悬停规则（等特异度，靠顺序取胜） */
+.vt-client--highlight-hover-row .vt-tr--group:hover > .vt-group-cell {
+  background: var(--vt-group-bg-hover);
+}
+
+/* 分组行里的开关：底色已是主色调，hover 用更实的填充 */
+.vt-tr--group .vt-group-toggle {
+  color: var(--vt-color-primary);
+}
+
+.vt-tr--group .vt-group-toggle:hover {
+  background: var(--vt-color-primary-soft);
+}
+
+/* ---- 动效 ---- */
+@keyframes vt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-root *,
+  .vt-loading-mask {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .vt-spinner {
+    animation-duration: 0.7s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ==========================================================================
+ * 分页条（仅服务端 UI 模式）：仅当根节点带 vt-root--paginated 才启用 flex 布局，
+ * 未启用分页的表格完全不受影响。
+ * ========================================================================== */
+.vt-root--paginated {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ---- cell range selection ---- */
-.vt-cell-selection-overlay {
-  position: absolute;
-  border: 2px solid #1890ff;
-  background: rgba(24, 144, 255, 0.1);
-  pointer-events: none;
-  z-index: 3;
+.vt-root--paginated .vt-client {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 
-/* ---- search ---- */
-.vt-search-box {
-  position: absolute;
-  top: 8px;
-  right: 16px;
-  z-index: 20;
+.vt-pagination {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: var(--vt-border-width) solid var(--vt-border-color);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size-sm);
+  user-select: none;
 }
 
-.vt-search-input {
-  border: 1px solid #d9d9d9;
-  border-radius: 2px;
-  padding: 2px 8px;
-  font-size: 13px;
+.vt-pagination-total {
+  color: var(--vt-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.vt-pagination-size {
+  height: 26px;
+  padding: 0 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  cursor: pointer;
   outline: none;
-  width: 180px;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
 }
 
-.vt-search-input:focus {
-  border-color: #1890ff;
+.vt-pagination-size:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
 }
 
-.vt-search-counter {
-  font-size: 12px;
-  color: #999;
-  min-width: 36px;
-  text-align: center;
-  user-select: none;
-}
-
-.vt-search-btn {
-  border: none;
-  background: transparent;
+.vt-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-  color: #666;
-  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
 }
 
-.vt-search-btn:hover {
-  background: #f0f0f0;
-  color: #333;
+.vt-pagination-btn:hover:not(:disabled):not(.vt-pagination-btn--active) {
+  border-color: var(--vt-color-primary);
+  color: var(--vt-color-primary);
 }
 
-.vt-search-close {
-  font-size: 14px;
-  margin-left: 2px;
+.vt-pagination-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
 }
 
-.vt-search-match-active {
-  background: rgba(255, 152, 0, 0.6) !important;
-  outline: 2px solid #ff9800;
+.vt-pagination-btn--active {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary);
+  color: #fff;
+  cursor: default;
 }
 
-/* ---- context menu ---- */
-.vt-context-menu {
-  position: absolute;
-  z-index: 50;
-  min-width: 160px;
-  background: #fff;
-  border: 1px solid #e8e8e8;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  padding: 4px 0;
-  font-size: 13px;
-  user-select: none;
-}
-
-.vt-context-menu-item {
-  padding: 8px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-  color: #333;
-}
-
-.vt-context-menu-item:hover {
-  background: #e6f7ff;
-  color: #1890ff;
-}
-
-.vt-context-menu-item--disabled {
-  color: #bfbfbf;
+.vt-pagination-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.vt-context-menu-item--disabled:hover {
-  background: transparent;
-  color: #bfbfbf;
+.vt-pagination-ellipsis {
+  min-width: 26px;
+  text-align: center;
+  color: var(--vt-text-placeholder);
 }
 
-.vt-context-menu-divider {
-  height: 1px;
-  background: #f0f0f0;
-  margin: 4px 0;
+.vt-pagination-jump-label,
+.vt-pagination-jump-unit {
+  color: var(--vt-text-secondary);
+}
+
+.vt-pagination-jump {
+  width: 50px;
+  height: 26px;
+  padding: 0 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  text-align: center;
+  outline: none;
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-pagination-jump:focus {
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/* ==========================================================================
+ * 无限滚动状态条：贴在滚动容器上/下沿的一条（不进 .vt-client，避免出现在
+ * 渲染窗口末尾而非数据末尾）。四态：加载中 / 加载更多按钮 / 没有更多 / 失败重试。
+ *
+ * 无内容可展示时由 JS 置 `visibility: hidden` 而非 `display: none`——状态条
+ * **常驻占位**，出现/消失不会改变 .vt-client 的高度，否则每次加载都会挤压滚动
+ * 容器，虚拟滚动跟着抖一下（且 scrollTop 会被浏览器就近夹取）。
+ * 想让它更矮/更高只需覆盖 .vt-infinite-bar 的 min-height 与 padding。
+ * ========================================================================== */
+.vt-root--infinite {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.vt-root--infinite .vt-client {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.vt-infinite-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 12px;
+  background: var(--vt-bg);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-sm);
+  user-select: none;
+}
+
+.vt-infinite-bar--bottom {
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-infinite-bar--top {
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color-light);
+}
+
+.vt-infinite-bar--loading {
+  color: var(--vt-color-primary);
+}
+
+.vt-infinite-bar--error {
+  color: var(--vt-color-danger);
+}
+
+.vt-infinite-bar--done {
+  color: var(--vt-text-placeholder);
+}
+
+.vt-infinite-text {
+  line-height: 1.4;
+}
+
+/* 小号 spinner：状态条里与文字同高 */
+.vt-spinner--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.vt-infinite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 12px;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font-family: inherit;
+  font-size: var(--vt-font-size-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--vt-transition-fast) linear,
+    border-color var(--vt-transition-fast) linear,
+    color var(--vt-transition-fast) linear;
+}
+
+.vt-infinite-btn:hover {
+  border-color: var(--vt-color-primary);
+  color: var(--vt-color-primary);
+}
+
+.vt-infinite-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
 }

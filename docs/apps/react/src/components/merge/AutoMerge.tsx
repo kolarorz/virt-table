@@ -1,0 +1,96 @@
+import React from 'react';
+import { VirtTableReact, type ReactTableColumn } from '@virt-table/react';
+
+/**
+ * 按值自动合并（列 `mergeKey`）。
+ *
+ * 10 万行，三种段长同时在场：
+ *   - 部门：8 行一段（常规）
+ *   - 状态：约 3.3 万行一段（长段，用来看「重锚」与虚拟滚动是否还成立）
+ *   - 大区：跨两个字段拼键（`mergeKey` 返回自定义键）
+ * 排序照常可用 —— 分段在管线末端重算，这是它与静态 `merges` 的关键差别。
+ */
+const ROW_COUNT = 100_000;
+const REGIONS = ['华东', '华北', '华南'];
+const STATUSES = ['待处理', '进行中', '已完成'];
+
+interface Row extends Record<string, unknown> {
+  id: number;
+  region: string;
+  dept: string;
+  status: string;
+  owner: string;
+  amount: number;
+}
+
+// 懒生成：App 会静态 import 全部示例模块，10 万行放在模块顶层会拖慢整个 demo 站首屏
+let _db: Row[] | null = null;
+const getList = (): Row[] =>
+  (_db ??= Array.from({ length: ROW_COUNT }, (_, i) => ({
+    id: i,
+    region: REGIONS[(i / 25_000) | 0] ?? '华南',
+    dept: 'D' + ((i / 8) | 0),
+    status: STATUSES[(i / 33_333) | 0] ?? '已完成',
+    owner: '员工 ' + i,
+    amount: ((i * 37) % 900) + 100,
+  })));
+
+const columns: ReactTableColumn<Row>[] = [
+  // 拼键：只有「大区 + 状态」都相同才合并
+  {
+    key: 'region',
+    title: '大区（拼键合并）',
+    width: 150,
+    mergeKey: (row) => `${row.region}/${row.status}`,
+    align: 'center',
+    vAlign: 'middle',
+  },
+  {
+    key: 'status',
+    title: '状态（长段 + 重锚）',
+    width: 160,
+    mergeKey: true,
+    align: 'center',
+    vAlign: 'middle',
+    sortable: true,
+  },
+  {
+    key: 'dept',
+    title: '部门（8 行一段）',
+    width: 150,
+    mergeKey: true,
+    align: 'center',
+    vAlign: 'middle',
+    sortable: true,
+  },
+  { key: 'owner', title: '负责人', width: 160 },
+  { key: 'amount', title: '金额', width: 120, align: 'right', sortable: true },
+];
+
+export default function AutoMergeTable() {
+  const list = React.useMemo(getList, []);
+  return (
+    <div className="demo-wrapper">
+      <h3 className="demo-title">React 按值自动合并</h3>
+      <div className="status-text">
+        {ROW_COUNT.toLocaleString()} 行 · 滚到长段中间时合并格会重锚到可视区顶部（虚拟滚动下的必然）·{' '}
+        <code>mergeKey</code> 不禁用排序，点表头试试
+      </div>
+      <div style={{ width: '100%', height: 600 }} className="demo-container">
+        <VirtTableReact
+          columns={columns}
+          options={{
+            list,
+            itemKey: 'id',
+            estimatedSize: 40,
+            buffer: 4,
+            // 合并 + 动态行高是既有的敏感组合，自动合并建议配固定行高
+            fixedSize: true,
+            border: true,
+            stripe: true,
+          }}
+        />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,17 @@
+{
+  // 只出类型声明（JS 产物由 vite 出）。为什么不 extends 根 `tsconfig.base.json`、
+  // 为什么依赖 vanilla 先构建，见 `packages/react/tsconfig.build.json` 的头注。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"]
+}
