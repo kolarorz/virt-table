@@ -43,7 +43,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@virt-list/core": "^0.0.7",
-    "@virt-list/vanilla": "^0.0.7"
+    "@virt-list/core": "^0.0.9",
+    "@virt-list/vanilla": "^0.0.9"
   }
 }
