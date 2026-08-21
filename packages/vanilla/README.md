@@ -2,7 +2,7 @@
 
 行列双向虚拟化的高性能表格，零框架依赖。十万级数据流畅滚动，同时把「后台管理系统的表格需求」补成一个完整闭环。
 
-📖 **[完整文档](https://keno-lee.github.io/virt-table/)** · [在线示例](https://keno-lee.github.io/virt-table/vanilla/examples/basic/basic) · [API](https://keno-lee.github.io/virt-table/vanilla/api/)
+📖 **[完整文档](https://kolarorz.github.io/virt-table/)** · [在线示例](https://kolarorz.github.io/virt-table/vanilla/examples/basic/basic) · [API](https://kolarorz.github.io/virt-table/vanilla/api/)
 
 框架封装：[`@virt-table/react`](https://www.npmjs.com/package/@virt-table/react) · [`@virt-table/vue`](https://www.npmjs.com/package/@virt-table/vue)
 
@@ -82,4 +82,4 @@ CDN 直接用：
 
 ## License
 
-[MIT](./LICENSE) © keno-lee
+[MIT](./LICENSE) © kolarorz(kolarorz@gmail.com)

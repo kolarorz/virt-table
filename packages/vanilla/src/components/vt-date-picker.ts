@@ -5,6 +5,7 @@ import { createDateEditor } from './_date-editor';
 import {
   type BaseColumnOptions,
   INPUT_CSS,
+  clearableOn,
   commitValue,
   pickColumnProps,
   wrapWithClear,
@@ -65,6 +66,9 @@ interface EditCtx<T> {
  * 键盘与区间版一致（`←→` 跨天、`↑↓` 跨周、`PageUp/Down` 跨月、`Enter` 确认）。
  *
  * `native: true` 切回浏览器原生 `input[type=date]`（不跟随暗色主题，但不依赖本库的面板实现）。
+ *
+ * `clearable` **默认开**（两条支路都给）：面板支路是锚点右侧一个 `×` 且 `Delete` /
+ * `Backspace` 同效，原生支路是 `.vt-comp-wrap` 外壳上那个 `×`。传 `clearable: false` 关掉。
  */
 export function VtDatePicker<T = any>(opts: VtDatePickerOptions<T>): VirtTableColumn<T> {
   const col: VirtTableColumn<T> = {
@@ -104,7 +108,8 @@ function panelEdit<T>(opts: VtDatePickerPanelOptions<T>) {
       panels: 1,
       shortcuts: opts.shortcuts,
       placeholder: opts.placeholder,
-      clearable: opts.clearable,
+      // 日历里只能改选另一天，没有「选回空」那一格 —— 所以 × 默认给（见 `clearableOn`）
+      clearable: clearableOn(opts),
       // 单日模式下面板只看 [0]，第二位跟着传同一天，省掉一个特例分支
       read: (v) => {
         const d = formatDay(v);
@@ -136,7 +141,7 @@ function nativeEdit<T>(opts: VtDatePickerNativeOptions<T>) {
     });
     requestAnimationFrame(() => input.focus());
 
-    return wrapWithClear(input, !!opts.clearable, () => {
+    return wrapWithClear(input, clearableOn(opts), () => {
       input.value = '';
       commitValue(opts, ctx as never, '' as never);
     });

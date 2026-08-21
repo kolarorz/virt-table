@@ -16,6 +16,8 @@
  *   §9 自绘浮层 VtMultiSelect / VtAutocomplete / VtCascader
  *   §10 人员 VtPerson（头像胶囊 + 选人面板 + 悬停名片）
  *   §11 日历面板 VtDatePicker / VtDateRangePicker（自绘双月区间日历）
+ *   §12 图片 VtImage（缩略图占位盒）
+ *   §13 图片查看器（铺满视口的模态浮层）—— 已拆到 `image-viewer.css`，由上面的 `@import` 内联
  *
  * ⚠️ 两条硬约束，改这个文件前先看 AGENTS.md §7.5 末两条与 §7.11：
  *   1. **展示元素的高度必须锁在 `var(--vt-line-height)` 上**，不能靠 padding +
@@ -30,6 +32,8 @@
  * `@import` 而不是 JS import 的理由见 AGENTS.md §3.1 最后一条。
  * ========================================================================== */
 @import '../plugins/_panel.css';
+/* §13 图片查看器（`VtImage` 与 `vtFloatingImage` 共用，见该文件头注） */
+@import './image-viewer.css';
 
 /* ==========================================================================
  * §1 编辑控件
@@ -740,6 +744,10 @@
   background: var(--vt-fill-color);
   /* 比正文小一档：胶囊里的名字不该和普通单元格文本抢视觉重量 */
   font-size: var(--vt-font-size-sm);
+  /* 胶囊是**可交互**的：悬停弹名片（还能把指针移进去划选邮箱/电话）、点一下进选人面板。
+     默认的文本光标让它看起来像一段普通文字，用户反馈的就是这个 —— 一个会响应悬停的
+     东西必须先在光标上说出来。锚点（`.vt-comp-anchor`）本来就是 pointer，这里对齐它。 */
+  cursor: pointer;
 }
 
 /* avatarOnly：没有姓名要圈起来，胶囊退化成一个光头像 ——
@@ -1141,5 +1149,193 @@
   color: var(--vt-text-secondary);
   font-size: var(--vt-font-size-xs);
   font-variant-numeric: var(--vt-font-numeric);
+  white-space: nowrap;
+}
+
+/**
+ * 进度列的编辑态：滑块 + 右侧可键入的数字（`max: 100` 时后面跟一个 `%`）。
+ *
+ * 数字框占的是只读态 `.vt-comp-progress-text` 那格的位置与宽度（`min-width: 36px` 对齐），
+ * 所以点开单元格时右侧那个数字不跳位置 —— 只读与编辑两态的数字必须落在同一处，
+ * 否则每次点开都在闪。
+ */
+.vt-comp-progress-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--vt-cell-padding-x);
+  box-sizing: border-box;
+}
+
+.vt-comp-progress-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--vt-color-primary);
+  cursor: ew-resize;
+}
+
+/* 数字框。`.vt-comp-input` 的 `width: 100%` 在这条 flex 行里会把滑块挤没，所以宽度在这里
+   重新定死（同文件后出现 → 同特异度下这条赢）；`min-width` 与只读态文字一致，两态对齐。
+   spinner 藏掉：18px 高的单元格里那两个小箭头点不准，调数值有滑块和 ↑↓ 键。 */
+.vt-comp-progress-input {
+  flex: 0 0 auto;
+  width: 44px;
+  min-width: 36px;
+  height: auto;
+  padding: 0;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  font-variant-numeric: var(--vt-font-numeric);
+  text-align: right;
+  appearance: textfield;
+}
+
+.vt-comp-progress-input::-webkit-outer-spin-button,
+.vt-comp-progress-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* 单位后缀，与数字框之间不留 gap（`65 %` 读起来是两个词） */
+.vt-comp-progress-unit {
+  flex-shrink: 0;
+  margin-left: -6px;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+}
+
+/* ==========================================================================
+ * §12 图片 VtImage
+ *
+ * 缩略图**不给尺寸选项**，一律 `height: 100%`（即公共外层锁住的 `--vt-line-height`）
+ * + `aspect-ratio: 1` 的方框。理由是 §7.11 那条行高不变量：写死 56px 的缩略图会把 40px
+ * 的行顶到 75px，而 `estimatedSize` 还是 40 —— 十万行下滚不到底。要大图就把**行**配高
+ * （`--vt-line-height` + 跟着改的 `estimatedSize`），缩略图自己就跟着变大。
+ *
+ * `<img>` 是加载完成后才 append 进占位盒的（见 `_image-loader.ts`），所以这里的底色 +
+ * 圆角同时充当「正在加载」的占位。
+ * ========================================================================== */
+.vt-comp-image {
+  gap: 4px;
+  overflow: hidden;
+}
+
+.vt-comp-image-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  /* 高度来自 `.vt-comp-cell`（这里只跟随，不重新锁）；方框宽度由比例推出来 */
+  height: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-fill-color);
+  color: var(--vt-text-placeholder);
+  font-size: var(--vt-font-size-sm);
+  /* 见文件头第 2 条：inline 级盒子必须 top，否则 descender 空间把行盒顶高 */
+  vertical-align: top;
+  cursor: pointer;
+}
+
+/* 不可点的那一档（`viewer: false` / `disabled`）：光标不该骗人说这里能点 */
+.vt-comp-image-item:not([role='button']) {
+  cursor: default;
+}
+
+.vt-comp-image-item:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+/* 正在排队 / 正在取图：只有底色。刻意不做闪烁骨架 —— 一屏几十个方块同时呼吸比空着更吵 */
+.vt-comp-image-item--loading {
+  background: var(--vt-fill-color);
+}
+
+/* 取图失败：断图图标 + 更淡的底色（浏览器默认的碎图占位在 21px 方框里只剩一团马赛克） */
+.vt-comp-image-item--error {
+  background: var(--vt-fill-color-light);
+  color: var(--vt-text-disabled);
+}
+
+.vt-comp-image-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 解码完成才插进来，所以这一下淡入不会与滚动抢帧 */
+  animation: vt-fade-in var(--vt-transition-fast) var(--vt-ease);
+}
+
+/* `fit: 'contain'`：完整放进方框（留白），比例差异大又必须看全貌的图用 */
+.vt-comp-image-item--contain .vt-comp-image-img {
+  object-fit: contain;
+}
+
+/* 折叠计数复用 `.vt-comp-tag-more`（锁高、圆角都在 §9 那条里），这里只补「能点」 */
+.vt-comp-image .vt-comp-tag-more[role='button'] {
+  cursor: pointer;
+}
+
+/* ==========================================================================
+ * §N 表格之外的表单件（createSelectField / createSwitch 用）
+ *
+ * 单元格里的下拉锚点（§ 面板类组件）刻意不画边框 —— 边框由 `.vt-cell-cover` 给、
+ * 高度由行高给。搬到**表单**里（插件的配置面板）之后这两样都得自己立起来。
+ *
+ * 观感对齐**表格里的选择单元格**：一样的字号（`--vt-font-size`，不是面板那档 sm ——
+ * 下拉框里回显的是**数据**，跟着单元格走才不会在同一个界面里出现两种字号）、一样的
+ * 圆角与边框令牌；聚焦 / 展开时的主色边框 + focus 环也照 `.vt-cell-cover` 的路子来，
+ * 只是把 2px 边框收成 1px（面板里那是个控件，不是「正在编辑这一格」的强提示）。
+ * ========================================================================== */
+.vt-field-select {
+  /* 高度用 min-height 而不是 height：字号 / 密度变了它跟着长，不会把文字挤扁 */
+  min-height: 30px;
+  padding: 0 10px;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-bg);
+  font-size: var(--vt-font-size);
+  transition:
+    border-color var(--vt-transition-fast) linear,
+    box-shadow var(--vt-transition-fast) linear;
+}
+
+.vt-field-select:hover:not(.vt-field-select--disabled) {
+  border-color: var(--vt-border-color-strong);
+}
+
+.vt-field-select:focus-visible,
+.vt-field-select[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--vt-color-primary);
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+.vt-field-select--disabled {
+  background: var(--vt-fill-color-light);
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+/* 分类值的小色点：下拉框里与面板项里同一个类，所以两处一定一致 */
+.vt-field-select-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--vt-radius-full);
+}
+
+/* 面板项里的文案：占满剩余宽度并自己截断，对勾永远贴右 */
+.vt-field-select-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }

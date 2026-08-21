@@ -60,7 +60,12 @@ export interface CellEditorService {
  * 关闭后会 `forceUpdate()` 让单元格显示写回后的值。
  *
  * **点开一格会同时给它打上激活态**（当前单元格描边，走核心的 `setActiveCell`）——
- * 编辑态是会消失的会话，描边留下来才回答得了「刚改的是哪一格」。见 `activeCell` 选项。
+ * 编辑态是会消失的会话（选完即关面板、Esc、提交），描边留下来才回答得了「刚改的是哪一格」。
+ * 见 `activeCell` 选项。
+ *
+ * 「留下来」有个边界：**点到单元格以外**（表头、空白、别的组件、页面别处）时描边跟着收起 ——
+ * 那是核心的 `clearActiveCellOnOutside`（默认开）。留痕说的是「编辑态关了、你还在这块表上」，
+ * 不是「描边赖到下次点格子为止」。
  *
  * **被编辑的行滚出渲染窗口不算关闭**：浮层只是藏起来，滚回来会带着未提交的输入原样显形
  * （并把焦点还回去）。编辑态按 `rowKey` + `colKey` 记，不绑 `<td>` 元素 —— 行 DOM 是池化
@@ -265,11 +270,43 @@ export function vtCellEditor<T extends Record<string, any> = any>(
         if (e.key === 'Escape' && active) dismissAndRefresh();
       };
 
-      const onOutsideClick = (e: MouseEvent): void => {
+      /**
+       * 点到外面就关掉。
+       *
+       * ⚠️ **必须听 `pointerdown`，不能听 `mousedown`**：`vtCellSelection` 的拖选起手在
+       * `pointerdown` 里 `preventDefault()`（为了不让浏览器顺手选中文字），而 pointerdown 的
+       * 默认行为里就包含「派发兼容 mouse 事件」—— 于是**表体内的 `mousedown` 根本不存在**。
+       * 实测（CDP，点单元格）：`{ pointerdown: 1, mousedown: 0, click: 1 }`，点表格外面才是
+       * `{ 1, 1, 1 }`。原来听 mousedown 的后果是：编辑浮层点别的格子关不掉，一直悬在旧格子上。
+       * `preventDefault()` 不等于 `stopPropagation()`，所以 pointerdown 照常冒泡到 document。
+       */
+      const onOutsideClick = (e: PointerEvent): void => {
         if (!active || !overlayEl) return;
         const target = e.target as HTMLElement;
         if (overlayEl.contains(target)) return;
-        if (ctx.tbodyEl.contains(target)) return;
+        if (ctx.tbodyEl.contains(target)) {
+          /**
+           * 点的是表体里的**另一个**格子。
+           *
+           * `trigger: 'click'` 下交给 `onCellTrigger`（它会 dismiss + forceUpdate + 重开）——
+           * **这里绝不能抢着关**：`dismissAndRefresh()` 会 `forceUpdate()`，指针底下那个
+           * `<td>` 当场被换掉，紧随的 `click` 就落不到单元格上（实测 click 直接不派发），
+           * 于是新格子的编辑器再也打不开。
+           *
+           * `trigger: 'dblclick'` 下单击**不触发** `onCellTrigger`，没人关 —— 浮层赖在旧格子
+           * 上、未提交的输入也刷不出来（用户报的就是这个）。所以只有这一支要自己收尾。
+           * 双击换格子不受影响：丢的只是那一次 `click`，`dblclick` 仍会命中新的 td。
+           */
+          if (trigger === 'click') return;
+          const td = target.closest?.('td.vt-td') as HTMLElement | null;
+          const tr = td?.closest?.('tr.vt-tr') as HTMLElement | null;
+          const sameCell =
+            !!td && !!tr && tr.dataset.rowKey === active.rowKey && td.dataset.colKey === active.colKey;
+          // 点回正在编辑的那一格不关（浮层没盖满 td 时点到边缘）
+          if (sameCell) return;
+          dismissAndRefresh();
+          return;
+        }
         // 内置组件的自绘浮层（VtMultiSelect / VtAutocomplete / VtCascader）挂在 .vt-client
         // 上（与本插件的 overlay 同层，定位公式也同一套）——不在 overlay 里也不在 tbody 里，
         // 不放行的话点一下下拉项就把编辑器关掉，连锚点一起清空。
@@ -283,7 +320,7 @@ export function vtCellEditor<T extends Record<string, any> = any>(
 
       ctx.tbodyEl.addEventListener(trigger, onCellTrigger);
       ctx.rootEl.addEventListener('keydown', onKeyDown);
-      document.addEventListener('mousedown', onOutsideClick);
+      document.addEventListener('pointerdown', onOutsideClick);
 
       /**
        * 浮层跟随。两个钩子都要订阅，覆盖的是不同的事：
@@ -326,7 +363,7 @@ export function vtCellEditor<T extends Record<string, any> = any>(
         destroy: () => {
           ctx.tbodyEl.removeEventListener(trigger, onCellTrigger);
           ctx.rootEl.removeEventListener('keydown', onKeyDown);
-          document.removeEventListener('mousedown', onOutsideClick);
+          document.removeEventListener('pointerdown', onOutsideClick);
           overlayEl?.remove();
           overlayEl = null;
           active = null;

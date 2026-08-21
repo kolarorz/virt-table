@@ -59,7 +59,14 @@
  * 主题，值的形状与改造前一致。`native: true` 切回浏览器原生控件。`VtTimePicker` 仍是原生
  * `input[type=time]`。
  * | **直接可点** | `VtCheckbox` `VtSwitch` `VtRate` `VtActions` | 常态本身可交互，点一下就写回，不需要插件 |
- * | 纯展示 | `VtTag` `VtProgress` `VtLink` `VtPerson`（不配 `options`） | 不改值 |
+ * | 纯展示 | `VtTag` `VtProgress` `VtLink` `VtImage` `VtPerson`（不配 `options`） | 不改值 |
+ *
+ * 「纯展示」不等于「不可交互」：`VtLink` 点了跳链接、`VtImage` 点了弹图片查看器 —— 它们
+ * 只是**不改行数据**，所以既没有 `renderEditor`、也不需要 `vtCellEditor`。
+ *
+ * `VtImage` 另有一件别的组件都不需要的事：**取图不能落在渲染路径上**。行 DOM 是池化的，
+ * 同步 `new Image()` 等于每个滚动帧都在发请求 + 在主线程解码。它的 `render` 只产出占位盒，
+ * 加载排到空闲期、并且单元格被回收就丢弃任务（`_image-loader.ts`）。
  *
  * `VtTag` 只在「纯展示」那一栏：它没有候选集，值本身就是内容。要「从候选集里选、选中的
  * 画成胶囊」用 `VtSelect({ display: 'tag' })`。
@@ -117,6 +124,12 @@ export {
 } from './vt-link';
 
 export { VtPerson, type VtPersonOptions, type VtPersonOption } from './vt-person';
+export { VtImage, type VtImageOptions, type VtImageItem } from './vt-image';
+/**
+ * 图片查看器的公共文案类型（`VtImage` 的 `texts` 选项要用到）。查看器本体
+ * （`openImageViewer`）与取图队列都是内部件，不出口 —— 与 `_popup` / `_enum` / `_calendar` 一致。
+ */
+export type { VtImageViewerTexts } from '../locale';
 export { VtAutocomplete, type VtAutocompleteOptions } from './vt-autocomplete';
 export {
   VtCascader,
@@ -144,3 +157,32 @@ export type {
   VtOption,
   VtSemanticType,
 } from './shared';
+
+/**
+ * 自绘浮层基元。**公开出来给插件用** —— 付费插件（甘特的工具栏下拉、里程碑浮层）要开浮层，
+ * 而「浮层必须挂在带 `--vt-*` 的容器里、且被 cell-editor 的 outside-click 白名单放行」
+ * 这两条约束是核心的实现细节：各家自己 `document.body.appendChild` 一律踩坑（见 _popup.ts
+ * 开头那段）。所以这里把它升级成公共 API，而不是让插件抄一遍。
+ */
+export {
+  createPopup,
+  type PopupHandle,
+  type PopupOptions,
+  type PopupPlacement,
+} from './_popup';
+
+/**
+ * **表格之外**的表单件：独立开关与独立单选下拉。
+ *
+ * 同一个理由：`VtSwitch` / `VtSelect` 是**列工厂**，只能装在单元格上，而插件的配置面板
+ * （甘特的「甘特图配置」下拉）需要普通表单里那两件。不公开的话每个插件都要照抄一遍
+ * DOM 结构与浮层规矩 —— 抄错读屏器读不出、浮层掉到 body 上 token 全失效，
+ * 而且**没人会发现**。外观复用 `.vt-comp-*`，所以与单元格里的同款控件长得一样。
+ */
+export { createSwitch, type SwitchHandle, type SwitchOptions } from './_switch';
+export {
+  createSelectField,
+  type SelectFieldHandle,
+  type SelectFieldOption,
+  type SelectFieldOptions,
+} from './_select-field';

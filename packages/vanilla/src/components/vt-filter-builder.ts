@@ -78,7 +78,12 @@ export class VtFilterBuilder<T extends Record<string, any> = any> {
     this._operatorLabels = tableLocale?.operators ?? zhCN.operators;
     this._model = opts.model ? (cloneFilterModel(opts.model) as FilterGroup) : createFilterGroup('and');
     this._columns = this._resolveColumns();
-    this._el.classList.add('vt-fb');
+    /*
+     * 两个类各管一件事：`vt-fb` 是 **token 载体**（核心 index.css 声明 `--vt-*` 的地方），
+     * `vt-fb-panel` 才是这张面板的**外观**。分开是因为前者也被别的容器（付费插件的外壳、
+     * 工具栏自己包的壳）当变量来源用 —— 外观画在它身上会让那些容器白得一圈卡片。
+     */
+    this._el.classList.add('vt-fb', 'vt-fb-panel');
     if (opts.theme) this.setTheme(opts.theme);
     this.render();
   }
@@ -134,7 +139,7 @@ export class VtFilterBuilder<T extends Record<string, any> = any> {
   /** 卸载：清空容器内容与 class */
   destroy(): void {
     this._el.innerHTML = '';
-    this._el.classList.remove('vt-fb');
+    this._el.classList.remove('vt-fb', 'vt-fb-panel');
     this._summaryEl = null;
   }
 

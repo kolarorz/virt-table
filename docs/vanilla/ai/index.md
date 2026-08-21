@@ -72,6 +72,6 @@ const table = new VirtTable(el, {
 
 ## 下一步
 
-- [vtAIQuery 自然语言查询](../examples/plugins/ai-query) —— 校验规则、`AIQuery` 形状、撤销栈
-- [vtAIColumn AI 列](../examples/plugins/ai-column) —— 并发与队列、缓存键、abort 时机
-- [vtAIStream 流式表格](../examples/plugins/ai-stream) —— 帧调度、列推断规则、跟随态
+- [vtAIQuery 自然语言查询](../examples/ai/ai-query) —— 校验规则、`AIQuery` 形状、撤销栈
+- [vtAIColumn AI 列](../examples/ai/ai-column) —— 并发与队列、缓存键、abort 时机
+- [vtAIStream 流式表格](../examples/ai/ai-stream) —— 帧调度、列推断规则、跟随态

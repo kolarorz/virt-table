@@ -9,6 +9,7 @@ import type {
 import { createAutoScroll } from '../internal/auto-scroll';
 import { isPrimaryPointer } from '../internal/drag';
 import './cell-selection.css';
+import { isOutsidePointer } from '../internal/outside-cell';
 
 export interface CellSelectionOptions {
   /**
@@ -20,6 +21,14 @@ export interface CellSelectionOptions {
   edgeZone?: number;
   /** 自动滚动速度 px/帧（默认 8） */
   scrollSpeed?: number;
+  /**
+   * 点到**单元格以外**时清空选区，默认 `true`。与核心的 `clearActiveCellOnOutside` 同一套
+   * 判断（`internal/outside-cell.ts`）：另一个单元格、编辑浮层、各类弹层、右键都不算「以外」。
+   *
+   * 关掉的理由通常是复制流程 —— 「选一片 → 去别处点两下 → 回来 Ctrl+C」。
+   * 但那时也该把核心的 `clearActiveCellOnOutside` 一起关掉，两个状态的行为别分叉。
+   */
+  clearOnOutside?: boolean;
 }
 
 type Cell = { row: number; col: number };
@@ -219,6 +228,23 @@ export function vtCellSelection<T extends Record<string, any> = any>(
       ctx.rootEl.setAttribute('tabindex', '-1');
       ctx.tbodyEl.addEventListener('pointerdown', onPointerDown);
 
+      /*
+       * 点到单元格以外 → 清空选区。与核心那边（激活态）**同一个判断、同一个事件**，
+       * 于是「描边消失了、选区还亮着」这种对不上的状态不存在。
+       *
+       * 挂 `document`：「别处」经常不在 `.vt-root` 里（付费甘特的时间轴 pane 与它是兄弟，
+       * 工具栏按钮条在它外面）。没选区时 handler 首行就早退。
+       */
+      let onOutside: ((e: PointerEvent) => void) | null = null;
+      if (options.clearOnOutside !== false) {
+        onOutside = (e: PointerEvent): void => {
+          if (!selStart || selecting) return;
+          if (!isOutsidePointer(e, ctx.tbodyEl)) return;
+          clearSelection();
+        };
+        document.addEventListener('pointerdown', onOutside);
+      }
+
       // 滚动时重绘；正在拖选则先按鼠标位置重算终点（内容在鼠标下方移动了）
       ctx.on('onScroll', () => {
         if (!selStart || !selEnd) return;
@@ -250,6 +276,7 @@ export function vtCellSelection<T extends Record<string, any> = any>(
         destroy: () => {
           autoScroll.stop();
           ctx.tbodyEl.removeEventListener('pointerdown', onPointerDown);
+          if (onOutside) document.removeEventListener('pointerdown', onOutside);
           if (onDocMove) document.removeEventListener('pointermove', onDocMove);
           if (onDocUp) {
             document.removeEventListener('pointerup', onDocUp);

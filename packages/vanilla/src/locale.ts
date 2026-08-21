@@ -68,6 +68,32 @@ export interface VtCalendarTexts {
   last30Days: string;
 }
 
+/**
+ * 图片查看器（`VtImage` 点开的浮层）UI 文案。
+ *
+ * 与 `VtCalendarTexts` 同一条约束：单元格组件是纯工厂函数、拿不到 `VirtTable` 实例，
+ * 所以这里只是**默认值的单一事实源**，组件建列时读一次 `zhCN.imageViewer`，
+ * **不跟随运行时 `setLocale()`**。要别的语言就在列上传 `texts: enUS.imageViewer`。
+ */
+export interface VtImageViewerTexts {
+  /** 关闭按钮的 aria-label 与 tooltip */
+  close: string;
+  /** 上/下一张 */
+  prev: string;
+  next: string;
+  /** 工具栏：放大 / 缩小 / 还原（回到适应窗口且不旋转） / 旋转 90° */
+  zoomIn: string;
+  zoomOut: string;
+  reset: string;
+  rotate: string;
+  /** 下载（仅 `downloadable: true` 时出现） */
+  download: string;
+  /** 多图计数，参数为当前序号（从 1 起）与总张数 */
+  counter: (index: number, total: number) => string;
+  /** 大图取不到时的提示 */
+  loadFailed: string;
+}
+
 /** 表格全部 UI 文案字典 */
 export interface VirtTableLocale {
   /** 空数据提示（被 option.emptyText 覆盖） */
@@ -138,6 +164,8 @@ export interface VirtTableLocale {
   filterBuilder: VtFilterBuilderTexts;
   /** 日历面板文案（`VtDatePicker` / `VtDateRangePicker` 建列时读一次，不跟随 setLocale） */
   calendar: VtCalendarTexts;
+  /** 图片查看器文案（`VtImage` 建列时读一次，不跟随 setLocale） */
+  imageViewer: VtImageViewerTexts;
   /** 无限滚动状态条文案（仅当启用 infinite option 时使用） */
   infinite: {
     /** 手动模式下的「加载更多」按钮 */
@@ -163,6 +191,66 @@ export interface VirtTableLocale {
     jumpUnit: string;
     /** 每页条数选项标签，参数为每页条数 */
     pageSizeUnit: (n: number) => string;
+  };
+  /**
+   * 工具栏与四个面板插件（`vtFieldConfig` / `vtFilterConfig` / `vtGroupConfig` / `vtSortConfig`）的文案。
+   *
+   * 键名仍叫 `toolbar`：这些词最早只有工具栏在用，而四个面板插件是从它里面拆出去的 ——
+   * 改键名要动所有语言包与使用方的 `texts` 覆盖，收益抵不上。**装了哪个插件就用到哪几个键**
+   * （单独装 `vtSortConfig` 用到的就是 `sort*` 那几个）。
+   *
+   * 别的插件贡献进工具栏的按钮（甘特配置、撤销/重做）文案留在各自那边 —— 那是它们自己的词汇，
+   * 搬进来会让核心的语言包认识一堆它管不着的概念。
+   */
+  toolbar: {
+    /** 规则列表通用 */
+    addRule: string;
+    remove: string;
+    clear: string;
+    asc: string;
+    desc: string;
+    /** 「字段配置」 */
+    columns: string;
+    columnsHint: string;
+    /** `vtFieldConfig({ reorder: false })` 那一档的提示 —— 面板里没有手柄可拖 */
+    columnsHintNoReorder: string;
+    /** 只剩一列时那一列为什么勾不掉 */
+    columnsLast: string;
+    noColumns: string;
+    /** 「筛选」 */
+    filter: string;
+    noFilterColumn: string;
+    /** 「分组」 */
+    group: string;
+    /** 第几级，参数为层号（从 1 起） */
+    groupLevel: (n: number) => string;
+    groupEmpty: string;
+    /** 分组标题按数据出现顺序排（不指定升降序的那一档） */
+    groupNatural: string;
+    groupNaturalHint: string;
+    noGroupColumn: string;
+    /** 「排序」 */
+    sort: string;
+    sortEmpty: string;
+    noSortColumn: string;
+    /** 表格没开 `sortMode: 'multiple'`，只能按一列排 */
+    sortSingleOnly: string;
+    /** 「行高」（由 `vtRowHeightConfig` 贡献：低 / 中 / 高三档） */
+    rowHeight: string;
+    rowHeightLow: string;
+    rowHeightMedium: string;
+    rowHeightHigh: string;
+    /** 当前档的行高是多少 px，参数为行高 */
+    rowHeightHint: (px: number) => string;
+    /** 表格没开 `fixedSize`，三档无从谈起 */
+    rowHeightFixedOnly: string;
+    /** 「搜索」（由 `vtSearch` 贡献） */
+    search: string;
+    /** 「导出」（由 `vtExport` 贡献） */
+    export: string;
+    exportCsv: string;
+    exportExcel: string;
+    print: string;
   };
 }
 
@@ -258,6 +346,18 @@ export const zhCN: VirtTableLocale = {
     last7Days: '最近 7 天',
     last30Days: '最近 30 天',
   },
+  imageViewer: {
+    close: '关闭',
+    prev: '上一张',
+    next: '下一张',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    reset: '还原',
+    rotate: '旋转',
+    download: '下载',
+    counter: (index, total) => `${index} / ${total}`,
+    loadFailed: '图片加载失败',
+  },
   infinite: {
     loadMore: '加载更多',
     loading: '加载中...',
@@ -272,6 +372,41 @@ export const zhCN: VirtTableLocale = {
     jumpTo: '跳至',
     jumpUnit: '页',
     pageSizeUnit: (n) => `${n} 条/页`,
+  },
+  toolbar: {
+    addRule: '添加条件',
+    remove: '移除',
+    clear: '清除',
+    asc: '升序',
+    desc: '降序',
+    columns: '字段配置',
+    columnsHint: '勾选控制显隐，拖动左侧手柄调整顺序',
+    columnsHintNoReorder: '勾选控制列的显示与隐藏',
+    columnsLast: '至少要保留一列',
+    noColumns: '没有可配置的列',
+    filter: '筛选',
+    noFilterColumn: '没有可筛选的列',
+    group: '分组',
+    groupLevel: (n) => `第 ${n} 级`,
+    groupEmpty: '还没有分组，添加一级试试',
+    groupNatural: '原序',
+    groupNaturalHint: '分组标题按数据里第一次出现的顺序排',
+    noGroupColumn: '没有适合分组的列（取值种类太多或都是日期）',
+    sort: '排序',
+    sortEmpty: '还没有排序，添加一条试试',
+    noSortColumn: '没有可排序的列',
+    sortSingleOnly: '表格未开 sortMode: "multiple"，只能按一列排序',
+    rowHeight: '行高',
+    rowHeightLow: '低',
+    rowHeightMedium: '中',
+    rowHeightHigh: '高',
+    rowHeightHint: (px) => `当前每行 ${px}px`,
+    rowHeightFixedOnly: '表格未开 fixedSize: true，行高由内容决定',
+    search: '搜索',
+    export: '导出',
+    exportCsv: '导出 CSV',
+    exportExcel: '导出 Excel',
+    print: '打印',
   },
 };
 
@@ -367,6 +502,18 @@ export const enUS: VirtTableLocale = {
     last7Days: 'Last 7 days',
     last30Days: 'Last 30 days',
   },
+  imageViewer: {
+    close: 'Close',
+    prev: 'Previous',
+    next: 'Next',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    reset: 'Reset',
+    rotate: 'Rotate',
+    download: 'Download',
+    counter: (index, total) => `${index} / ${total}`,
+    loadFailed: 'Failed to load image',
+  },
   infinite: {
     loadMore: 'Load more',
     loading: 'Loading...',
@@ -381,6 +528,41 @@ export const enUS: VirtTableLocale = {
     jumpTo: 'Go to',
     jumpUnit: '',
     pageSizeUnit: (n) => `${n}/page`,
+  },
+  toolbar: {
+    addRule: 'Add condition',
+    remove: 'Remove',
+    clear: 'Clear',
+    asc: 'Ascending',
+    desc: 'Descending',
+    columns: 'Fields',
+    columnsHint: 'Check to show or hide, drag the handle to reorder',
+    columnsHintNoReorder: 'Check to show or hide columns',
+    columnsLast: 'At least one column must stay visible',
+    noColumns: 'No configurable columns',
+    filter: 'Filter',
+    noFilterColumn: 'No filterable columns',
+    group: 'Group',
+    groupLevel: (n) => `Level ${n}`,
+    groupEmpty: 'No grouping yet — add a level',
+    groupNatural: 'As-is',
+    groupNaturalHint: 'Group headers keep the order they first appear in the data',
+    noGroupColumn: 'No column fits grouping (too many distinct values, or dates)',
+    sort: 'Sort',
+    sortEmpty: 'No sorting yet — add a rule',
+    noSortColumn: 'No sortable columns',
+    sortSingleOnly: 'sortMode: "multiple" is off — only one column can be sorted',
+    rowHeight: 'Row height',
+    rowHeightLow: 'Low',
+    rowHeightMedium: 'Medium',
+    rowHeightHigh: 'High',
+    rowHeightHint: (px) => `${px}px per row`,
+    rowHeightFixedOnly: 'fixedSize: true is off — row height is driven by content',
+    search: 'Search',
+    export: 'Export',
+    exportCsv: 'Export CSV',
+    exportExcel: 'Export Excel',
+    print: 'Print',
   },
 };
 
@@ -403,7 +585,8 @@ export type DeepPartial<T> = {
 
 /**
  * 把 override 深合并进 base，返回完整 locale。
- * 顶层标量/函数（sortTip）整体替换；filter/search/operators/filterBuilder/calendar 逐层浅合并。
+ * 顶层标量/函数（sortTip）整体替换；filter/search/operators/filterBuilder/calendar/imageViewer
+ * 逐层浅合并。
  *
  * ⚠️ **每加一个子块都必须在下面补一行**，否则 `{ calendar: { today: 'TD' } }` 这种局部覆盖会把
  * 整块（含 12 个月名）替换掉而不是合并。`locale.test.ts` 的「键集一致」抓不到这个 —— 那边比的是
@@ -425,7 +608,9 @@ export function mergeLocale(
     operators: { ...base.operators, ...(override.operators ?? {}) },
     filterBuilder: { ...base.filterBuilder, ...(override.filterBuilder ?? {}) },
     calendar: { ...base.calendar, ...(override.calendar ?? {}) },
+    imageViewer: { ...base.imageViewer, ...(override.imageViewer ?? {}) },
     infinite: { ...base.infinite, ...(override.infinite ?? {}) },
     pagination: { ...base.pagination, ...(override.pagination ?? {}) },
+    toolbar: { ...base.toolbar, ...(override.toolbar ?? {}) },
   };
 }

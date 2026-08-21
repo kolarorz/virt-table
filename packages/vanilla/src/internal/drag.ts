@@ -20,6 +20,17 @@
 export interface DragHandlers {
   /** 超过多少 px 才算开始拖（默认 4；传 0 表示第一次 move 就算） */
   threshold?: number;
+  /**
+   * 只在这条轴主导时才启动拖拽（默认不限方向）。
+   *
+   * 给「从一整块区域发起、而那块区域同时还要能滚动」的手势用 —— 典型是列拖拽：
+   * 它从整个表头单元格发起，而表头现在也能触摸滚动（表头是 `InputController` 的
+   * 输入源）。不加门控的话触屏上纵滑会**同时**拖列 + 滚表格。
+   *
+   * 判据是越过阈值那一刻两轴位移的绝对值谁大，与 `InputController` 的轴锁同一套
+   * 启发式，所以两边的判定不会互相矛盾。
+   */
+  axis?: 'x' | 'y';
   /** 首次越过阈值时触发一次 */
   onStart?: () => void;
   onMove: (ev: PointerEvent, dx: number, dy: number) => void;
@@ -53,6 +64,18 @@ export function startDrag(e: PointerEvent, handlers: DragHandlers): void {
     const dy = ev.clientY - startY;
     if (!started) {
       if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+      // 主导轴不是这次拖拽要的那条：整个手势作废，让给滚动（不再等下一次 move ——
+      // 手势中途改方向也不该突然拽起一列）
+      if (handlers.axis === 'x' && Math.abs(dx) <= Math.abs(dy)) {
+        cleanup();
+        handlers.onCancel?.();
+        return;
+      }
+      if (handlers.axis === 'y' && Math.abs(dy) <= Math.abs(dx)) {
+        cleanup();
+        handlers.onCancel?.();
+        return;
+      }
       started = true;
       handlers.onStart?.();
     }

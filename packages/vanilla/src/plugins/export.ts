@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtTablePlugin, PluginContext, CellSelectionService } from '../plugin';
+import type { ToolbarService } from './toolbar';
 import type { VirtTableColumn } from '../index';
 import { toCsvString, toExcelHtml, rowsToHtmlTable } from '../export';
+import { TOOLBAR_ORDER } from '../internal/toolbar-order';
 
 export interface ExportOptions {
   /** 文件名（含扩展名） */
@@ -39,7 +41,20 @@ const NON_EXPORTABLE_TYPES = new Set(['index', 'checkbox', 'expand', 'tree', 'ra
  *
  * 暴露 API：`exportCsv()` / `exportExcel()` / `print()`
  */
-export function vtExport<T extends Record<string, any> = any>(): VirtTablePlugin<T> {
+/** 插件级选项（与调用 `exportCsv(opts)` 时传的 `ExportOptions` 不是一回事） */
+export interface ExportPluginOptions {
+  /**
+   * 装了 `vtToolbar` 时要不要放「导出」那颗按钮，默认 `true`。
+   *
+   * `false` = 只提供 `exportCsv()` / `exportExcel()` / `print()`，入口自己放
+   * （右键菜单里挂一项、页面上放个按钮都行）。
+   */
+  toolbar?: boolean;
+}
+
+export function vtExport<T extends Record<string, any> = any>(
+  options: ExportPluginOptions = {},
+): VirtTablePlugin<T> {
   return {
     name: 'vtExport',
     setup(ctx: PluginContext<T>) {
@@ -92,46 +107,92 @@ export function vtExport<T extends Record<string, any> = any>(): VirtTablePlugin
         URL.revokeObjectURL(url);
       };
 
-      return {
-        api: {
-          exportCsv: (opts: ExportOptions = {}) => {
-            const { header, rows } = buildRows(opts);
-            const data =
-              opts.includeHeader === false || header.length === 0 ? rows : [header, ...rows];
-            const csv = toCsvString(data, opts.delimiter ?? ',');
-            download(csv, opts.filename ?? 'export.csv', 'text/csv;charset=utf-8;');
-          },
+      /**
+       * 装了 `vtToolbar` 就往工具栏放一颗「导出」。
+       *
+       * **面板型**（一个三行的小菜单：CSV / Excel / 打印），因为这个插件本来就有三个动作 ——
+       * 摆三颗按钮会占掉工具栏一小半，而它们明显是同一件事的三种格式。每一行点完就关
+       * （`p.close()`）：导出是一次性动作，浮层留着没有意义。
+       *
+       * 在 `onMounted` 里 `inject`：工具栏在自己的 `setup` 里 `provide`，而插件的安装顺序
+       * 不该由使用方数组里谁写在前面决定。拿不到（没装工具栏）就什么都不做，API 照旧。
+       */
+      let offToolbar: (() => void) | null = null;
+      ctx.on('onMounted', () => {
+        const toolbar = options.toolbar === false ? null : ctx.inject<ToolbarService>('toolbar');
+        offToolbar =
+          toolbar?.register({
+            key: 'export',
+            label: ctx.getLocale().toolbar.export,
+            order: TOOLBAR_ORDER.export,
+            icon:
+              '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" ' +
+              'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<path d="M12 4v10M8.5 10.5 12 14l3.5-3.5M5 18h14"/></svg>',
+            panel: (p) => {
+              const t = ctx.getLocale().toolbar;
+              p.ui.title(t.export);
+              for (const [label, run] of [
+                [t.exportCsv, () => api.exportCsv()],
+                [t.exportExcel, () => api.exportExcel()],
+                [t.print, () => api.print()],
+              ] as Array<[string, () => void]>) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                // 复用共享的面板条目样式（与列头筛选下拉里的选项同款）
+                btn.className = 'vt-filter-item';
+                btn.textContent = label;
+                btn.addEventListener('click', () => {
+                  p.close();
+                  run();
+                });
+                p.el.appendChild(btn);
+              }
+              p.resize();
+            },
+          }) ?? null;
+      });
 
-          exportExcel: (opts: ExportOptions = {}) => {
-            const { header, rows } = buildRows(opts);
-            const html = toExcelHtml(
-              opts.includeHeader === false ? [] : header,
-              rows,
-              opts.filename ?? 'Sheet',
-            );
-            download(html, opts.filename ?? 'export.xls', 'application/vnd.ms-excel');
-          },
+      const api = {
+        exportCsv: (opts: ExportOptions = {}) => {
+          const { header, rows } = buildRows(opts);
+          const data =
+            opts.includeHeader === false || header.length === 0 ? rows : [header, ...rows];
+          const csv = toCsvString(data, opts.delimiter ?? ',');
+          download(csv, opts.filename ?? 'export.csv', 'text/csv;charset=utf-8;');
+        },
 
-          /** 打印全表（新窗口 + 内联样式） */
-          print: (opts: { title?: string } = {}) => {
-            const { header, rows } = buildRows({ scope: 'all' });
-            const table = rowsToHtmlTable(header, rows);
-            const win = window.open('', '_blank');
-            if (!win) return;
-            const title = opts.title ?? ctx.getLocale().print;
-            win.document.write(
-              `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>` +
-                `<style>${PRINT_STYLE}</style></head><body>` +
-                (opts.title ? `<h3>${title}</h3>` : '') +
-                table +
-                '</body></html>',
-            );
-            win.document.close();
-            win.focus();
-            win.print();
-          },
+        exportExcel: (opts: ExportOptions = {}) => {
+          const { header, rows } = buildRows(opts);
+          const html = toExcelHtml(
+            opts.includeHeader === false ? [] : header,
+            rows,
+            opts.filename ?? 'Sheet',
+          );
+          download(html, opts.filename ?? 'export.xls', 'application/vnd.ms-excel');
+        },
+
+        /** 打印全表（新窗口 + 内联样式） */
+        print: (opts: { title?: string } = {}) => {
+          const { header, rows } = buildRows({ scope: 'all' });
+          const table = rowsToHtmlTable(header, rows);
+          const win = window.open('', '_blank');
+          if (!win) return;
+          const title = opts.title ?? ctx.getLocale().print;
+          win.document.write(
+            `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>` +
+              `<style>${PRINT_STYLE}</style></head><body>` +
+              (opts.title ? `<h3>${title}</h3>` : '') +
+              table +
+              '</body></html>',
+          );
+          win.document.close();
+          win.focus();
+          win.print();
         },
       };
+
+      return { api, destroy: () => offToolbar?.() };
     },
   };
 }

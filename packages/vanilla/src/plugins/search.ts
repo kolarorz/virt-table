@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtTablePlugin, PluginContext } from '../plugin';
+import type { ToolbarService } from './toolbar';
 import './search.css';
+import { TOOLBAR_ORDER } from '../internal/toolbar-order';
 
 export interface SearchMatch {
   rowIndex: number;
@@ -17,6 +19,22 @@ export interface SearchOptions<T = any> {
   matcher?: (value: unknown, term: string, row: T, colKey: string) => boolean;
   /** 命中项变化时触发（跳转前） */
   onMatchChange?: (current: SearchMatch | null, matches: SearchMatch[]) => void;
+  /**
+   * 装了 `vtToolbar` 时要不要放「搜索」那颗按钮，默认 `true`。
+   *
+   * 与 `hotkey` 是同一个能力的两个入口 —— 搜索框、命中高亮、上/下一个都是同一份实现，
+   * 差别只在**谁来唤出它**。所以不存在「工具栏里的搜索」与「快捷键的搜索」两个东西：
+   *
+   * | 写法 | 入口 |
+   * | --- | --- |
+   * | `vtSearch()` | 快捷键 + 工具栏按钮 |
+   * | `vtSearch({ toolbar: false })` | 只有 Ctrl/Cmd+F |
+   * | `vtSearch({ hotkey: false })` | 只有那颗按钮 |
+   * | 两个都 `false` | 只有 `openSearch()` 那组 API，按钮自己放 |
+   */
+  toolbar?: boolean;
+  /** 响不响应 Ctrl/Cmd+F，默认 `true`。见 `toolbar` 那张表 */
+  hotkey?: boolean;
 }
 
 const ACTIVE_CLASS = 'vt-search-match-active';
@@ -241,7 +259,8 @@ export function vtSearch<T extends Record<string, any> = any>(
         }
       };
       ctx.rootEl.setAttribute('tabindex', '-1');
-      ctx.rootEl.addEventListener('keydown', onKeyDown);
+      // `hotkey: false` 时只留按钮与 API（表格里按 Ctrl/Cmd+F 交回浏览器的查找）
+      if (options.hotkey !== false) ctx.rootEl.addEventListener('keydown', onKeyDown);
 
       // 数据变了，之前算出的命中索引就失效了——重算而不是留着错的
       ctx.on('onDataChanged', () => {
@@ -262,6 +281,31 @@ export function vtSearch<T extends Record<string, any> = any>(
         if (wasOpen) openBox();
       });
 
+      /**
+       * 装了 `vtToolbar` 就往工具栏放一颗「搜索」。
+       *
+       * **动作型**（点一下就打开搜索框），不是面板型 —— 搜索框有自己的形态（贴在表格右上角、
+       * 带上一个/下一个与命中计数），塞进一个下拉里既装不下也不该关掉才能翻命中项。
+       *
+       * 在 `onMounted` 里 `inject`：工具栏在自己的 `setup` 里 `provide`，而插件的安装顺序
+       * 不该由使用方数组里谁写在前面决定。拿不到就什么都不做 —— 快捷键与 API 照旧。
+       */
+      let offToolbar: (() => void) | null = null;
+      ctx.on('onMounted', () => {
+        const toolbar = options.toolbar === false ? null : ctx.inject<ToolbarService>('toolbar');
+        offToolbar =
+          toolbar?.register({
+            key: 'search',
+            label: ctx.getLocale().toolbar.search,
+            order: TOOLBAR_ORDER.search,
+            icon:
+              '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" ' +
+              'stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
+              '<circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>',
+            onClick: () => openBox(),
+          }) ?? null;
+      });
+
       return {
         api: {
           /** 打开搜索框并聚焦 */
@@ -280,6 +324,7 @@ export function vtSearch<T extends Record<string, any> = any>(
           getSearchMatches: () => matches.slice(),
         },
         destroy: () => {
+          offToolbar?.();
           if (debounceTimer) clearTimeout(debounceTimer);
           ctx.rootEl.removeEventListener('keydown', onKeyDown);
           clearHighlights();

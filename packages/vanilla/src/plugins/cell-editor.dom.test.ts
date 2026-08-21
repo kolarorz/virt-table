@@ -220,6 +220,11 @@ describe('vtCellEditor：点开一格同时打上激活态', () => {
     expect(table.getActiveCell()).toEqual({ rowKey: '3', colKey: 'name' });
   });
 
+  /*
+   * Esc 关编辑态 → 描边留着（留痕）。与它成对的是另一条：**点到单元格以外**时描边跟着收起
+   * （核心的 `clearActiveCellOnOutside`，见 `active-cell-outside.dom.test.ts`）。
+   * 两条一起才是完整语义：留痕说的是「编辑态关了、你还在这块表上」。
+   */
   it('编辑态消失后描边还在 —— 这就是「刚改的是哪一格」', () => {
     const { box, table } = mount();
     openEditor(box, '3', 'name');
@@ -371,5 +376,79 @@ describe('vtCellEditor：离开一格时立刻重绘那一格', () => {
     // 浮层仍然是可见的、且编辑态归行 5 —— 拿着旧 td 定位的话这里会错位/隐藏
     expect(coverOf(box).style.display).not.toBe('none');
     expect(inputOf(box)!.value).toBe('N5');
+  });
+});
+
+/**
+ * 用户报的 bug：**「在单元格里输入内容后，点别的单元格，刚才那个编辑浮层不关」**。
+ *
+ * 两层原因，两条断言各守一层：
+ *
+ * 1. `onOutsideClick` 里有一句「点到 tbody 里就放行」，前提是 `onCellTrigger` 会接管
+ *    （dismiss + 重开）。`trigger: 'click'` 成立，**`trigger: 'dblclick'` 不成立** ——
+ *    单击不触发 dblclick，于是没人关，浮层赖在旧格子上、未提交的输入也刷不出来。
+ * 2. 监听的事件必须是 `pointerdown`。`vtCellSelection` 在 pointerdown 里 `preventDefault()`，
+ *    连带取消兼容 mouse 事件，装了框选的表格里**表体内不存在 mousedown**（CDP 实测
+ *    点单元格：pointerdown 1 / mousedown 0 / click 1）。详见 `events-contract.test.ts`。
+ */
+describe('vtCellEditor：点别的单元格必须关掉浮层', () => {
+  /** 双击进入编辑（trigger: 'dblclick'） */
+  const openByDblClick = (box: HTMLElement, rowKey: string, colKey: string): void => {
+    const td = box.querySelector(
+      `tr[data-row-key="${rowKey}"] td[data-col-key="${colKey}"]`,
+    ) as HTMLElement;
+    expect(td, `没找到 row=${rowKey} col=${colKey}`).toBeTruthy();
+    td.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  };
+
+  const textOf = (box: HTMLElement, rowKey: string, colKey: string): string =>
+    (
+      box.querySelector(
+        `tr[data-row-key="${rowKey}"] td[data-col-key="${colKey}"]`,
+      ) as HTMLElement
+    ).textContent ?? '';
+
+  /** 在某个单元格上按下指针（不是 mousedown —— 见文件头注） */
+  const pointerDownOn = (box: HTMLElement, rowKey: string, colKey: string): void => {
+    const td = box.querySelector(
+      `tr[data-row-key="${rowKey}"] td[data-col-key="${colKey}"]`,
+    ) as HTMLElement;
+    td.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+  };
+
+  it('trigger: dblclick 时，单击另一个单元格也要关掉并写回', () => {
+    const { box } = mount({ plugins: [vtCellEditor({ trigger: 'dblclick' }), vtCellSelection()] });
+
+    openByDblClick(box, '3', 'name');
+    expect(coverOf(box).style.display, '双击应该打开浮层').not.toBe('none');
+
+    const input = inputOf(box)!;
+    input.value = '输入了但没提交';
+    input.dispatchEvent(new Event('input'));
+
+    pointerDownOn(box, '6', 'name');
+
+    expect(coverOf(box).style.display, '点别的格子必须关掉浮层').toBe('none');
+    expect(textOf(box, '3', 'name'), '关掉时要刷新，让那一格显示写回后的值').toBe('输入了但没提交');
+  });
+
+  it('点回正在编辑的那一格不关（浮层没盖满 td 时点到边缘）', () => {
+    const { box } = mount({ plugins: [vtCellEditor({ trigger: 'dblclick' }), vtCellSelection()] });
+    openByDblClick(box, '3', 'name');
+    pointerDownOn(box, '3', 'name');
+    expect(coverOf(box).style.display).not.toBe('none');
+  });
+
+  it('trigger: click 时行为不变（由 onCellTrigger 接管，换格子照样重开）', () => {
+    const { box } = mount({ plugins: [vtCellEditor(), vtCellSelection()] });
+    openEditor(box, '3', 'name');
+    const input = inputOf(box)!;
+    input.value = 'X';
+    input.dispatchEvent(new Event('input'));
+
+    openEditor(box, '6', 'name');
+    expect(coverOf(box).style.display, '换格子后浮层应该还开着（在新格子上）').not.toBe('none');
+    expect(inputOf(box)!.value).toBe('N6');
+    expect(textOf(box, '3', 'name'), '旧格子要显示写回后的值').toBe('X');
   });
 });

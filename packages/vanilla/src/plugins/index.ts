@@ -22,7 +22,7 @@ export {
   type ContextMenuContext,
   type ContextMenuItem,
 } from './context-menu';
-export { vtExport, type ExportOptions } from './export';
+export { vtExport, type ExportOptions, type ExportPluginOptions } from './export';
 export {
   vtClipboard,
   type ClipboardOptions,
@@ -32,7 +32,48 @@ export {
   type ClipboardPasteContext,
 } from './clipboard';
 export { vtSearch, type SearchOptions, type SearchMatch } from './search';
-export { vtColumnPanel, type ColumnPanelOptions } from './column-panel';
+/**
+ * 四个面板插件：**字段配置 / 筛选 / 分组 / 排序**。
+ *
+ * 每个都有两种归宿：装了 `vtToolbar` 就挂成工具栏上的一颗按钮，没装就自己开浮层
+ * （使用方放按钮，调 `toggleFieldConfig(anchor)` 这类 API）。两条路是同一份面板实现。
+ *
+ * **工具栏一颗按钮都不自带** —— 要哪颗就装哪个。想要这四颗的常见组合有个一行写法：
+ * `plugins: [vtToolbar(), ...vtToolbarPanels()]`。
+ */
+export { vtFieldConfig, type FieldConfigOptions } from './field-config';
+export { vtFilterConfig, type FilterConfigOptions } from './filter-config';
+export { vtGroupConfig, type GroupConfigOptions } from './group-config';
+export { vtSortConfig, type SortConfigOptions } from './sort-config';
+export { vtToolbarPanels, type ToolbarPanelsOptions } from './toolbar-panels';
+/**
+ * 行高设置：低 / 中 / 高三档，**只在 `fixedSize: true` 下开放**。
+ *
+ * 一档同时换两件事 —— 密度类（`.vt-root--compact` / `.vt-root--loose`，管内边距与字号）与
+ * 虚拟化的行高（30 / 40 / 50）。只做一半的表现是行间露白或内容被裁，所以它们绑在一起。
+ *
+ * 与上面四个不同：**工具栏不自带这一项**，想要那颗按钮就得装本插件。
+ */
+export {
+  vtRowHeightConfig,
+  type RowHeightConfigOptions,
+  type RowHeightLevel,
+} from './row-height-config';
+/**
+ * 工具栏：一条按钮条 + 一个**贡献点**，自己一颗按钮都没有。
+ *
+ * 谁有按钮谁来 `register()`：上面那四个面板、`vtRowHeightConfig`、`vtSearch` / `vtExport`、
+ * 付费插件（甘特配置、撤销/重做）、以及使用方自己（`table.registerToolbarItem(item)`）。
+ */
+export {
+  vtToolbar,
+  type ToolbarOptions,
+  type ToolbarItem,
+  type ToolbarService,
+  type ToolbarPanelContext,
+  type ToolbarPanelHandle,
+  type ToolbarPanelUi,
+} from './toolbar';
 export { vtCellSelection, type CellSelectionOptions } from './cell-selection';
 export { vtKeyboardNav } from './keyboard-nav';
 export { vtColumnFilter, type ColumnFilterOptions } from './column-filter';

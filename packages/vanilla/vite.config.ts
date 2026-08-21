@@ -90,9 +90,23 @@ export default defineConfig({
          * 它也确实值得单独引 —— 纯逻辑零 DOM，服务端可以先把列算好随数据下发。
          */
         'infer-columns': r('src/infer-columns.ts'),
+        /*
+         * 自绘滚动条的公开入口（付费包 `@virt-table-pro/gantt` 的双 pane 要它）。
+         * 单独成入口的理由与上面两条同源：只想画一条滚动条的使用方不该被迫拉进整张表。
+         * 它与主入口引用同一个 `Scrollbar`，Rollup 会提成共享 chunk —— 不会有两份实现。
+         */
+        scrollbar: r('src/scrollbar.ts'),
         'components/index': r('src/components/index.ts'),
         // 400+ 行 CSS，单独成 chunk 才不会并进 components/index.css
         'components/vt-filter-builder': r('src/components/vt-filter-builder.ts'),
+        /*
+         * 图片查看器的公开入口。单独成入口有两个理由，与 ai-query 那条同源：
+         *   1. 它有外部消费者（付费包 `@virt-table-pro/floating-image` 点图看大图），
+         *      而那个包不该为一个查看器把 19 个单元格组件与整份 components.css 拉进来；
+         *   2. 不给入口的话，barrel 与它两处引用会让 Rollup 把查看器提成共享 chunk，
+         *      `components/image-viewer.css` 这个 exports 路径就失效了。
+         */
+        'components/image-viewer': r('src/components/image-viewer.ts'),
       },
     },
     rollupOptions: {

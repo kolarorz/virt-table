@@ -29,7 +29,7 @@
  * ---- 为什么第 2 条只管 `[data-vp-example]`，不管 `.vp-doc` ----
  *
  * `Layout.vue` 会在**嵌 demo 的路径**下把内容容器的 `.vp-doc` 摘掉、换成
- * `[data-vp-example]`（目前是 `/examples/` 与 `/ai/`，见那里的 `DEMO_HOSTING_SEGMENTS`）。
+ * `[data-vp-example]`（目前是 `/examples/`、`/ai/` 与 `/demos/`，见那里的 `DEMO_HOSTING_SEGMENTS`）。
  * demo 只出现在这些页，所以 `.vp-doc xxx` 那批规则天然碰不到 demo，不需要排除；
  * 真正生效并越界的是 `[data-vp-example] xxx`。
  *

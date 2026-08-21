@@ -46,6 +46,18 @@ describe('locale', () => {
     expect(merged.operators.contains).toBe(zhCN.operators.contains);
   });
 
+  /**
+   * 与上面 `calendar` 那条同源（见 `mergeLocale` 的 ⚠️）：`imageViewer` 是新加的子块，
+   * 忘了在 `mergeLocale` 里补一行浅合并的话，这里覆盖一个 `close` 会把整块替换掉 ——
+   * 表现是查看器工具栏的 title 变 `undefined`，而「键集一致」那条抓不到它。
+   */
+  it('mergeLocale 覆盖查看器单条文案，同块其余保留', () => {
+    const merged = mergeLocale(zhCN, { imageViewer: { close: 'X' } });
+    expect(merged.imageViewer.close).toBe('X');
+    expect(merged.imageViewer.zoomIn).toBe(zhCN.imageViewer.zoomIn);
+    expect(merged.imageViewer.counter(2, 5)).toBe('2 / 5');
+  });
+
   it('mergeLocale 函数型文案整体替换', () => {
     const merged = mergeLocale(zhCN, { sortTip: (t) => `S:${t}` });
     expect(merged.sortTip('名称')).toBe('S:名称');
@@ -78,6 +90,18 @@ describe('locale', () => {
     expect(merged.calendar.months).toEqual(zhCN.calendar.months);
     expect(merged.calendar.weekdays).toHaveLength(7);
     expect(merged.calendar.thisQuarter).toBe(zhCN.calendar.thisQuarter);
+  });
+
+  /**
+   * 工具栏那一块（`vtToolbar` 的内置项文案）。与上面每个子块同一条要求：
+   * `mergeLocale` 里漏加一行的表现是「覆盖一个词把整块 26 条抹成 undefined」，
+   * 而键集一致那条用例抓不到它。
+   */
+  it('mergeLocale 覆盖单条工具栏文案，同块其余保留', () => {
+    const merged = mergeLocale(zhCN, { toolbar: { sort: 'Sort by' } });
+    expect(merged.toolbar.sort).toBe('Sort by');
+    expect(merged.toolbar.columns).toBe(zhCN.toolbar.columns);
+    expect(merged.toolbar.groupLevel(2)).toBe(zhCN.toolbar.groupLevel(2));
   });
 
   it('日历的 months / weekdays 是整体替换（12 个一套，没有只覆盖三月的语义）', () => {

@@ -25,20 +25,30 @@ virt-table/
 │  │     ├─ plugin.ts      # 插件契约 + PluginRuntime（含 plugin.test.ts）
 │  │     ├─ index.css      # 核心样式 → 产物 dist/core.css（可选层样式各自成文件）
 │  │     ├─ umd.ts         # 仅 UMD 构建用的全量入口（不进 exports）
+│  │     ├─ scrollbar.ts   # 自绘滚动条的**公开子路径**入口（付费包 gantt 的双 pane 复用它）
 │  │     ├─ plugins/       # 插件：可选 UI/交互层，各自带 css，入口 /plugins
 │  │     │  ├─ index.ts                # barrel：@virt-table/vanilla/plugins
-│  │     │  ├─ _panel.css              # 通用面板样式，被下面三方 CSS @import 内联
+│  │     │  ├─ _panel.css              # 通用面板样式（面板外壳/条目），被多方 CSS @import 内联
+│  │     │  ├─ _panel-ui.css           # 面板基元样式，被工具栏与四个面板插件 @import 内联
 │  │     │  ├─ context-menu.ts / .css   # vtContextMenu
 │  │     │  ├─ export.ts               # vtExport（导出 CSV/Excel + 打印，无 CSS）
 │  │     │  ├─ clipboard.ts            # vtClipboard（选区复制/粘贴，无 CSS）
 │  │     │  ├─ search.ts / search.css   # vtSearch（Ctrl/Cmd+F）
-│  │     │  ├─ column-panel.ts / .css   # vtColumnPanel（列设置面板）
+│  │     │  ├─ field-config.ts / .css   # vtFieldConfig（字段配置：列显隐 + 拖手柄换序）
+│  │     │  ├─ filter-config.ts / .css  # vtFilterConfig（高级筛选面板 = VtFilterBuilder）
+│  │     │  ├─ group-config.ts / .css   # vtGroupConfig（分组面板）
+│  │     │  ├─ sort-config.ts / .css    # vtSortConfig（排序面板）
+│  │     │  ├─ row-height-config.ts / .css # vtRowHeightConfig（行高三档，工具栏不自带）
+│  │     │  ├─ toolbar.ts / .css        # vtToolbar（按钮条 + 贡献点，自带上面四项）
 │  │     │  ├─ cell-selection.ts / .css # vtCellSelection（框选，provide cellSelection）
 │  │     │  ├─ keyboard-nav.ts         # vtKeyboardNav（requires cellSelection，无 CSS）
 │  │     │  ├─ cell-editor.ts / .css    # vtCellEditor（编辑浮层，provide cellEditor）
 │  │     │  ├─ column-filter.ts / .css  # vtColumnFilter（列头筛选下拉）
-│  │     │  └─ drag-sort.ts / .css      # vtColumnDrag + vtRowDrag
-│  │     ├─ internal/      # 多方共享的手势/滚动基元（不对外导出）
+│  │     │  └─ drag-sort.ts / .css      # vtColumnDrag + vtRowDrag（行拖拽支持树形/分组，见 §7.24）
+│  │     ├─ internal/      # 多方共享的手势/滚动/面板基元（不对外导出）
+│  │     │  ├─ panel-ui.ts             # 面板基元 createPanelUi（工具栏与四个面板插件共用）
+│  │     │  ├─ panel-popup.ts          # 面板的独立浮层壳（不装工具栏时那半边）
+│  │     │  ├─ panel-columns.ts        # 分组/排序的候选列推断（两个插件共用）
 │  │     │  ├─ drag.ts                 # startDrag / swallowNextClick（resize + 两个拖拽插件）
 │  │     │  ├─ auto-scroll.ts          # 边缘自动滚动（框选 + 行拖拽）
 │  │     │  └─ tooltip.ts / .test.ts   # textOverflow:'tooltip' 的浮层（定位是纯函数，有单测）
@@ -51,6 +61,8 @@ virt-table/
 │  │        │          vt-date-picker / vt-date-range-picker / vt-time-picker
 │  │        ├─ 直接可点：vt-checkbox / vt-switch / vt-rate / vt-actions
 │  │        ├─ 纯展示：vt-tag / vt-progress / vt-link
+│  │        ├─ _image-viewer.ts / .css      # 图片查看器实现（CSS 由下面两处 @import）
+│  │        ├─ image-viewer.ts              # ↑ 的**公开子路径**入口（付费包 floating-image 复用它，见 §7.23）
 │  │        ├─ vt-filter-builder.ts / .css  # 单独成入口（CSS 416 行）
 │  │        ├─ components.css          # .vt-comp-* 轻 DOM 外观（@import 共享 _panel.css）
 │  │        └─ components-contract.test.ts / components.dom.test.ts
@@ -58,7 +70,9 @@ virt-table/
 │  ├─ react/               # @virt-table/react —— 薄封装（273 行）
 │  └─ vue/                 # @virt-table/vue —— 薄封装（252 行）
 ├─ docs/                   # VitePress 文档站 + 三端 playground（apps/{react,vue,vanilla}）
-│  ├─ vanilla|react|vue/   # 各端 guide / examples / api 文档
+│  ├─ vanilla|react|vue/   # 各端 guide / examples / api 文档（顶栏合成一个「文档 Docs」入口）
+│  ├─ demos/               # 经典案例（ag-grid 风格），无框架前缀，只有 vanilla 一份实现
+│  └─ apps/vanilla/src/demos/  # 案例本体 + index.ts 注册表（新增案例只改这一处）
 ├─ package.json            # workspace 根，脚本入口
 └─ tsconfig.base.json
 ```
@@ -75,7 +89,7 @@ virt-table/
 │  VNode/JSX ↔ DOM 桥接、生命周期、列转换         │  依赖 react-dom createRoot / vue render
 ├──────────────────────────────────────────────┤
 │         插件层（可选，按需引入）                │  packages/vanilla/src/plugins/*
-│  11 个插件：框选/键盘/编辑/筛选/拖拽/搜索/…      │  契约在 src/plugin.ts
+│  14 个插件：框选/键盘/编辑/筛选/拖拽/搜索/…      │  契约在 src/plugin.ts
 ├──────────────────────────────────────────────┤
 │         VirtTable (vanilla) —— 核心            │  packages/vanilla/src/index.ts
 │  列管理 | 固定列 | 横向虚拟化 | 合并单元格      │
@@ -132,10 +146,18 @@ virt-table/
 - **插件只从 `@virt-table/vanilla/plugins` 导出，主入口不 re-export**（内置组件同理走 `/components`）。主入口带着它们的话，插件代码与各自的 CSS 都会落进核心 chunk，子路径 exports 就白加了。`VirtTablePluginApi` 里要用到的 `ExportOptions` / `SearchMatch` 用 `import type` 引，不产生运行时引用。
 - **拖拽类手势一律走 `internal/drag.ts` 的 `startDrag`（Pointer Events），并给发起元素设 `touch-action`**。少了 `touch-action` 触屏上完全不工作：浏览器决定滚动后就不再派发 move，而 `preventDefault()` 对 `pointermove` 拦不住滚动。粒度见 §7.3。
 - 插件样式独立成 `plugins/<name>.css`，只写具体规则，`--vt-*` 变量与 `vt-pop-in` keyframes 仍由核心 `index.css`（产物 `core.css`）提供。
+- **「点到单元格以外就收起当前状态」只有一份判断**：`internal/outside-cell.ts` 的
+  `isOutsidePointer(e, tbodyEl)`，核心的激活态（`clearActiveCellOnOutside`，默认开）与
+  `vtCellSelection` 的选区（`clearOnOutside`，默认开）共用它。界内 = 本表格的单元格（换格不是
+  离开，且**必须排除** —— document 监听在冒泡链末端，不排就成了「先设置再清掉」）、编辑浮层
+  `.vt-cell-cover`、任何 `[data-vt-popup]`、右键与中键。**挂 `document` 而不是 `.vt-root`**：
+  「别处」经常不在 root 里 —— 付费甘特的时间轴 pane 与 root 是兄弟节点，工具栏按钮条也在
+  root 外面，而那两处恰恰最常点。用户报的原始现象是「甘特里点开一格，去点时间轴，描边还亮着」。
+- **「点到外面就关掉」一律听 `pointerdown`，不许听 `mousedown`**（`events-contract.test.ts` 守着）。`vtCellSelection` 的拖选起手在 pointerdown 里 `preventDefault()`，而那会连带取消「派发兼容 mouse 事件」—— 装了框选的表格里**表体内根本不存在 mousedown**（CDP 实测点单元格：`pointerdown 1 / mousedown 0 / click 1`）。听 mousedown 的浮层/菜单/面板点表格里的格子就关不掉，理由与实测见 §7.3。元素级的 mousedown（浮层内部的选项、按钮、拖拽把手）不受这条约束。
 - **所有浮层一律 `ctx.rootEl.appendChild`，不要挂 `document.body`**。`--vt-*` 只声明在 `.vt-root` / `.vt-fb` 上，body 的子节点继承不到，整批 `var()` 声明会静默失效（拖拽 ghost 曾踩过：实测退化成「透明底 + 16px 黑字」，暗色也不跟随）。`position: fixed` 挂在 root 里依然按视口定位，且不被 root 的 `overflow: hidden` 裁掉（无 transform 之类的祖先），所以挂进去不损失任何东西。唯一例外是 `export.ts` 里那个临时 `<a download>`，它不需要样式。
-- **被多方复用的 CSS 放 `plugins/_panel.css`，用 CSS `@import` 引而不是 JS import**：`.vt-filter-panel` / `.vt-filter-list` / `.vt-filter-item` 被 `vtColumnFilter`、`vtColumnPanel`、`VtFilterBuilder` 三方共用。走 JS import 会被 Rollup 提成 hash 命名的公共 chunk，用户没法引；`@import` 在构建时内联，每个插件的 CSS 产物自包含。唯一例外是 `.vt-filter-checkbox`——它与核心勾选框逗号共用同一套规则，留在 `index.css` §7。
+- **被多方复用的 CSS 放 `plugins/_panel.css`，用 CSS `@import` 引而不是 JS import**：`.vt-filter-panel` / `.vt-filter-list` / `.vt-filter-item` 被 `vtColumnFilter`、`vtFieldConfig`、`VtFilterBuilder` 三方共用；面板基元（`.vt-toolbar-panel-*`）同理放 `plugins/_panel-ui.css`，被 `vtToolbar` 与四个面板插件各自 `@import`。走 JS import 会被 Rollup 提成 hash 命名的公共 chunk，用户没法引；`@import` 在构建时内联，每个插件的 CSS 产物自包含。唯一例外是 `.vt-filter-checkbox`——它与核心勾选框逗号共用同一套规则，留在 `index.css` §7。
 
-**已迁移（11 个）**：`vtContextMenu` / `vtExport` / `vtClipboard` / `vtSearch` / `vtColumnPanel` / `vtCellSelection` / `vtKeyboardNav` / `vtCellEditor` / `vtColumnFilter` / `vtColumnDrag` / `vtRowDrag`。
+**已迁移（14 个）**：`vtContextMenu` / `vtExport` / `vtClipboard` / `vtSearch` / `vtFieldConfig` / `vtFilterConfig` / `vtGroupConfig` / `vtSortConfig` / `vtCellSelection` / `vtKeyboardNav` / `vtCellEditor` / `vtColumnFilter` / `vtColumnDrag` / `vtRowDrag`。
 
 **插件依赖图**（`requires` 硬依赖 / `inject` 软依赖）：
 ```
@@ -144,7 +166,17 @@ vtCellSelection ──provide('cellSelection')──┬─→ vtClipboard      (
                                             ├─→ vtExport         (inject，仅 scope:'selection')
                                             └─→ vtContextMenu    (inject，仅 ctx.selection 字段)
 vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNav      (inject，仅 F2)
+vtToolbar ───────provide('toolbar')─────────┬─→ vtRowHeightConfig (inject，没有就自己开浮层)
+                                            ├─→ vtFieldConfig     (inject，没有就自己开浮层)
+                                            ├─→ vtFilterConfig   (同上)
+                                            ├─→ vtGroupConfig    (同上)
+                                            ├─→ vtSortConfig     (同上)
+                                            ├─→ vtSearch         (inject，加一颗「搜索」)
+                                            ├─→ vtExport         (inject，加一颗「导出」)
+                                            └─→ 付费的甘特配置 / 撤销·重做
 ```
+四个面板插件与工具栏是**双向可选**的：没装工具栏它们自己开浮层，没装它们工具栏也照样自带那四项
+（`toolbar.ts` 静态 import 它们的项工厂）。所以那条箭头是「谁来开这张面板」，不是「谁依赖谁」。
 
 **不再迁移**：分页条（查询状态耦合 + UI 太薄 + 行业无先例）、服务端取数/无限滚动（51 处接线，是**数据源策略**不是 UI 层，需另设「行模型扩展点」，参考 AG Grid 的行模型模块）。理由详见 README。
 
@@ -210,6 +242,7 @@ vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNa
   - 表尾与表头同序、共用同一份网格；内容优先级 `renderFooter > footerValue > summary 聚合 > 合计标签`
   - 分组格聚合 = 覆盖的「全部叶子列 × 全部行」摊平后聚合（`computeCellSummary`）
   - **分组格必须 `white-space: nowrap`**：裁剪宽度随滚动变化，允许折行会导致 sticky 表头/表尾高度抖动
+  - 分组格标题的对齐走列上的 `headerAlign`（默认居中，左/右同样支持，写在 sticky 内层上而不是 `th` 上）。付费甘特的年月表头就用 `'left'` 吸左：跨两屏的「2026年8月」居中会飘在屏幕正中、与哪一列都对不上。`header-structure.dom.test.ts` 守着
   - **分组标签用 CSS sticky 跟随横滚**（`.vt-group-label`，仅中间段）：裁剪按整列取整、滚动按像素，直接格内居中会漂移+跳半列。靠 `--vt-fixed-left-w` / `--vt-center-view-w` 两个变量定位（`_syncGeometryVars`，只在容器/列宽变化时写，不随滚动）。⚠️ 承载它的格子必须 `overflow: visible`——祖先非 visible 会让内层 sticky 彻底失效
 - 表尾（`footerData` + `footerMerges`）
 - 合并单元格（表体 `merges` / 表头 / 表尾，算法在 `merge.ts`）
@@ -223,6 +256,11 @@ vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNa
   - `vtClipboard` / `vtExport` 从来不读合并信息（逐行取值），所以自动合并在那边没有额外接线
 - 树形数据（`type: 'tree'`，`children` 字段，展开/折叠）
 - 分组（`groupConfig` 多字段层级分组，支持组内 asc/desc）
+  - 运行期换维度走 `setGroupConfig()`（付费甘特工具栏的「分组」按钮就是它）
+  - **分组行的 `.vt-group-content` 兼任「遮住左冻结区」**：分组行没有冻结列（它是一个 colSpan 铺满整行的格子），所以插件的绝对定位覆盖层横滚时会浮到任务列上面。这个 sticky 内层 `min-width` 铺满 `--vt-fixed-left-w`、`z-index: 4`（与冻结列同层）、`background: inherit`，行为与数据行的冻结列对齐
+  - 为此**分组格自己不留上下与左内边距**（`padding: 0 x 0 0`），全部交给内层 —— 两个都是实测过的坑：① 内边距在格子上时内层只有一行文字那么高（21px vs 行高 43px），上下各留 10/12px 的缝，覆盖层从缝里压在冻结列上面；② sticky 只会把元素往前推、不会拉到静态位置之前，格子留 10px 左内边距的话横滚前 10px 分组标题会跟着内容往左漂
+  - 最后 1px 由 `.vt-group-content::after` 收口：分组格自己的上下边框在 padding box 之外，内层背景铺不到，覆盖层还能在那 2px 上画东西（实测里程碑竖线正好压在分隔线上露出两点）。伪元素往上下各反向长出一个边框宽吃掉它，并**把那两条分隔线照原样重画一遍** —— 单纯遮住会让分隔线在冻结区断掉几百 px
+  - **分组格 `position: relative` 但不给 z-index**：`relative` 让它排在 DOM 里更靠前的已定位覆盖层之上（时间轴装饰不该从结构分隔行身上透出来）；给了 z-index 就成层叠上下文，内层那个 4 会被困住
 - 展开行（`type: 'expand'` + `renderExpandRow`）
 - 默认全展开 `defaultExpandAll`
 
@@ -230,27 +268,95 @@ vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNa
 - 单元格区域框选（**已插件化**：`plugins: [vtCellSelection()]`，回调仍可写 `onCellSelectionChange`）
 - 剪贴板复制/粘贴（**已插件化**：`plugins: [vtClipboard({ onCopy, onPaste, mimeType })]`）
 - 单元格编辑（**已插件化**：`plugins: [vtCellEditor({ trigger: 'dblclick' })]`，列上仍配 `renderEditor`）
-- 内置单元格组件（17 个工厂，`/components` 入口，见 §7.14；装单个格子用 `asCell()`，见 §7.17）
+- 内置单元格组件（18 个工厂，`/components` 入口，见 §7.14；装单个格子用 `asCell()`，见 §7.17）
   - 编辑态（需装 `vtCellEditor`）：`VtInput` / `VtNumberInput` / `VtTextarea` / `VtSelect`
     （`multiple` × `display: 'text'|'tag'`，「从候选集里选」的唯一入口）/ `VtCascader` /
     `VtAutocomplete` / `VtPerson` / `VtDatePicker` / `VtDateRangePicker`（两者共用**自绘日历
     面板**：区间版双月并排、点起点→hover 预览→点终点；`native: true` 切回原生控件）/
     `VtTimePicker`（仍是原生 `input[type=time]`）/ `VtLink`（配 `editable: true`，面板里分改文案与地址）
   - 直接可点（不给 `renderEditor`，点一下就写回）：`VtCheckbox` / `VtSwitch` / `VtRate` / `VtActions`
-  - 纯展示：`VtTag`（无候选集，值即内容）/ `VtProgress` / `VtLink`（默认支路）/ `VtPerson`（不配 `options` 时）
+  - 纯展示（不改值，但可以有交互）：`VtTag`（无候选集，值即内容）/ `VtProgress` / `VtLink`（默认支路）/
+    `VtImage`（缩略图 + 点开图片查看器，取图排到空闲期做，见 §7.14.3）/ `VtPerson`（不配 `options` 时）
 - 列筛选两种入口（状态独立，最终 AND）：
   - 表头快捷筛选（**下拉 UI 已插件化**：`plugins: [vtColumnFilter()]`；列配置与 `onFilterChange` 不变）
   - 高级筛选管理器（`filterModel` AND/OR 条件树 + `VtFilterBuilder`，`onFilterModelChange`）
 - 搜索（**已插件化**：`plugins: [vtSearch()]`，Ctrl/Cmd+F 弹出搜索框，高亮 + 上/下一个）
 - 右键菜单（**已插件化**：`plugins: [vtContextMenu(fn)]`，见 §3.1）
+- **四个面板插件**（免费）—— `vtFieldConfig`（字段配置 = 列显隐 + 拖拽换序）/ `vtFilterConfig`
+  （高级筛选 = `VtFilterBuilder` 条件树）/ `vtGroupConfig`（分组）/ `vtSortConfig`（排序）。
+  全部落在核心公开的查询状态入口上（`setColumnVisible`+`moveColumn` / `setState({filterModel})`
+  / `setGroupConfig()` / `setState({sort})`）。
+  - **每个都有两种归宿，一份实现**：`onMounted` 里 `inject('toolbar')` 拿到了就把自己注册成工具栏
+    上一项，拿不到就走 `internal/panel-popup.ts` 自己开浮层（使用方调 `toggleFieldConfig(anchor)`
+    那组 API）。两条路吃同一个 `buildXxxPanel`，所以「单独用」不是降级档。
+  - 面板项的构造（key / 图标 / 徽标 / 排序位）在**各自的插件文件**里导出（`fieldConfigToolbarItem`
+    这组，`@internal`），工具栏与插件自注册都用它 —— 于是「自带的那份」与「显式装的那份」不可能长得不一样。
+- **行高设置 `vtRowHeightConfig`**（免费插件）—— 低 / 中 / 高三档。**一档 = 两件事**：
+  密度类（`.vt-root--compact` / `.vt-root--loose`，管内边距与字号）+ 虚拟化行高（30 / 40 / 50，
+  三个数是各档「行高 = line-height + padding×2 + 边框」等式的解，`css-contract.test.ts` 钉住）。
+  只做一半的表现是行间露白或内容被裁 —— 这个插件的全部价值就是把两件事绑在一起。
+  - **只在 `fixedSize: true` 下开放**：不定高模式下行高由内容决定，`estimatedSize` 只是估算值，
+    那时给三档是句空话（面板改为说明原因，API 调用 warn 并不生效）。
+  - 落地走核心的 `setRowHeight(px)`（`VirtTableHost` 白名单）。那条要同时动**三处**：
+    使用方那份 `estimatedSize`、虚拟化账本的热快照、以及总高重算（`forceUpdate()`）——
+    `_core.updateOptions()` 只刷快照**不重算总高**，漏了它行会按旧行高摆位，且只在滚动时才看出来。
+  - 行高变了另派发 `onRowHeightChanged`：行的摆位靠 `onRendered` 就够了，这个钩子是给
+    **表头几何**用的 —— 付费甘特把表头内边距反解成行内值写死，密度换档后必须重解一次，
+    否则左表表头比时间轴表头矮 2px。
+  - **工具栏不自带这一项**（`vtToolbar()` 仍是四颗），装了本插件才多那颗按钮。
+- **工具栏 `vtToolbar`**（免费插件）—— 一条按钮条 + 一个**贡献点**，**自己一颗按钮都没有**。
+  `vtToolbarPanels()` 是「那四个面板」的一行预设（`plugins: [vtToolbar(), ...vtToolbarPanels()]`）。
+  - 别的插件与使用方通过 `provide`/`inject` 握手往里加按钮：`ctx.inject<ToolbarService>('toolbar')?.register(item)`，
+    或 `table.registerToolbarItem(item)`。**可选依赖且顺序无关**（服务表共享，`onMounted` 在全部
+    `setup` 之后）—— 四个面板插件、`vtSearch` / `vtExport` 与付费的甘特配置、撤销/重做都是这么接进来的。
+  - `bar: false` 只提供面板与 `toggleToolbarPanel(key, anchor)`，按钮由使用方放。
+  - **「工具栏里的 X」不该是另一份实现**：搜索就是 `vtSearch`、导出就是 `vtExport` ——
+    它们自己 `register()` 那颗按钮，差别只在谁来唤出。所以「有按钮 / 只有快捷键」是**同一个插件的
+    选项**（`toolbar` / `hotkey`），不是两个东西。`toolbar?: boolean` 这个选项名在所有会往工具栏
+    放按钮的插件上统一（四个面板 + `vtRowHeightConfig` + `vtSearch` + `vtExport`），
+    语义都是「不占那条按钮条的位置，能力照旧」—— 它与 `vtToolbar({ bar: false })` 是同一件事的两半。
+  - **排序位集中在 `internal/toolbar-order.ts`**，别各插件自己写数字：`vtSearch` 与
+    `vtRowHeightConfig` 一度都写着 `order: 50`，同侧同 order 只能按注册顺序排，
+    于是「谁在前」变成了使用方 `plugins` 数组顺序决定的事。
+  - **为什么不做成「工具栏配置里挑几个内置项」**（2026-08-21 推翻了「自带四项」那一版）：
+    付费甘特的「甘特图配置」核心不可能认识 → 贡献点无论如何要存在；既然存在，内置面板走另一条路
+    就是两套心智。`vtSearch` 是同一道理的另一面（搜索框+高亮+快捷键是一份能力，按钮只是入口之一，
+    塞不进配置项）。「自带」那一版换来四条要记的规则（自带哪几个 / 不自带哪几个 / 同 key 覆盖 /
+    `canToggleColumn` 两处入口），还让 `toolbar.css` 必须 `@import` 全部面板 ——
+    「只要排序面板」也得吞下筛选管理器那 14KB。现在只有一张注册表，撞 key 一律先到先得。
+  - **一项都没有时 warn 一句**：空按钮条与「插件没装上」长得一模一样。
+  - **外观**：浅色槽（`--vt-header-bg`）里的白色药片按钮，无边框、无下拉箭头，高度走自己的
+    `--vt-toolbar-button-height`（默认 28px，**不与面板控件的 `--vt-control-height` 共用**）。
+    生效数量是**前置文字**（图标 → 数量 → 标签，读作「1 分组」）而不是右上角实心角标；
+    `is-active` 只给图标上色 —— 不用字重（500/400 宽度不同，一排按钮会在开关分组时位移），
+    也不点亮整颗（有生效设置是常态，一排蓝边就是背景噪音）。三条都由 `css-contract` 与
+    `toolbar.dom.test.ts` 钉住。
+  - 面板基元在 `ctx.ui`（贡献方不自己画 DOM，否则几张脸的行距会各不相同），实现在
+    `internal/panel-ui.ts` —— **不能放 `plugins/`**（那里每个文件都会变成一个公开入口），
+    而它必须能被四个面板插件在没有工具栏时用到，所以也不能留在 `toolbar.ts` 里。
+- 行拖拽排序（**已插件化**：`plugins: [vtRowDrag({ crossLevel })]`）——**扁平 / 树形 / 分组三种结构都支持**，
+  落点分上/下/中三档 + 指针横向位置定层级，落数据在核心 `moveRowTo()`，见 §7.24
 
 ### 电子表格模式（experimental，`spreadsheet.ts`）
 - 单元格类型：text / number / checkbox / option / image / rich-text
 - 剪贴板序列化（TSV + HTML + 自定义 payload）、行列增删
+- ⚠️ `renderSpreadsheetCellHtml()` 走的是 **DOM → `outerHTML`** 这条路（image / option / checkbox
+  三类要建节点），所以任何**只设 DOM 属性、不反射到 attribute**的状态都会在这里丢掉。
+  已踩过一次：`cellType: 'checkbox'` 只设 `box.checked`（不反射），电子表格里的布尔列
+  恒显示未勾选 —— 修法是同时设 `defaultChecked`（`cell-type.ts`，`cell-type.test.ts` 里有
+  「勾选态能活过 outerHTML 序列化」守着）。**新增内容类型时先想清楚它在序列化路径上还剩什么。**
+- ⚠️ 只读勾选框恒带 `disabled`，而 `.vt-checkbox:disabled` 与 `:checked` 特异度相同且在后，
+  会把主色底顶成浅灰 —— 勾号是固定白色的 data URI，于是白勾隐形。已补 `:disabled:checked`
+  (0,3,0) 还回主色底（`css-contract.test.ts` 有断言）。
 
 ### 自定义渲染
 - `render`（单元格）/ `renderHeader` / `renderExpandRow` / `renderEditor`
 - 返回 `string | HTMLElement`（React/Vue 端支持返回 VNode/JSX）
+- ⚠️ **字符串一律走 `textContent`，不解析标记** —— 使用方的数据不该能注入 HTML。
+  想要结构（套一层胶囊/圆底之类）就必须返回**元素**。付费甘特的「今天圆底」正踩过这条
+- `renderHeader` 在表头每次重建（`setColumns` / 列显隐 / 列窗口变化）时都会重新调用，
+  返回的元素**不复用**。所以它是声明式的：插件不必在渲染后去补 DOM。`render-header.dom.test.ts` 守着
+- 分组表头节点的格子用 `data-group-key`，**叶子列**才是 `data-col-key`（找错属性会一直找不到）
 
 ### 分页
 - **客户端分页是默认**：传 `pagination` 即由表格切片，`total` 由筛选后的根行数派生
@@ -269,12 +375,14 @@ vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNa
 - 数据：`setList / setColumns / setMerges / setHeaderMerges / setFooterData / forceUpdate / reset`
 - 勾选：`getCheckedRows / setCheckedRows / clearCheckedRows`
 - 展开/折叠：`toggleExpand / toggleFold / expandAll / collapseAll`
+- 分组：`getGroupConfig / setGroupConfig`（运行期换维度；**刻意不进 `getState()`** —— 进去就得把状态 `version` 加一，已存在 localStorage 里的视图会全部作废。付费甘特工具栏的「分组」按钮走这条）
 - 列：`setColumnVisible / getVisibleColumns（可见叶子列）/ getLeafColumns / getAllColumns（列树）/ getHeaderDepth`
+- 工具栏（`vtToolbar`）：`toggleToolbarPanel(key, anchor?) / openToolbarPanel / closeToolbarPanel / isToolbarPanelOpen(key?) / registerToolbarItem(item) / refreshToolbar`
 - 筛选：`setColumnFilter / clearAllFilters / getActiveFilters`；高级筛选 `setFilterModel / getFilterModel / clearFilterModel / hasActiveFilters`
 - 框选：`getCellSelection / clearCellSelection`
 - `destroy` 释放 DOM 与事件
 
-> 完整 API 见 `docs/vanilla/api/index.md`（Options / Column / MergeCell / 方法 / 类型定义）。
+> 完整 API 见 `docs/vanilla/api/`（按作用对象拆页：`table.md` 表格级 / `instance.md` 实例方法 / `data.md` 数据与远程 / `column.md` 列级 / `group-header.md` 分组表头表尾 / `cell.md` 单元格渲染 / `components.md` 单元格组件 / `merge.md` 合并 / `plugins.md` 插件 / `types.md` 类型；`index.md` 只是导航）。
 
 ## 5. 开发定位速查
 
@@ -293,13 +401,16 @@ vtCellEditor ────provide('cellEditor')──────→ vtKeyboardNa
 | 筛选模型/算子求值     | `packages/vanilla/src/filter-model.ts`（+ `filter-model.test.ts`）|
 | 服务端取数/无限滚动   | `packages/vanilla/src/remote.ts`（`RemoteController` 状态机 + `remote.test.ts`）；接线在 `index.ts` 的 `_initRemote` / `_runFetcher` / `_commitRemoteRows` / `_appendRows` / `_prependRows` / `_renderInfiniteBars` |
 | 树形懒加载            | `index.ts` 的 `_isLazyParent` / `loadChildrenFor` / `resetLazyNode` / `_setLazyToggleLoading`；懒节点判定在 `_flattenTree`（`_lazyPending`） |
+| 行拖拽落点            | 手势与归约在 `plugins/drag-sort.ts` 的 `vtRowDrag`（`process` / `resolveSpot` / `parentAt`）；落数据在 `index.ts` 的 `moveRowTo` / `_resolveDrop` / `_locateRow`（唯一判定源，`canDropRow` 与它共用），见 §7.24 |
 | 筛选管理器 UI         | `packages/vanilla/src/components/vt-filter-builder.ts`（样式 `.vt-fb*` 在同目录 `vt-filter-builder.css`；`--vt-*` token 那份 `.vt-fb` 选择器仍在 `index.css` §1/§2）|
 | React 桥接/列转换     | `packages/react/src/index.ts`（`convertColumns`、`createRoot`）  |
 | Vue 桥接              | `packages/vue/src/index.ts`                                      |
 | 纵向虚拟滚动算法      | 外部 `@virt-list/core`（不在本仓库，只读）                       |
-| 文档/示例             | `docs/{vanilla,react,vue}/examples/**`（插件示例在 `examples/plugins/`）、`docs/**/api/index.md` |
-| 侧边栏分组            | `docs/.vitepress/config.ts` 顶部的 `vanilla*Links` / `shared*Links` 数组；**插件示例统一挂 `vanillaPluginLinks` / `sharedPluginLinks`（侧边栏「插件」组）**，目录结构与侧边栏一致：文档在 `docs/{vanilla,react,vue}/examples/plugins/`，playground 组件在 `docs/apps/*/src/components/plugins/`。归类标准：**示例主题就是某个插件**才进「插件」组（如「单元格选区」= vtCellSelection）；只是顺带装了插件的不算（如「行级单元格渲染」主题是 `_cellRenders`、「编辑校验」主题是 `validator`、「电子表格」是实验模式，都留在原分组） |
-| 文档站样式/换肤       | `docs/.vitepress/theme/styles/design.css`（`--vtd-*` 令牌 + 映射到 `--vp-*`）；示例页排版在同目录 `playground.css` |
+| 文档/示例             | `docs/{vanilla,react,vue}/examples/**`（目录名 = 侧边栏分组名：`basic` / `cell` / `advanced` / `plugins` / `ai` / `merge`）、`docs/**/api/*.md`（按作用对象拆页，`index.md` 是导航）。**职责分开**：api 页只放表格化信息（字段表 / 方法签名 / 取值表 / 优先级表 + 最小接口骨架），示例页放正文（怎么用、边界、设计理由）+ 一节「相关 API」精简表 + 锚点链接。写文档时别把字段说明抄进示例页，也别把长篇讲解写回 api 页 —— 这两件事各只有一处事实源 |
+| Demos（经典案例）     | **清单** `docs/.vitepress/demoCases.ts`（唯一一份，侧边栏与画廊都从它派生，`slug` 同时决定路由/demo id/截图名）；**落地页** `docs/demos/index.md` → `theme/components/demos/DemosGallery.vue`（卡片网格 + 下方舞台，**首屏默认挂 `DEFAULT_SLUG`（电子表格）**、点别的卡片即卸载重挂，同时只活一个实例；卡片缩略图底部那条 `.dg-card-veil` 悬停浮出，触屏（`hover: none`）常显）；**案例页** `docs/demos/<slug>.md`；**实现** `docs/apps/vanilla/src/demos/*.ts` + 同目录 `index.ts` 注册表（id 用 `demo-*` 前缀，与示例的 `table-*` 分开）；**截图** `node scripts/shoot-demos.mjs`（需先 `pnpm dev:vanilla`）→ `docs/public/demos/<slug>.png`，尺寸 1560×740 与 `DemosGallery.vue` 的 `aspect-ratio` 绑定。案例=一个业务场景串十几项能力，示例=一个能力一页；案例刻意只做 vanilla 一份（三端各写一遍必然只有 vanilla 保持更新）。`useFramework.ts` 里 `demos` 属于「无框架模块」（框架切换器在这里隐藏） |
+| 顶栏与侧边栏          | `docs/.vitepress/config.ts`。顶栏四个入口：**经典案例 / AI 场景 / 指南 / 使用文档**（`useFramework.ts` 的 `NavModule`，顺序即导航顺序）。**「指南」是独立入口**（`/{fw}/guide/*` → `guideSidebars`，只有 指南 / 深入 两组）——「先读一遍」与「按需查一条」是两种阅读方式，混在一份侧边栏里时前者会被下面上百条功能与 API 条目压在最上面。**「使用文档」聚合** `examples` + `api` 两段（`buildDocsSidebar()` → 功能 / API），因为示例页底部的「相关 API」本来就指向后者；功能的 7 个分类一律 `collapsed: true`，VitePress 会自动展开含当前页的那一组。各入口的落地页在 `getModuleLink()`：指南 → `guide/index`、使用文档 → `examples/basic/basic`。API 同样分了四组（表格级 / 列级 / 单元格级 / 其他，见 `buildApiSidebar`）；**三端页名必须一致** —— `getFrameworkLink` 换框架只替换第一段路径段，某端缺页就是 404 |
+| 侧边栏分组            | `docs/.vitepress/config.ts` 顶部的 `basicLinks` / `featureColumnLinks` / `cellLinks` / `columnLinks` / `advancedLinks` / `pluginLinks` / `aiPluginLinks` / `mergeLinks` 数组（**三端共用一份**，新增示例加一行即三端出现）；框架差异只走 `frameworkOnlyCellLinks`（组件渲染）/ `thirdPartyLinks`。**分组名 = md 目录名 = playground demo 目录名**，三处一起放：`基础功能`→`basic`、`功能列`→`feature-columns`（只一页，`index.md`，侧边栏 link 末尾**必须带斜杠**，否则 404；排在「单元格渲染」之前 —— 分层图里接管层在内容层之上）、`单元格渲染`→`cell`（机制页 + 18 个内置组件 + 第三方库）、`高级功能`→`advanced`（原「增强功能」已并进来）、`插件`→`plugins`、`AI 插件`→`ai`、`合并单元格`→`merge`。归类标准：**示例主题就是某个插件**才进「插件」组（如「单元格选区」= vtCellSelection）；只是顺带装了插件的不算（如「编辑校验」主题是 `validator`，留在「高级功能」）。侧边栏一级标题是**「功能」而不是「示例」**（与 Demos 的「经典案例」对照），但 URL 段仍是 `/examples/` |
+| 文档站样式/换肤       | `docs/.vitepress/theme/styles/design.css`（`--vtd-*` 令牌 + 映射到 `--vp-*`）；示例页排版在同目录 `playground.css`。**全宽布局那段的「给侧边栏让位」必须留在 `@media (min-width: 960px)` 里** —— 那是 VitePress 侧边栏真正占位的断点（窄屏侧边栏是抽屉），无条件写 `padding-left: var(--vp-sidebar-width)` 会把手机上的正文推出屏幕 272px；窄屏 `.VPDoc` 左右内边距要保持 24px，代码块靠 `margin: 16px -24px` 贴边 |
 | Playground 外观       | `docs/apps/{vanilla,vue,react}/src/style.css`（`--dm-*` 令牌，取自文档站 `--vtd-*`，三份内容保持一致） |
 
 **约定**：
@@ -367,13 +478,14 @@ directive」，所以「该报错的不报」与「不该报的报了」都会�
 「这两个地方的约定还对得上吗」。它读的是**文本**（CSS 源码、TS 源码），不造实例、不跑浏览器，
 所以极快（全部加起来 ~120ms），适合守那些**编译器管不到、运行时也测不出来**的耦合。
 
-本仓三份，各守一类耦合：
+本仓四份（外加文档站的 `styles-contract.test.ts`），各守一类耦合：
 
 | 文件 | 守什么 | 典型失败 |
 | --- | --- | --- |
 | `css-contract.test.ts` | `index.css` 的**令牌算术**（行高等式）与**选择器特异度**关系 | 有人把 `--vt-line-height` 改成无单位比例 → 行高 40.69px → 十万行下滚动几何崩（§7.11 真踩过） |
 | `components-contract.test.ts` | `components.css` 的**声明级规则**（内容元素锁高、`inline-flex` 必配 `vertical-align`） | 新组件自己发明一套撑高方式，把 40px 的行顶成 42px |
 | `class-contract.test.ts`（08-12 新增） | **JS 写出的 class ↔ CSS 里的选择器** | 改名只改了一侧、或留下没人消费的死类名 —— 两种都**静默通过** |
+| `events-contract.test.ts`（08-14 新增） | **「点外面关掉」用的事件名**：不许出现 document / tbody 级的 `mousedown`，且五处浮层必须都还在听 `pointerdown` | 装了 `vtCellSelection` 后表体内没有 mousedown（它的 `preventDefault` 连带取消兼容 mouse 事件），于是浮层「点表格里的格子关不掉」—— 而单测与类型都发现不了，见 §7.3 |
 
 第三份补的是这个仓库**唯一没人守的跨文件引用**。标识符改名敢一次动 272 处（`renderEdit →
 renderEditor`）是因为漏一处就 tsc 报错；class 名没有这个保障，所以「要不要顺带把 class 也
@@ -406,7 +518,7 @@ renderEditor`）是因为漏一处就 tsc 报错；class 名没有这个保障�
 
 ### 6.2 竞品功能补齐（已全部实现 ✅）
 
-对标缺口已全部补齐。核心实现均在 `packages/vanilla/src/index.ts`；纯逻辑抽到 `pipeline.ts` / `summary.ts` / `export.ts`（有 vitest 覆盖）。API 详见 `docs/vanilla/api/index.md` 的「新增能力」章节。
+对标缺口已全部补齐。核心实现均在 `packages/vanilla/src/index.ts`；纯逻辑抽到 `pipeline.ts` / `summary.ts` / `export.ts`（有 vitest 覆盖）。API 详见 `docs/vanilla/api/` 下对应那页（原来集中在 `index.md` 的「新增能力」章节，已按作用对象分散）。
 
 | 优先级 | 功能                | 实现要点                                                                                          |
 | ------ | ------------------- | ------------------------------------------------------------------------------------------------- |
@@ -416,10 +528,10 @@ renderEditor`）是因为漏一处就 tsc 报错；class 名没有这个保障�
 | ✅ P1  | **数据导出**        | `exportCsv()/exportExcel()`（`export.ts` 纯函数 + 单测），`exportValue` 列级取值。               |
 | ✅ P1  | **合计/聚合行**     | `showSummary` + 列 `summary`/`summaryMethod`（`summary.ts` + 单测），管线末端算叶子，随视图更新。分组表尾下逐格聚合走 `computeCellSummary`。 |
 | ✅ P1  | **列拖拽排序**      | **已插件化** `vtColumnDrag`；重排在核心 `moveColumn()`，手势基元在 `internal/drag.ts`。            |
-| ✅ P1  | **行拖拽排序**      | **已插件化** `vtRowDrag`；重排在核心 `moveRow()`/`canReorderRows()`，自动滚动在 `internal/auto-scroll.ts`。|
+| ✅ P1  | **行拖拽排序**      | **已插件化** `vtRowDrag`，**树形 / 分组都支持**（见 §7.24）；落数据在核心 `moveRowTo()`/`canDropRow()`/`canReorderRows()`，自动滚动在 `internal/auto-scroll.ts`。|
 | ✅ P1  | **暗色主题/变量**   | `.vt-root` 上 `--vt-*` 变量 + `.vt-root--dark`，`theme` option + `setTheme()`。                   |
 | ✅ P1  | **无障碍 ARIA**     | `role=grid/row/columnheader/gridcell` + `aria-sort/rowindex/rowcount/colcount/busy`。            |
-| ✅ P2  | **列显隐/面板**     | 列 `hidden`/`hideable`，`setColumnVisible()`/`getVisibleColumns()`/`toggleColumnPanel()`。全量列存 `_allColumns`。 |
+| ✅ P2  | **列显隐/面板**     | 列 `hidden`/`hideable`，`setColumnVisible()`/`getVisibleColumns()`/`toggleFieldConfig()`（`vtFieldConfig` 插件）。全量列存 `_allColumns`。 |
 | ✅ P2  | **富筛选 UI**       | 列 `filterType: enum\|text\|number-range\|date-range`，`matchFilter` 在 `pipeline.ts`。          |
 | ✅ P2  | **高级筛选管理器**  | AND/OR 任意嵌套条件树（`filter-model.ts` + `filter-model.test.ts`），`setFilterModel()`/`getFilterModel()`/`clearFilterModel()`/`hasActiveFilters()`；可视化构建器 `VtFilterBuilder`（`components/vt-filter-builder.ts`，挂在表格外部，三端均有封装）。与列头筛选**状态独立、管线里 AND 组合**。 |
 | ✅ P2  | **固定/置顶行**     | `pinnedTop`/`pinnedBottom` + `setPinnedRows()`，渲染进 sticky thead/tfoot（随横向滚动、冻结）。  |
@@ -435,8 +547,21 @@ renderEditor`）是因为漏一处就 tsc 报错；class 名没有这个保障�
 
 ### 6.3 范围外（暂未实现）
 - **电子表格公式引擎**（`=SUM()` 等，独立大工程）
+- **撤销 / 重做**：计划做成插件（暂名 `vtUndo`）。电子表格案例里原本手写过一版（快照对 + Cmd/Ctrl+Z），2026-08-14 连同「切换合并单元格」按钮一起删掉了 —— 撤销要拦下**所有**改数据的入口（编辑、粘贴、合并、将来的删行删列），那是表格级的通用能力，写在单个案例里既不完整也无法复用。做插件时可以翻 git 历史拿那份快照对的思路（`cellsBefore/cellsAfter` + `mergesBefore/mergesAfter`：合并会同时改内容与合并表，只存一半撤不干净）。
 
-> 补齐任一功能的改动链路：`packages/vanilla/src/index.ts`（核心）→ 纯逻辑进 `pipeline/summary/export.ts` 并补测试 → `docs/vanilla/api/index.md` → 需要新实例方法时补 `packages/{react,vue}/src/index.ts` 的 ref 转发（普通 option/列字段自动透传，改后须 `pnpm -C packages/vanilla build` 刷新 dist 供三端类型检查）。
+**Demos 待做的案例**（清单唯一一份在 `docs/.vitepress/demoCases.ts`，规划中的那条打 `planned: true`）：
+
+| 案例 | 打算证明的事 | 要串的能力 | 备注 |
+| --- | --- | --- | --- |
+| 金融行情看板 | 高频推流下的帧稳定性 —— 双向虚拟化最难被替代的场景，也是 AG Grid 的招牌 demo | 定时/推送批量更新 · 涨跌闪烁（`cellClass` 瞬时类）· 十万行 · `pinnedTop` 指数行 · 色阶与千分位 | 闪烁类要避开 `.vt-td` 的 background 过渡禁令（§7 那条：行 DOM 池化，加过渡会闪色）——用 `animation` 而不是 `transition` |
+
+「项目管理 WBS」**已经上线**（`docs/apps/vanilla/src/demos/project-wbs.ts`）：甘特那一层由付费插件
+`@virt-table-pro/gantt` 出（时间轴 pane、条形层、配置面板、工作日历），核心这边出的是树形 WBS、
+`VtDatePicker`/`VtProgress` 等单元格组件、`vtRowDrag` 的手柄换序与筛选/搜索/导出。当年那条备注
+（「自绘甘特条 + 甘特列很宽要不要退出列虚拟化」）没有成立：时间轴最后搬进了插件自己的 pane，
+根本不是核心的列。
+
+> 补齐任一功能的改动链路：`packages/vanilla/src/index.ts`（核心）→ 纯逻辑进 `pipeline/summary/export.ts` 并补测试 → `docs/vanilla/api/` 下对应那页（表级配置进 `table.md`、列字段进 `column.md`、数据管线进 `data.md`…） → 需要新实例方法时补 `packages/{react,vue}/src/index.ts` 的 ref 转发（普通 option/列字段自动透传，改后须 `pnpm -C packages/vanilla build` 刷新 dist 供三端类型检查）。
 
 ## 7. 决策记录（含实测数据）
 
@@ -482,7 +607,8 @@ renderEditor`）是因为漏一处就 tsc 报错；class 名没有这个保障�
 | **必须按 `pointerId` 过滤 + 处理 `pointercancel`** | 多指同时按会有多条事件流；系统接管手势（来电、多指缩放）只发 `pointercancel` 不发 `pointerup` | 不过滤会串；不处理 cancel 则 `selecting` 一直挂着、`autoScroll` 的 rAF 循环停不下来 |
 | **`touch-action` 的粒度：专用手柄用 `none`，可拖列头用 `pan-y`** | 实测：`.vt-resize-trigger` / `.vt-drag-handle` 是 8px 级的专用手柄，设 `none` 不影响表格滚动（tbody 仍是 `auto`，触摸滑动照样滚 242px） | 列拖拽从整个表头单元格发起，设 `none` 会连纵向滚动一起吃掉 → 用 `pan-y`：横向（= 列拖拽方向）归我们，纵向留给浏览器。代价是「在表头上横滑滚动表格」失效——装了 `vtColumnDrag` 就等于选了这个语义，表体横滑照旧 |
 | **框选只对 mouse / pen 生效，touch 不启动** | 表体上手指拖动的语义是「滚动表格」。要把它变成框选就得给 tbody 设 `touch-action: none`，那会**直接废掉表格滚动** | 代价远大于收益。触屏框选需要另设入口（长按启动 / 选区手柄 / 显式选择模式），那是一次交互设计而不是事件迁移，见 §7.8。实测：触屏滑表体 → 滚动 242px 且 `getCellSelection()` 为 null；鼠标框选无回归 |
-| **面板的 dismiss handler 保持 `mousedown` 不动** | 右键菜单 / 列设置 / 列筛选 / 编辑浮层的「点外面关闭」在触屏上靠浏览器合成的 mouse 事件已经能工作 | 改成 `pointerdown` 会让触发时机早于 mousedown，可能打乱「点开关按钮不该立刻重开」那套判定。**没坏就别动** |
+| ~~**面板的 dismiss handler 保持 `mousedown` 不动**~~ → **2026-08-14 推翻：一律 `pointerdown`** | 旧结论的前提是「没坏」，而它**是坏的**：`vtCellSelection` 的拖选起手在 pointerdown 里 `preventDefault()`，而 pointerdown 的默认行为里就包含「派发兼容 mouse 事件」—— 装了框选的表格里**表体内根本不存在 mousedown**。CDP 实测 document 上收到的次数：点单元格 `pointerdown 1 / mousedown 0 / click 1`，点表格外面才是 `1 / 1 / 1` | 用户报的现象：**在单元格里输入后点别的单元格，编辑浮层与右键菜单都关不掉**。同一根因一次咬了 6 处（编辑浮层 / 右键菜单 / 列筛选 / 列设置 / `components/_popup.ts` / 核心三个 `highlightSelect*` 落当前行列的监听）。旧结论担心的「点开关按钮会闪一下又开」没有发生 —— 两处排除都是**按元素**判定（`e.target === currentAnchor`、`closest('.vt-filter-icon')`）而不是按时机，`setTimeout(0)` 延后绑定也还在。实测开关按钮点三次：开 / 关 / 开。`events-contract.test.ts` 守住「源码里不许再出现 document 级 mousedown」 |
+| **`trigger: 'click'` 时不许在 pointerdown 里抢着关编辑浮层** | 关闭会 `forceUpdate()`，指针底下那个 `<td>` 当场被换掉 —— 紧随的 `click` 就落不到单元格上（实测 click 直接不派发），新格子的编辑器再也打不开 | 只有 `trigger: 'dblclick'` 那一支自己收尾（单击不触发 `onCellTrigger`，没人关）；click 模式仍由 `onCellTrigger` 接管。两种模式的 A→B 切换都实测过：旧格子写回、新格子开编辑器 |
 
 ### 7.4 按值自动合并
 
@@ -834,7 +960,7 @@ no-header / body-merge / auto-merge / summary / empty / pagination），全部�
 | 轴 | 位置来源 | 滚动条 | 输入 |
 | --- | --- | --- | --- |
 | 纵向 | core 的虚拟偏移量 + `.vt-table` 的残差 `top` | 自绘，按**行索引**映射 | `InputController` 接管（滚轮 / 触摸 / 惯性） |
-| 横向 | **原生 `scrollLeft`**（`overflow-x: auto`） | 自绘，按**像素**映射、驱动原生 | 浏览器（触摸板横扫、shift+滚轮） |
+| 横向 | **原生 `scrollLeft`**（`overflow-x: auto`） | 自绘，按**像素**映射、驱动原生 | `InputController` 作为**交叉轴**接管（`crossEl`），只写 `scrollLeft` 不接管位移 |
 
 `Scrollbar` / `InputController` / `positionToRatio` / `ratioToPosition` 全部**从
 `@virt-list/vanilla` 引入**，不在表格里重写一份。皮肤自己写（`index.css` §3.1）：
@@ -842,7 +968,7 @@ no-header / body-merge / auto-merge / summary / empty / pagination），全部�
 
 | 决策 | 理由 / 实测 | 结论 |
 | --- | --- | --- |
-| **横向必须保留原生 scrollport** | `td.vt-fixed-left/right`、`.vt-group-label`（分组表头）、`.vt-merge-label`（自动合并）三处 `position: sticky` 都以 `.vt-client` 为参照。横向改成 JS 位移后它们**同时失效**，得重写整套固定列 / 分组 / 合并的定位 | 只把纵向交给 JS。代价是外观要靠自绘横条统一，而不是靠"两边都自绘"天然统一 |
+| **横向必须保留原生 scrollport** | `td.vt-fixed-left/right`、`.vt-group-label`（分组表头）、`.vt-merge-label`（自动合并）三处 `position: sticky` 都以 `.vt-client` 为参照。横向改成 JS 位移后它们**同时失效**，得重写整套固定列 / 分组 / 合并的定位 | 只把纵向的**位移**交给 JS（输入是另一回事：两条轴的滚轮 / 触摸都归 `InputController`，见下面 `touch-action` 那条）。代价是外观要靠自绘横条统一，而不是靠"两边都自绘"天然统一 |
 | **表体用 `position: relative` + `top`，不用 transform** | 这是与 virt-list 唯一的实现分歧。`.vt-table` 是固定列 `<td>` 的祖先，**transform 会给后代建立包含块**，让 `position: sticky; left` 失去参照、跟着内容被推走 —— 与 §7.12 里表头横向同步踩的是同一个坑（那次实测横滚 1500px 后固定列表头偏差 1500px） | `top` 不建包含块，sticky 照常工作。代价：每帧一次表体布局失效（transform 本可只走合成）。可接受 —— 表体只有一屏 DOM（约 30 行），虚拟滚动本来每帧都在重建行、布局早就要算 |
 | **写入的是「残差」而不是绝对位置** | `top = stickyHeaderSize + leadingSize − offset`。量级不超过一屏多一点，永远碰不到浏览器对位移量的上限（Chrome 实测 33,554,400px） | 顺手消掉两个老坑：① 元素高度上限（原来 `.vt-skeleton` 高度 = itemsTotalSize，超限那部分行永远滚不到）；② §7.11 的「滚不到底 / 窗口永久冻结」 |
 | **`.vt-skeleton` 与两个 spacer 一并删除** | 新模型下没有任何元素的几何尺寸随行数增长 | 撑滚动高度、顶部占位、表头表尾占位这三件事全部由账本表达。`tr.vt-padding` 保留但不再写 height —— 它只是 `_patch` 里行插入的锚点 |
@@ -853,7 +979,12 @@ no-header / body-merge / auto-merge / summary / empty / pagination），全部�
 | **轨道挂 `.vt-root` 而不是 `.vt-client`** | `.vt-header` / `.vt-footer` 是 `.vt-root` 的子节点且 `z-index: 10`，而 `.vt-client` 自身没有 z-index —— 挂在视口内的轨道整棵子树都会被表头表尾盖住 | 轨道 `z-index: 30`。竖向轨道用 `--vt-body-view-t/-h`（`_syncGeometryVars()` 本来就在维护，原是给 `.vt-merge-label` 用的）限制在表体带内，不横穿表头表尾 |
 | **显形选择器必须重写，不能直接用 virt-list 的 scrollbar.css** | 那份写的是 `.virt-list__client:hover > .virt-scrollbar`（轨道是视口的直接子节点），而这里容器叫 `.vt-client`、轨道挂在 `.vt-root` 上，**既不同名也不是父子关系** | 改成 `.vt-root:hover > .virt-scrollbar`。鼠标在表头上时滚动条也可见 |
 | **键盘让给 `vtKeyboardNav`** | 插件在 `.vt-root` 上监听 keydown，`InputController` 挂在 `.vt-client`（后代），冒泡时**先**于它触发 → 一次方向键会既滚一段又移一格 | 装了该插件时给 `InputController` 传 `keyboard: false`（它自己已实现 PageUp/Down、Home/End）；没装时保持接管，补回原生 `overflow: auto` 时代免费的方向键滚动 |
-| **`touch-action: pan-x`（不是 virt-list 的 `none`）** | 横向仍是原生 scrollport，触摸平移该交给浏览器 | 只让出 x 轴，纵向含惯性由 `InputController` 实现 |
+| **`touch-action` 不放行任何单指平移**（`none` 打底 + `pinch-zoom`），横向作为交叉轴一并交给 `InputController` | 2026-08-14 移动端实测的 bug：竖向滚起来之后**横向完全滚不动**，只有竖向分量恰好为 0 或已顶到边界时才横滚得动。根因是 `preventDefault` 没有「只拦一条轴」的粒度 —— 纵向一拦，同一个手势里的横向分量也一起没了，而当时没传 `crossEl`、没人替横向补上。桌面端触摸板斜向横扫同样被吃掉。曾经的 `pan-x` 还有第二层问题：浏览器的方向判定**先于** JS，它一旦启动原生 pan-x，后续 `touchmove` 的 `cancelable` 变 `false`，轴锁失效且 `_scrollCross` 会叠成横向双倍速 | 传 `crossEl: this._clientEl`（横向 scrollport 就是它自己，不像 virt-list 另有滚动层）。`pinch-zoom` 保双指缩放，前面的 `none` 是 Safari < 13 的兜底 —— 无效声明会让 `touch-action` 落回 `auto`，两条轴全被浏览器抢回去。位移机制一行未动：横向仍是 `scrollLeft`，sticky 照旧，写入照常触发 `_onHScroll` |
+| **手势中途 `touchstart` 的 target 被 DOM 回收 → 滚动静默断掉** | 2026-08-14 报的第二个移动端 bug：**手指按在自动合并格上滚不动**。touch 事件的 target 在 `touchstart` 时就固定，后续 move / end 全派发给它；`.vt-merge-label`（及其内层 `.vt-td-text`）是 `_mergeCellSlot` 每帧新建的，合并行结构一变就走 `_fillRowCells` 的 `tr.innerHTML = ''` —— target 一被摘走，事件路径里再没有 `.vt-client`，`InputController` 就收不到了。**CDP 实测**（headless + mobile emulation，按在 sticky 内层上竖滑 8 帧）：`.vt-client` 上只收到 3 次 `touchmove`、`document` 同样 3 次、**没有 `touchcancel`**，残差 `top` 从第 3 帧起卡死；而挂在 target 自己身上的监听收到全部 **8** 次。对照组（按在复用的普通 `td` 上）三个计数都是 8 | 修在 `InputController`（虚拟列表回收 item DOM 时是同一个坑）：`touchstart` 时额外把 `touchmove`/`touchend` 挂到 target 上，**仅当 `!_el.contains(e.target)` 时**才接手，否则让给冒泡路径（两边都消费会滚双倍）。修完实测：8 帧全部生效、每帧跟手 30px、窗口正常推进。⚠️ 治本是别每帧重建 label（复用或移动节点），没做 —— 兜底已经够，但 label 的每帧重建对 hover / tooltip / 点击态仍有影响 |
+| **表头 / 表尾要作为 `InputController` 的额外输入源** | 2026-08-14 报的第四个问题：**表头和表尾上滚不动**，PC（滚轮）与移动端（触摸）都不行。这两段是 `absolute` 挂在 `.vt-root` 上的浮层、是 `.vt-client` 的**兄弟**（§7.12 的取舍），所以那里的事件冒泡永远到不了挂在视口上的 `InputController`。移动端还叠了第二层：浏览器眼里表头不在任何可滚容器里，`touch-action` 留着 `auto` 时纵滑会去滚**外层页面** | `InputController` 加 `sources` 选项（同一个状态机，轴锁与惯性只有一份），virt-table 传 `[_headerWrapEl, _footerWrapEl]`；两段的 `touch-action` 同样收紧成 `none` + `pinch-zoom`。固定行渲染在这两段里，一并生效。⚠️ **不能图省事传 `_rootEl`**：插件浮层（列面板 / 筛选 / 编辑器）也挂在根上，它们内部要滚，冒泡上来会变成表格跟着动。CDP 实测：表头滚轮 #23→#38、表头触摸 #38→#45、表尾滚轮 #45→#56、表尾触摸 #56→#68，且 `window.scrollY` 全程不变 |
+| **表头能滚之后，从表头发起的拖拽要做方向门控** | 一根手指同时产出 touch 与 pointer 两套事件：拖拽吃 pointer，而表头上的 touchmove 现在会冒泡给 `InputController` —— 不处理的话触屏上纵滑会**同时**拽起一列并滚表格。`startDrag` 原来的阈值判定是 `\|dx\| < t && \|dy\| < t`，任意方向 4px 就开拖 | `startDrag` 加 `axis?: 'x' \| 'y'`：越过阈值那一刻主导轴不符就整个手势作废（与 `InputController` 的轴锁同一套启发式）。`vtColumnDrag` 传 `axis: 'x'` —— 纵滑落回滚动，横滑照旧拖列；拖拽开始后在 `document` 捕获阶段 `stopPropagation` 掉 touchmove，免得横滑时表格跟着横滚。`.vt-resize-trigger` 那 8px 手柄直接吞掉 touch 事件（它整个属于拖拽）。`.vt-th--draggable` 的 `touch-action` 从 `pan-y` 改成 `none`+`pinch-zoom` —— 旧值的注释写着「纵向留给浏览器滚动」，那个前提在纵向归 JS 之后就不成立了，放行纵向 pan 只会去滚外层页面 |
+| **列虚拟化占位格 `.vt-cell-pad` 必须进复用池** | 2026-08-14 报的第三个移动端问题：**合并格上滚动很卡**。pad 没有 `_ci`（不对应任何列），于是 `_updateCenterCells` 的清理循环把它当"不需要的格子"每帧 `remove()`，插入循环再 `createElement` 建一遍。CDP 实测（自动合并 demo，触摸滚动 3×700px，CPU 4x 节流）：tbody 的 **3595** 条 DOM 变更里 **3264 条是 pad 的删+建**（占 90%），而同样距离下无合并的 `table-basic` 总变更只有 **71** 条 —— 差 50 倍。pad 身上唯一会变的属性就是 `colSpan` | 单独维护 `padPool`：收集阶段把 pad 收进池、清理循环跳过它们，插入阶段 `pop()` 复用并只在 `colSpan` 变了时才写，循环末尾把多余的摘掉。实测 DOM 变更 3595 → **331**，Script 128→75ms、Layout 68→45ms、RecalcStyle 115→69ms、累计任务 640→417ms。剩下的 `+td.vt-td×195`（合并 rowSpan 变化必须新建的格子）与 `±tr.vt-tr×68`（行进出窗口）是合理量级。⚠️ headless 里测不出"卡"（80% idle、几乎无长帧），所以**流畅度只能靠真机验**，这里量的是 DOM 变更量与三项耗时 |
+| **触摸手势对齐 iOS：起步阈值 + 方向锁定 + 双轴同曲线惯性** | 表格的阅读单位是行与列：竖向浏览时列漂几十像素，眼睛就得重新找列（冻结表头与固定列存在的全部理由）。Android 的自由 2D 滚动没有「不想漂」这个选项；iOS 的「锁 + 持续斜推可解锁」两种能力都给。另外锁轴时每帧只驱动一条轴，另一条的重渲染（`_onHScroll` 曾占 5.1% self time）直接省掉 | 实现在 `virt-list` 的 `InputController`（一个手势状态机，必须同时看两轴，不能两边各写一份）：起步 9px 内不滚、越过阈值按位移方向锁轴、另一轴净移动超 40px 解锁、抬手两轴按同一条指数曲线衰减（`INERTIA_DECAY` 0.95 → 0.967，对齐 iOS 的 0.998/ms）。橡皮筋回弹**没做**，触边即停 |
 | **两条滚动条都是 overlay 浮层，谁都不让位** | 走过一段弯路，值得记下来：先是让位（表头表尾 `right`/`bottom` 各收 10px）+ 轨道自动淡出，这两者**自相矛盾** —— 让位留出的空带，遮挡物却会自己消失。表现：拖竖条时横条淡出，底部那条 10px 空带露出下方仍在滚动的行内容。中间试过把轨道底色改成不透明去遮，那是让「一个会自动消失的东西」去当遮罩，方向就错了 | `--vt-scrollbar-w/-h` 恒为 `0px`（保留变量只为兼容使用方样式），表头表尾贴边，`.vt-client` 不收窄，轨道底色回到 `transparent`。要么两边都让位且常驻，要么都不让位——选了后者，与 macOS 浮层滚动条一致。代价：滑块显形时压住内容最右/最下 10px（含右固定列），1200ms 后淡出 |
 | **`clientWidth` / `clientHeight` 不需要扣轨道** | overlay 不占布局空间，这两个值直接就是可见区尺寸 | 曾因让位方案短暂加过 `_trackGutter()` 扣减，改回 overlay 后一并删除。⚠️ 若将来改回让位，`--vt-body-view-h` / `--vt-center-view-w` 都必须显式扣 —— 隐藏原生条之后浏览器不再自动把滚动条尺寸从 client 尺寸里扣掉，漏扣会让纵向轨道高出 10px、分组标签钉宽偏大、`.vt-merge-label` 居中偏下 5px |
 | **表头表尾的 `pointer-events: none` 与滚动条无关** | 轨道 `z-index: 30` 本就在表头表尾（10）之上，命中测试同样按层叠顺序，滑块拿得到事件 | 那条规则留着是为原本的用途（让单元格空隙、以及改回原生条时的那一条穿透）。别再把它写成「滑块可拖的前提」 |
@@ -866,7 +997,7 @@ no-header / body-merge / auto-merge / summary / empty / pagination），全部�
 `internal/auto-scroll.ts` 的 `scroller.scrollTop += dy` 换成新增的 `scrollByY` 回调，
 调用方（`drag-sort` / `cell-selection`）经 `ctx.table.scrollByY()` 走回 `scrollFromUser`。
 
-**API 变化**（对外，已写进 `docs/vanilla/api/index.md`）：
+**API 变化**（对外，已写进 `docs/vanilla/api/instance.md` 的「滚动模型」一节）：
 - `scroll` 事件载荷从 DOM `Event` 变成 core 的 `VirtScrollEvent`（带 `source: 'user' | 'program' | 'adjust'`）；
 - 新增实例方法 `getOffset()` / `scrollByY()`，新增选项 `scrollbarAutoHide` / `scrollbarMinThumbSize`；
 - `rangeUpdate` 事件 core 已移除，改由表格从 `update` 的 `state.inViewBegin/End` 派生（**保留区间去重**，
@@ -880,7 +1011,7 @@ sticky 标签不漂移这些只能手验（清单在下面的「待手验」）�
 ### 7.14 内置单元格组件（`/components`）
 
 一组**工厂函数**：`VtSwitch(opts)` 返回一个配好 `render` / `renderEditor` 的
-`VirtTableColumn`。17 个，分三类交互模型（清单见 §4）。下面几条是踩出来的，新增组件前先读。
+`VirtTableColumn`。18 个，分三类交互模型（清单见 §4）。下面几条是踩出来的，新增组件前先读。
 
 > 术语：曾经叫「列组件」，2026-08-11 改称**单元格组件** —— 装在列上只是最常见的用法，
 > 配 `asCell()` 也能只装在单个格子上。改名理由与 `asCell` 的三个缺口见 §7.17。
@@ -913,6 +1044,11 @@ sticky 标签不漂移这些只能手验（清单在下面的「待手验」）�
 | **`VtCascader` 的 `valueType: 'leaf'` 预建路径索引** | 反查是一次 DFS，放在 `render` 里就是虚拟滚动下每帧几十次 | 工厂里建一次 `Map<value, 路径>`。代价：`options` 必须建列时定下来，运行时换树要重新 `setColumns()` |
 | **`VtAutocomplete` 的异步竞态按 `seq` 丢弃** | 防抖只减少请求数，挡不住**乱序返回**：慢请求先发、快请求后到时，旧结果会盖掉新结果（有单测断言） | 递增 `seq` + `input.isConnected` 双重判断 |
 | **`clearable` 的清除按钮在控件右侧（一个「×」），不在面板底部** | 用户反馈「清除按钮放在 input 右侧一个 x 按钮」。面板底部那颗「清除」要先展开面板才点得到，而「清空这一格」是个一步动作；而且输入类组件（`VtInput` / `VtNumberInput` / `VtDatePicker` / `VtTimePicker`）一直是右侧一个 `×`（`wrapWithClear`），下拉类自成一套只是不一致 | 收口进 `makeAnchor(placeholder, onClear?)`：复用 `makeClearBtn()`（`.vt-comp-clear`，连 mousedown 的 `preventDefault` + `stopPropagation` 都已经在里面），排在文案与箭头之间，**只在有值时出现**（空值常驻一个灰叉会让人以为能点）。CSS 只加两行把定位从「绝对定位钉在输入框右侧」改成 flex 项。面板类组件一起接上：`VtSelect`（含 `display:'tag'` 与 `multiple`）、`VtCascader`（此前 `clearable` 根本没实现）、`VtPerson`。多值面板底部的「清空」保留 —— 它和「全选」成对，是面板的批量操作，不是控件上的清除。CDP 实测：`×` 18×18、在锚点内、在箭头左侧，点完值清空、回落 placeholder、叉自己隐藏 |
+| **`clearable` 的默认值分两档：锚点类默认开、输入类默认关（2026-08-17）** | 用户反馈「下拉选择没有清空按钮，多选也加上，级联加上，日期类型加上」。当时 `clearable` 是全体默认 `false`，于是 demo 里没显式打开的列一律没有 `×`。分界线不是「哪几个组件」而是**这一格能不能用键盘删空**：`VtInput` / `VtNumberInput` / `VtAutocomplete` 的编辑态是真文本框（全选 + Backspace 就清得掉，`×` 只是顺手），而下拉 / 级联 / 人员 / 日期时间的编辑态是**锚点**（`makeAnchor`，不是文本框）—— 一旦有值，界面上再没有任何「变回空」的手段，面板里只能换选另一项。默认不给 `×` 等于「这一列填过一次就填不回空」 | `shared.ts` 加 `clearableOn(opts)`（`opts.clearable !== false`），锚点那一档全部走它：`VtSelect`（含 `multiple`）/ `VtCascader` / `VtPerson` / `VtDatePicker` / `VtDateRangePicker` / `VtTimePicker`；输入类保持 `!!opts.clearable`。`_enum.ts` 的内核不再自己读 `opts.clearable`，改成由预设算好传 `cfg.clearable`（两个预设入口不同）。顺带补了两个死角：`VtDateRangePicker({ native: true })` 从来没渲染过那个 `×`（`clearable` 是死选项），`VtAutocomplete` 同样从没渲染过（文档却写了）—— 两处都补上，后者默认仍是关 |
+| **锚点上的 `Delete` / `Backspace` 就是那个 `×`（2026-08-17）** | 用户反馈「能支持清空的单元格都要支持在激活状态下按 del 键清空」。锚点不是文本框，这两个键在它身上本来没有语义，而「选中一格按 Delete 清掉」是表格用户的肌肉记忆（Excel / Sheets）。放在**组件层**而不是插件层：`vtCellEditor` 默认 `trigger: 'click'`，点开一格就进编辑态，「激活」与「编辑态打开」在这批组件上是同一件事；做成插件则要在列上新增「可清空 + 空值形状」的元数据，那是另一层公开 API | 收口在 `makeAnchor`：**只在传了 `onClear`（即 `clearable`）时挂**，于是「能不能按 Delete 清」与「有没有那个 ×」永远是同一件事。`preventDefault()`（Backspace 在部分环境是浏览器后退）+ `stopPropagation()`（不让 `vtKeyboardNav` 再解释一次）。带搜索框的面板（`VtPerson` 默认、`VtSelect({ searchable })`）打开时焦点在输入框里、事件到不了锚点，所以 `_enum.ts` 自己再接一次：**搜索词为空才清**，有词得留给输入框删字 |
+| **进度条的编辑态是滑块 + 数字输入框，两个都要（2026-08-17）** | 上一版只有滑块，用户反馈「进度条要支持输入数字百分比」—— 200px 的单元格里滑块一个像素约等于半个百分点，「就要 65」根本点不准。反过来只给数字框也不对：「大概拖到七成」用键入表达很别扭，而且与只读态的条形观感断开 | 滑块 + 数字框共享同一个值（拖滑块刷新数字框、键入反推滑块位置，两边都边改边 `commitValue`）。数字框键入的是**原值** `0 ~ max`（默认 `max: 100` 下就是百分比，才在后面写 `%`；`max: 5` 的得分列不写）。三个边界：越界在 `change` 时夹回、**空框不写回**（`Number('')` 是 0，提交它等于「删到空就先归零」，条会闪一下）、`change` 时回填当前值。数字框占只读态 `.vt-comp-progress-text` 那格的位置与 `min-width`，所以点开时右侧数字不跳。`format` 因此**只作用于只读态**（一个能被 `format` 改成任意文案的输入框没法再当输入框用），焦点也给数字框而不是滑块（点开就能打字覆盖） |
+| **人员胶囊 `cursor: pointer`（2026-08-17）** | 用户反馈「人员 hover 的时候应该用手指样式」。`.vt-comp-person` 悬停 200ms 弹名片、点一下进选人面板，却顶着默认的文本光标 —— 一个会响应悬停的东西必须先在光标上说出来，否则看起来就是一段普通文字 | `.vt-comp-person { cursor: pointer }`（与 `.vt-comp-anchor` 对齐）。`components-contract.test.ts` 加了一条清单式断言（`.vt-comp-person` / `.vt-comp-anchor` / `.vt-comp-clear` 都必须有 pointer），以后新增「常态可交互」的展示元素照样被查到 |
+| **`VtCascader` 的锚点也要 `focus()`（2026-08-17）** | 加完「锚点按 Delete 清空」后 CDP 实测：下拉与日期都清得掉，**级联毫无反应**。原因不是清除逻辑，而是这一支的 `renderEditor` 从来没聚焦过锚点（`_enum.ts` / `_date-editor.ts` 都有那句 rAF focus，只有它漏了）—— 键盘事件全落在 `document.body` 上，`Esc` 之所以还能用是靠 `_popup` 的 document 级监听兜着 | 补 `requestAnimationFrame(() => anchor.el.focus())`（必须在 rAF 里：此刻锚点还没进文档）。dom 测试加了一条「打开就聚焦锚点」，happy-dom 会跑 rAF，所以守得住 |
 | **编辑态的回显必须和常态长得一样** | 用户反馈「单元格激活的样式要和表格渲染的保持一致」。`VtPerson` 第一版锚点走 `setText`，把姓名用「、」拼成一行文字 —— 点一下单元格，整排头像消失变成纯文字，观感是「换了一列」而不是「这一格进入编辑」 | `AnchorHandle` 加 `setNodes(nodes)`（`setText` 保留给纯文本组件），`VtPerson` 的常态与锚点共用同一个 `makeChip()` / `buildChips()`（含 `+N` 折叠）。CDP 实测激活前后：胶囊 `left 103 → 103`、`60×21 → 60×21`，只剩 0.5px 纵向差（`.vt-cell-cover` 高 39 而 td 高 40，见 §7.14 上文那条） |
 | **`.vt-comp-anchor` 的左右内边距要扣掉 2px** | 上一条顺带查出来的：锚点在 `.vt-cell-cover` 的 2px 边框**内侧**，直接给 `var(--vt-cell-padding-x)` 会让回显内容比常态右移 2px —— 点一下单元格文字就跳一下。`.vt-comp-textarea` 早就写成 `calc(… - 2px)`，锚点漏了 | 改成 `padding: 0 calc(var(--vt-cell-padding-x) - 2px)`。这是**共享基元**，`VtSelect` / `VtCascader` / `VtPerson` 一起受益 |
 | **人员面板项要自己声明 `justify-content: flex-start`** | 用户反馈「下拉列表里没有左对齐」。根因是 §9 那条 `.vt-filter-item[role='option'] { justify-content: space-between }` —— 它是给 `VtSelect`「文案 + 对勾」**两个**子元素写的；人员项有**三个**（头像 / 姓名块 / 对勾），space-between 把中间的姓名块推到行中央，名字长短不同起始位置就参差不齐 | `.vt-comp-person-item` 声明 `flex-start`，对勾用 `margin-left: auto` 顶到右边。CDP 实测七项的头像 left 全为 104、姓名 left 全为 133、对勾 right 全为 304.3。happy-dom 没有布局引擎量不出对齐，改用 `components-contract.test.ts` 静态守这两条声明 |
@@ -949,7 +1085,7 @@ sticky 标签不漂移这些只能手验（清单在下面的「待手验」）�
 | **删掉 `startPlaceholder` / `endPlaceholder`** | 它们**从未生效** —— 声明了但代码从没读过，而且原生 `input[type=date]` 根本不渲染 placeholder。留着就是「配了没反应」的静默失效 | 全仓只有接口两行 + api 文档一行提及，删除只影响编译、不改任何运行时行为（包 `0.0.1` 未发布）。两端的空态提示改由面板底部回显承担（`texts.pickStart` / `pickEnd`），整格空态仍用 `placeholder` |
 | **给 `VtDatePicker` 补了 `render`** | 改造前它没有 `render`，核心回落 `String(value)`；而编辑态锚点必须与常态**逐字一致**（§7.14「点开单元格文字不许跳」），两处各写一份格式化早晚会漂 | 两个组件的 `render` 与锚点回显共用 `formatDay` / `formatRange`。合法值上与 `String(value)` 同结果，两处有意的差别：空值改显示 `placeholder`（本来就是「空值占位」的语义）、非法日期串（`'2026-2-3'`）显示成空。DOM 测试各钉一例 |
 
-**没做的一件事**：`docs/vanilla/examples/column/vt-date-*.md` 没加说明段落 —— 那个目录下 17 个
+**没做的一件事**：`docs/vanilla/examples/cell/vt-date-*.md` 没加说明段落 —— 那个目录下 17 个
 示例页全是「标题 + `<PlaygroundHost>`」三行，为两个页面破例会让目录不齐。交互说明写在
 api 文档的「日期与区间日历」小节，demo 页顶部的 status 文案里也讲了。
 
@@ -967,7 +1103,7 @@ api 文档的「日期与区间日历」小节，demo 页顶部的 status 文案
 | 窄容器降级 | `.vt-root` 收到 382px 后重开 → **1 个月**、面板宽 228、左右都未溢出容器 |
 | 暗色跟随 | `.vt-root--dark`：面板 `bg rgb(34,36,43)`、端点 `bg rgb(76,141,255)` / 字 `rgb(255,255,255)`、`in-range` 是 primary 的 10% 淡色；宽度恢复后回到双月 |
 
-**顺带修掉的既有问题**：`docs/apps/vanilla/src/components/column/` 下原有 5 个单元格组件 demo
+**顺带修掉的既有问题**：`docs/apps/vanilla/src/components/cell/` 下原有 5 个单元格组件 demo
 **都没装 `vtCellEditor`** —— 也就是说那 5 个示例里的编辑态从来触发不了（点单元格没有任何反应）。
 新增 demo 一并补上了。
 
@@ -1030,11 +1166,16 @@ api 文档的「日期与区间日历」小节，demo 页顶部的 status 文案
 1. `packages/vanilla/src/components/vt-<name>.ts`；
 2. `components.css` 加一节（锁高 + 只用 `--vt-*` 令牌）；
 3. `components/index.ts` 导出组件与 Options 类型；
-4. `docs/apps/vanilla/src/components/column/vt-<name>.ts` demo + 同目录 `index.ts` 导出
+4. `docs/apps/vanilla/src/components/cell/vt-<name>.ts` demo + 同目录 `index.ts` 导出
    + `docs/apps/vanilla/src/main.ts` 的 import 与 `demoBootstrapMap`；
-5. `docs/vanilla/examples/column/vt-<name>.md`（标题 + `PlaygroundHost`）；
-6. `docs/.vitepress/config.ts` 的 `vanillaColumnLinks`；
-7. `docs/vanilla/api/index.md` 的「单元格组件」章节；
+5. `docs/{vanilla,vue,react}/examples/cell/vt-<name>.md` —— 四段式：说明（含交互模型 +
+   要不要 `vtCellEditor` + 值形状与取舍）、`## 相关 API`（**只列本组件 3–6 个关键选项**的精简表
+   + 指回 `api/components#vt<name>` 的链接，别抄整份 Options）、`## 示例`（`PlaygroundHost`）、
+   `## 源码`（`<<<` 折叠块）。**三端正文可以逐字共用** —— 组件是框架无关的工厂，三端 `import`
+   都来自 `@virt-table/vanilla/components`，只有标题前缀、`example-id` 与源码路径不同；
+6. `docs/.vitepress/config.ts` 的 `columnLinks`；
+7. `docs/vanilla/api/components.md` 的「各组件专属选项」加一节 `#### Vt<Name>`（选项表 +
+   必要的 interface）—— **全量选项表只在这里维护一份**；
 8. 测试：DOM 行为进 `components.dom.test.ts`，新样式自动被 `components-contract.test.ts` 扫到。
 
 ⚠️ 第 3 步之后要 `pnpm -C packages/vanilla build` 刷新 `dist`，否则三端 playground 的
@@ -1077,6 +1218,90 @@ api 文档的「日期与区间日历」小节，demo 页顶部的 status 文案
 复用 `_panel.css`）、`components/index.ts`（多导出 `VtLinkValue` 与两支 Options 类型）、
 vanilla demo（补 `vtCellEditor({ trigger: 'dblclick' })` + 一列 `editable`，数据里三种值形状各一批）、
 api 文档（专属选项行 + 新增「可编辑的链接列」小节 + 三类交互模型表）。测试 +9 例，全量 774 通过。
+
+#### 7.14.3 图片单元格 `VtImage` 与图片查看器（2026-08-18）
+
+起因是「加载图片的时候不能影响主线程渲染，点击图片激活图片查看器」。核心早就有
+`cellType: 'image'`（`cell-type.ts`）—— 一行 `document.createElement('img')` + `loading="lazy"`，
+**同步建在渲染路径上**、一格一张、点了没反应。行 DOM 是池化的（`_fillCellContent` 每次重绘都新建
+`.vt-td-text`），所以那条路径在快滚时每帧都在发请求 + 在主线程解码。
+
+| 决策 | 实测 / 依据 | 结论 |
+| --- | --- | --- |
+| **`render` 只产出占位盒，取图排到空闲期** | `loading="lazy"` 在虚拟滚动里**等于立即加载**：单元格只在渲染窗口内存在，浏览器眼里它一直可见。真正需要「懒」的那一层是虚拟滚动自己，浏览器不知道 | 队列在 `components/_image-loader.ts`：`requestIdleCallback(fn, { timeout: 200 })`，没有它退 `setTimeout(16)`。CDP 实测快滚一屏（12000px）后那一刻 `img` 32 个、占位 170 个；空闲 1.2s 后 `img` 202、占位 0 |
+| **出队顺序只有一条规则：先进先出** | 走了两次弯路。① **纯 LIFO**（动机是「快滚十屏后队头全是废任务，用户盯着的那一屏反而最后才出」）→ 一屏图**从最后一行往上**冒，用户直接问「为什么是从下往上」。② 改成**按帧分批、批之间 LIFO + 批内 FIFO** → 初次挂载翻车：核心第一次重绘只画前 6 行、第二次才补到 21 行，而**前 6 行沿用原有 DOM**（占位盒没离开文档 → 任务还活着、还留在第一批），于是出图变成「第 7 行往下走完再回头补前 6 行」—— 用户报的正是这个。**根子在于 LIFO 这个动机本身不成立**：滚走的格子早被回收，`alive()` 一查就跳过（连请求都不发），不需要靠出队顺序去躲废任务 | `queue.shift()`，进队顺序 = 行序 = 出图顺序；「不做废功」交给出队前那次 `alive()`。CDP 实测（MutationObserver 记每帧的出图位图）：初次加载 `1000…` → `1100…` → `1110…`（改之前是 `0000001…`），快滚到新一屏后同样是前缀推进 |
+| **`alive()` 双检（出队前 + 解码后）** | 虚拟滚动回收单元格时**不发任何通知**，占位盒无声无息地离开 DOM。这是唯一能问的探针（与 `_popup.ts` 的锚点存活探针同源） | `alive: () => box.isConnected`。解码完成后再查一次，否则会把图 append 到一棵游离的树上 |
+| **`img.decoding = 'async'` + `img.decode()`，而不是 `onload`** | 只做空闲期调度但仍然同步解码的话，卡顿只是从滚动帧挪到了空闲帧。`decode()` resolve 之后再 append 才是「插进来的那一帧不会卡」 | `imageIO.load()` 优先 `decode()`，老浏览器（与 happy-dom）退 `onload`/`onerror`。`imageIO` 抽成可替换对象**只为可测** —— happy-dom 没有网络也没有 `decode`，真实现永远不会 settle |
+| **只记失败，不记成功** | 成功的图有浏览器自己的内存 / HTTP 缓存，我们再记一份也省不掉「新建 `<img>` + 解码」这两步（每个单元格都要自己的元素），那份记录只是空占内存；坏链反过来 —— 不记的话一列坏链每滚过去一次就重发一轮 | `failed: Set<string>`，上限 300 按插入序淘汰。已知坏链**同步**回调 `onError`（先画占位再变断图等于白闪一次，而这条路径没有任何解码工作） |
+| **不给 `size` 选项** | 缩略图写死 56px 会把 40px 的行顶到 75px，而 `estimatedSize` 还是 40 —— 正是 §7.11 那条「滚不到底」 | 缩略图 `height: 100%` + `aspect-ratio: 1`，尺寸恒等于行内容高。要大图就把**行**配高：容器上设 `--vt-density-line-height`（不是 `--vt-line-height`，见 index.css 密度那段）+ 跟着改 `estimatedSize`。CDP 实测：默认档行高 40.00 / 缩略图 21×21；切到 48px 档后行高 67.00 / 缩略图 48×48，多图 + `+N` 的行也一样 |
+| **查看器舞台用确定尺寸（`86vw × 76vh`），不是 `max-*` 让内容撑** | **第一版是 `max-*`，实测塌成 0×0**：`viewBox`-only 的 SVG（没有 `width`/`height` 属性）没有固有宽度，作为 flex 项时外壳的 max-content 解析成 0（`naturalWidth` 200 / `complete` true，但 rect 0×0）。真实数据里 SVG 很常见 | 舞台给确定尺寸 + 图 `object-fit: contain`，SVG / 竖图 / 超宽图全都稳（改后实测 1290×722）。代价是「点图旁边的空白」不再关闭 —— 关闭走 `Esc` / ✕ / 点舞台之外的幕布（还留着 14vw / 24vh） |
+| **查看器挂 `.vt-root` 内 + `position: fixed`** | 挂 `document.body` 的老问题：`--vt-*` 一个都继承不到（§7.2）。`.vt-root` 不是包含块，所以 fixed 仍以视口为参照 —— `plugins/drag-sort.css` 的拖拽 ghost 一直是这么干的 | 实测 `parentElement` 是 `.vt-root`、rect 1400×900、`z-index: 1000`（ghost 是 999）。幕布派生自 `--vt-tooltip-bg`（两个主题下都是深墨；`--vt-mask-bg` 亮色下是白纱，图压在白纱上看不清），`@supports` 分档兜住不支持 `color-mix` 的浏览器 |
+| **查看器的 keydown 必须 `stopPropagation`** | `vtKeyboardNav` 把 keydown 挂在 `.vt-root` 上，浮层是它的后代 —— 不拦的话按 `←` `→` 换图会同时把底下的单元格选区挪走 | 每个分支都 `preventDefault` + `stopPropagation`。实测在 `.vt-root` 上挂监听后按 `→`：收到 **0** 次 |
+| **工具栏按钮不用 `--vt-icon-btn-size`** | 那个令牌（20px）是给**表内**图标按钮（排序、折叠箭头）标定的，铺满视口的浮层上小得找不到 —— 用户为此反馈了三轮（20 → 30 → 40 → 46） | 定稿 **46×46 按钮 + 26px 图标**（图标是 `1em`，跟着 `font-size` 走），浮层字号从 `--vt-font-size-sm` 提到 `--vt-font-size`，左右切换箭头 56×56。实测：按钮 46×46 / 图标 26×26 / 工具组 322×46 / 顶栏高 74。**核心那个令牌一个字节没动** —— 改它会连表内所有图标按钮一起变大 |
+| **滚轮缩放按 `deltaY` 连续换算，不是「一次事件一档」** | 第一版滚轮和按钮共用 1.25 倍一档 —— 触控板一次两指滑动会连发几十个 `wheel`（每个 `deltaY` 只有个位数），`1.25³⁰` 直接顶到 `SCALE_MAX`，用户反馈「滚轮放大缩小太敏感」 | `scale *= Math.exp(-deltaY × 0.0012)`，`deltaMode` 先折算成像素（1 = 行 ×16、2 = 页 ×400，否则按行上报的设备一次只有 Δ3、几乎不动），单次 `deltaY` 夹在 ±150。实测：触控板 30 × Δ3 → **111%**（原来 800%），鼠标一格 Δ100 → 113% / 127% / 143%（每格 ~1.13），deltaMode 1 的 Δ3 → 106%，上下限仍是 800% / 20% |
+| **过渡只给离散动作** | 滚轮与拖拽是连续手势，每个事件都重启一次 120ms 过渡，图会一直追在指针后面（手感是黏的） | `transition: transform` 从基类挪到 `.vt-comp-image-viewer-figure--animated`，JS 只在按钮 / 键盘 / 旋转 / 还原 / 双击那几条路径上加它。实测 `transitionDuration`：滚轮时 **0s**、点按钮时 **0.12s** |
+| **查看器的四段必须是流内 flex 项，舞台还要裁剪** | **用户报「点击会关闭预览器」**，根因是两处层叠，都只有真实鼠标才撞得出（之前的自动化用 `el.click()`，绕过命中判定，一路全绿）：① 第一版顶栏与舞台**都是 `position: absolute`**，两个不带 z-index 的定位元素后写的赢 → 舞台整片盖住工具栏，点「放大」被判成「点了幕布」；② 改成流内后又发现**放大到 125% 的图会盖住工具栏** —— transform 过的元素自成层叠上下文、画在流内内容之上，于是点一次放大之后旋转/缩小/还原全部没反应 | 浮层改成一列 flex：顶栏 / 舞台 / 说明 / 列表条四个流内项，舞台 `flex: 1; min-height: 0; overflow: hidden`（裁掉放大的图，也正是查看器该有的观感），顶栏 / 说明 / 列表条 `position: relative; z-index: 1`。左右箭头挂进**舞台**（相对图片居中，且点它们时 `e.target` 不是舞台）。契约测试静态钉住「舞台不许 absolute + 必须裁剪 + 操作区有 z-index」，CDP 用 `Input.dispatchMouseEvent` 发真实鼠标复验 |
+| **多图给底部列表条** | 用户问「多图的时候预览器要不要做列表显示」。要：光有 `←` `→` 与 `3 / 8`，「跳到第 6 张」得按五次，也看不出别的几张长什么样 | 一排 56×56 小图，当前那张 `box-shadow` 主色描边（不用 `border` —— 那会改内容盒尺寸，切换时整排抖 1px），横向可滚 + `scrollIntoView({ inline: 'center' })` 跟着当前项走。小图走同一条取图队列，而且**在 `show()` 之后才进队**：同一批内先进先做，正在看的那张大图必须先出来。单图不挂列表条（一格的列表条是纯噪音）。实测 4 图：4 格 56×56、条高 80、真实鼠标点第 3 格 → `3 / 4` |
+| **`separator` 默认不拆字符串** | data URI 里就有逗号（`data:image/png;base64,...`），默认按 `,` 拆会把一张内联图劈成两个坏链 —— 静默出错，比多写一个选项糟得多 | 只有显式传 `separator` 才拆。认不出的形状（数字、`{ src }`）当空值处理，显示 `placeholder`，而不是画一个永远失败的断图 |
+| **`+N` 复用 `.vt-comp-tag-more` + `buildChips`** | 标签列、人员列、图片列的「还有 N 个」不该长得不一样，也不该各算一遍折叠数 | `buildChips` 追加的最后一个节点按类名认出来再绑点击，**从被折叠的第一张开始看**。实测 4 图 / `maxCount: 3` 的行点 `+1` 打开在 `4 / 4`，首尾循环 `4/4 → 1/4 → 2/4` |
+
+**文案进了 locale**（`imageViewer` 子块，zhCN + enUS）。⚠️ 照 §7.14 那条：**新增子块必须同时在
+`mergeLocale` 里补一行浅合并**，`locale.test.ts` 里配了一条专钉它的用例（键集一致那条抓不到）。
+与 `calendar` 同一条约束：组件是纯工厂函数、拿不到实例，所以 locale 只是**默认值的单一事实源**，
+不跟随运行时 `setLocale()`，要别的语言在列上传 `texts`。
+
+**碰的地方**：新增 `components/_image-loader.ts`（队列 + 坏链表）、`components/_image-viewer.ts`
+（浮层）、`components/vt-image.ts`（工厂）、`components.css` §12/§13；`locale.ts`（三处 + 类型导出）；
+`components/index.ts` 多导出三个名字。测试 +28 例（`_image-loader.dom.test.ts` 7 例
++ `components.dom.test.ts` 的 `VtImage` 18 例 + 契约 2 例 + locale 1 例），全量 1148 通过。
+三端 demo + 三个示例页 + api 选项表 + 侧边栏，另把仓库里「17 个内置组件 / 21 种逐格配置」的
+口径统一成 18 / 22（`cell-type-render` 三端各加了一个 `VtImage` kind，紧挨着 `cellType: 'image'`
+放 —— 同一份 URL，一个同步一张图、一个异步 + 查看器，摆在一起才看得出分工）。
+
+### 7.14.3 `.vt-fb` 只带变量：token 载体不能兼任某个组件的外观（2026-08-20）
+
+`index.css` 把整套 `--vt-*` 声明在 `.vt-root, .vt-fb` 上 —— 后者是给**表格之外的 DOM** 用的
+token 载体（付费插件的外壳、`vtToolbar` 自己包的那层壳都靠它拿变量）。
+
+而 `components/vt-filter-builder.css` 一度把**构建器自己那张面板的外观**（1px 边框 + 阴影 +
+圆角 + `padding: 12px 14px`）也画在同一个 `.vt-fb` 上。后果：**任何一个 token 载体都白得一圈
+卡片**，而且只在「那份 CSS 恰好在场」时出现 —— 实测撞到的是甘特外壳（`vtp-gantt-shell vt-fb`）
+左右各被推进 15px、外面套了一层不属于它的边框与阴影，而它的注释明明写着「`.vt-fb` 只带变量」。
+更阴的是触发条件：`plugins/toolbar.css` 开始 `@import` 筛选管理器的样式之后，这条 CSS
+在装了工具栏的每个页面都在场，于是那圈卡片从「偶发」变成了「常驻」。
+
+**结论**：token 载体是**一个角色**，组件根节点是**另一个角色**，不许共用一个类名。
+外观搬到 `.vt-fb-panel`（构建器自己一起加上），`.vt-fb` 恢复成纯变量载体。
+`css-contract.test.ts` 里有一条断言盯着「这份 CSS 里不许再出现裸 `.vt-fb` 的规则块」。
+
+下次给「表格之外的 DOM」加公共类时照这条走：**带变量的类不带外观**。
+
+### 7.14.2 表格之外也要用的三件共享件（2026-08-19）
+
+付费插件的配置面板（甘特的「甘特图配置」下拉）需要**普通表单里**的下拉框与开关，
+而 `VtSelect` / `VtSwitch` 是**列工厂** —— 返回的是 `VirtTableColumn`，只能装在单元格上。
+于是 `components/` 里多了三件公开的共享件：
+
+| 件 | 文件 | 谁在用 |
+| --- | --- | --- |
+| `createPopup` | `_popup.ts` | 内置组件的下拉、甘特的配置面板与里程碑浮层 |
+| `createSwitch` | `_switch.ts` | `VtSwitch` 列组件**自己也用它**（一处实现），甘特的「仅计算工作日」 |
+| `createSelectField` | `_select-field.ts` | 甘特配置面板里那四个下拉 |
+
+三条踩过的理由，别再各自实现一遍：
+
+1. **浮层不能挂 `document.body`** —— `--vt-*` 只声明在 `.vt-root` / `.vt-fb` 上（§7.2），
+   挂到 body 整批 `var()` 静默失效；而 `vtCellEditor` 的 outside-click 白名单认
+   `data-vt-popup`，自己搭的浮层一点就把别人的编辑器关掉。
+2. **浮层里再开浮层**：子浮层挂在宿主上、是父浮层的**兄弟**，父浮层原本会判定为「点到外面」
+   把自己关掉（连带清掉子浮层的锚点）。`_popup.ts` 因此维护一个 `OPEN_STACK`：
+   点在**更晚打开**的浮层里不算外面；Esc 只收起最上面那一层。
+3. **`VtSwitch` 改成套 `createSwitch`**，而不是两份 DOM 结构。搬子节点而不是整个 `sw.el`
+   塞进单元格外壳 —— 两层 `.vt-comp-cell` 会让「锁高只能有一处」那条契约测试红。
+
+`createSelectField` 的外观 = `.vt-comp-anchor`（回显 + 箭头）+ 新增的 `.vt-field-select`
+（边框 + 自己的高度）。单元格里那份不画边框，因为边框由 `.vt-cell-cover` 给、高度由行高给；
+搬到表单里这两样都得自己立起来。
 
 ### 7.15 编辑浮层的归属：按 `rowKey` 记，不绑 `<td>` 元素
 
@@ -1168,7 +1393,7 @@ api 文档（专属选项行 + 新增「可编辑的链接列」小节 + 三类�
 | CSS `position: fixed` | §7.12 那张四种定位方式对照表 | **不改** |
 
 判别式：**取值是布尔的就是 virt-list 选项**（列上永远是 `'left'|'right'` 字符串）。
-另外注意 `docs/apps/vanilla/src/components/column/*.ts` 里有几个 demo 拿 `fixed` 当**数据字段名**
+另外注意 `docs/apps/vanilla/src/components/cell/*.ts` 里有几个 demo 拿 `fixed` 当**数据字段名**
 （「只读」那一列的 key），取值是字符串/数组/数字，也不能动。剩下 5 处不带布尔值的散文/文档表格
 （三端 API 文档的选项表行、§4 功能清单、`index.ts` 的一句注释）逐条手改。
 
@@ -1273,13 +1498,142 @@ excess property；但如果某处漏改成了别的写法，运行时会**静默
 `tsconfig.typecheck.json` + 根 `pnpm typecheck` 的第一道，做法与「怎么验守卫真的会红」见 §5.2。
 顺带把 vanilla playground（17 个组件 demo，本来有 tsconfig 却没挂脚本）也接进了 typecheck。
 
-**Demo（08-12 补上）**：`docs/apps/vanilla/src/components/advanced/cell-type-render.ts` 扩成
+**Demo（08-12 补上）**：`docs/apps/vanilla/src/components/cell/cell-type-render.ts` 扩成
 「内容层四种来源摆在同一张表里」——「分类」列故意配**列级 `render`** 作基线，每 3n+1 行用
 **单元格级 `cellType`** 抢过来（粒度优先的实证）；4n+2 行的「状态」格用 `asCell(VtSelect)`；
 7n 行的勾选格**穿透功能列**画成 🔒。CDP 实测（§7.9 的方法）：非 3n+1 行全为 `[X 类]`、
 3n+1 行全为 `.vt-cell-option`；7n 行无 `input.vt-checkbox` 且有 🔒、其余行照常有勾选框（无误伤）；
 4n+2 行状态格有组件胶囊；**数据行高全部 40.00px**（§7.11 不变量没被新元素破坏）；
 头像列 `img.vt-cell-image` 仍在。
+
+**同一份 Demo 的控件全部改用内置组件（08-17）**：那时示例里还剩一半是手写的 ——
+四个手写编辑器（`makeInputEditor` / `makeNumberEditor` / `makeSelectEditor` /
+`makeCheckboxEditor`，最后那个根本没被引用过）、手写状态徽章、手写 `div` 数据条（写死
+`#e5e7eb` / `#22c55e` 这类色值，不跟主题）。示例本身讲的是「四种来源与优先级」，不是
+「怎么手搓控件」，照着抄的人会以为得自己画 —— 与首页那次同一个问题（见
+`demos-must-use-builtin-cell-components` 那条约定）。现在**控件一律 `asCell()` + 内置组件**：
+状态 4n 行 `VtTag`（只读胶囊）／4n+2 行 `VtSelect({ display: 'tag' })`（可选，外观逐字符相同
+—— 顺带成了「长什么样是参数，不该是组件名」的实证）、进度 `VtProgress({ thresholds })`
+（按档取语义色）、姓名 `VtInput`、分数 `VtNumberInput({ validator })`、备注 `VtTextarea`。
+自写 `render` 只留组件给不了的那一层：**条件格式**（分数按档上色）、**文字装饰**（蓝色姓名、
+灰斜体备注）、🔒 穿透格；配色也一并换成 `var(--vt-color-*)`。要「组件的编辑器 + 自己的常态
+外观」就写 `{ ...asCell(X, …), render }` —— spread 之后只覆盖 `render`，编辑器/校验/写回仍是
+组件那一份，避免了 §7.17 说的那种「展示一套、点开另一套」。React / Vue 两份同名示例一并改，
+并从行数据 `_cellRenders` 迁到 `setCellRenders()`，自写内容返回 JSX / VNode（走适配层包装，
+`_cellRenders` 那条路本来就拿不到）。CDP 实测（§7.9 的方法）：数据行高仍全为 40px
+（`.vt-comp-cell` 的锁高接住了新进来的进度条与胶囊）、姓名格双击弹出的是 `.vt-comp-input`
+而非手写 input、进度条是 `.vt-comp-progress-bar`、无控制台报错。
+
+**⚠️ 下面这一轮走反了方向，已被第三轮取代 —— 留着是为了别再犯同一个错**（08-17 第二轮）：
+把「能用的组件都用上」做成了**一列一个组件**（列级），而这一页的主题恰恰是**同一列里每一格
+都不一样**（逐格 `render` / `renderEditor`）。列级铺满组件之后，示例反而变成了「组件大全」，
+而组件大全在 `docs/*/examples/cell/` 下已经有 18 页了。**改这一页之前先问自己：改动是在
+强化「逐格」这件事，还是在把它变成列级示例？** 上一轮之后还剩四处自写 `render`
+（蓝色姓名、按档上色的分数、灰斜体备注、🔒）和一列刻意手写的基线（分类列 `[A 类]`）。
+把它们全部删掉，示例改成 **20 列 / 17 个内置单元格组件各占一列**：`VtInput` `VtPerson`
+`VtTag` `VtSelect`（单值 + 多值）`VtNumberInput` `VtRate` `VtProgress` `VtSwitch` `VtCheckbox`
+`VtDatePicker` `VtDateRangePicker` `VtTimePicker` `VtCascader` `VtAutocomplete` `VtLink`
+`VtTextarea` `VtActions`（`VtFilterBuilder` 不是单元格组件，不在内）。**这一页现在没有一行
+自己拼的 HTML。**
+
+去掉手写基线之后，「四种来源 × 粒度优先」靠三处组件间的对照来讲，比原来更准：
+① 状态列列级 `VtTag`（只读胶囊）→ 3n+1 行单元格级 `cellType: 'option'` **抢过去**（粒度优先
+的实证，且顺带说明代价 —— `cellType` 只按内容类型画，拿不到列上的字典，所以显示原始值
+`active` 而不是「活跃」）→ 4n+2 行 `asCell(VtSelect, { display: 'tag' })`（同一份 `createTagChip`，
+外观逐字符相同，差别只在能不能点开选）；② 分数列列级 `VtNumberInput` → 3n 行换成
+`asCell(VtProgress)`（同一列不同格换控件）；③ 勾选列 7n 行**穿透**成 `asCell(VtTag, { options: LOCK })`
+的「锁」胶囊（值取行上的 `sel` —— `type: 'checkbox'` 功能列自己不读行值，那个字段正好空着）。
+两个状态列分支写成 `else if`：同一格登记两次的话后写的静默盖掉前写的，示例就说不清哪条生效。
+数据同时改成**确定式**（去掉 `Math.random()`，日期全程本地构造 + 手拼格式化，见 §7.14 那条
+UTC 的坑），这样文档里「3n+1 行显示 active」才对得上。React / Vue 两份同名示例同步到同一
+列集与同一份单元格级配置。
+
+CDP 实测（三端）：数据行高全部 40px；**逐列点开编辑器**——`name`/`score` 出 `.vt-comp-input`、
+`owner` 出带搜索的人员面板、`priority`/`skills` 出选择面板（多选带底部 actions）、`due` 出
+`.vt-comp-calendar--single`、`period` 出 `--range`、`checkin` 出 `.vt-comp-time`、`region` 出三列
+`.vt-comp-cascader-col`、`city` 出建议列表、`remark` 出 `.vt-comp-textarea` 浮层；`rate`/`enabled`/
+`passed` 点一下就改（无浮层，符合「开关型控件不进编辑态」的设计）；`status`（只读）/`email`
+（链接）/`ops`（按钮组）无浮层；全程无控制台 error/warning。
+
+**改成「逐格不同」（08-17 第三轮，现行形态）**：A~E 五列的列定义里**只有 key / title / width**，
+渲染完全由 `setCellRenders()` 决定，规则 `kinds[(行号 + 列号) % 22]` —— 往下、往右都不重复，
+屏幕上是一条斜向花纹，「同一列的格子彼此无关」一眼可见（2.8 万条逐格配置）。**22 种 kind 覆盖
+全部 18 个内置组件**（`VtSelect` 单值 / 多值各一种；08-18 随 `VtImage` 从 21 / 17 加到 22 / 18，
+见 §7.14.3）**+ 3 个内容类型**（`cellType: 'option' /
+'image' / 'checkbox'`，与组件并列摆着，好看出「内容类型不带编辑器、值得自己带内容」）。
+唯一保留列级配置的是钉在右侧的「状态（列级兜底）」列，专门用来对照粒度优先。
+
+三条实现约束（照抄这一页时最容易漏的）：① **配置与值必须配对** —— 装 `VtDateRangePicker` 的格子
+存 `['YYYY-MM-DD', 'YYYY-MM-DD']`、装 `cellType: 'option'` 的格子得自己带 `{ label, color }`，
+所以 `CellKind` 把「配置」与「造值」绑在同一个对象里；② **配置对象无行状态可共享** ——
+2.8 万个格子共用 21 个 `asCell()` 产物，不是造 2.8 万份；③ 胶囊专属的 `maxCount` / `variant` /
+`color` **在单元格级传不了**（`VtSelectOptions` 是按 `display` 拆的判别联合，`CellOnlyOptions` 的
+`Omit<A | B, K>` 只保留两支共有的键，列级不受影响）—— 编译器直接报错，示例里改用默认阈值 3
+并把值给到 4 枚来展示 `+N`。
+
+CDP 实测（三端一致）：A 列行 0~20 逐个点开，**21 种 kind 全部符合预期** —— input / input /
+无（VtTag 只读）/ 无（进度条）/ 人员面板带搜索 / 选择面板 / 无（点星即改）/ `--single` 日历 /
+选择面板带 actions / 无（开关点即切）/ 级联多列 / 无（cellType option）/ textarea 浮层 /
+`.vt-comp-time` / 无（勾选点即切）/ `--range` 日历 / 无（cellType image）/ 建议列表 /
+无（cellType checkbox 只读）/ 无（链接）/ 无（按钮组）；前 14 行 × 5 列**没有空格子**、
+行高全 40px、无控制台 error/warning。固定列的三种来源也验过：行 0 列级胶囊「活跃」、
+行 1 `cellType` 抢占显示原始值 `inactive`、行 2 单元格级 `VtSelect` 胶囊「待审」。
+
+**踩到的坑（验证脚本这边）**：右侧固定列宽 150px 正好压在 E 列上方，按 `getBoundingClientRect()`
+算出的点击坐标全落进了固定列 —— 表现是「点了没反应」，看着像单元格级 `renderEditor` 不生效。
+CDP 点击验证碰到固定列时，要么改点靠左的列，要么先横滚。
+
+**文档分工：指南只讲架构，用法进示例（08-17 第四轮）**。用户的原话是「guide 中只介绍架构设计，
+具体使用放到示例中新增一个 demo（guide 里弄个超链跳过去）」。于是：
+
+- **新增示例 `advanced/cell-render-levels`（三端）**：表级 / 列级 / 单元格级各配一遍，7 个按钮
+  **现场**演示回落 —— ① 表级 `text ⇄ rich-text`（销毁重建 / React·Vue 换 `key` 重挂载）、
+  ② 单元格级 `cellType` 抢过列级 `render`、③ 同粒度 `render` 又抢过 `cellType`、④ 传 `null`
+  清除回落列级、⑤ 穿透功能列、⑥ 单元格级 `asCell(VtTag)` 覆盖列级组件、⑦ 显式关掉编辑器。
+  状态栏实时打印 `resolveCellRender()` 的结果 —— 优先级不靠 demo 自己推一遍（那会是第二份实现），
+  只问核心。
+- **`guide/cell-render.md` 三份瘦身**（214 → 177 行）：删掉所有可运行代码块（`new VirtTable`、
+  `setCellRender`、`asCell` 的用法），只留分层图、那条优先级规则、内容类型契约表、设计理由
+  （为什么没有表级 `render`、为什么没有行级）、会话层的结构解释；每节末尾链到示例页。
+  末尾「速查」表从「配在哪（代码）」改成「哪一层 / 哪一级」。
+- **api 三份**：vanilla 在 `## 单元格渲染` 节顶加双链（指南 + 示例）；react / vue 的 api 没有这一节，
+  就在 `cellType` 行原有的指南链接后追加示例链接。两个示例页之间也互加了 tip 链接。
+
+示例里刻意写进了三个**踩出来的**真实行为：① `cellType` 与**值的形状必须配对** —— 给 `option`
+一个数字会画出空格子（`option` 只认标签字符串或 `{ label, color }`），所以按钮 ② 用的是
+`'number'`；② 穿透进功能列的组件读的是 `row[colKey]`，行上没有那个字段（勾选列通常没有）
+就只会画个空，示例的行数据里因此专门放了 `sel: 'lock'`；③ **`renderEditor` 独立回落是双刃剑** ——
+按钮 ⑥ 把常态换成只读 `VtTag` 之后，`resolveCellRender()` 仍报「有 renderEditor」（回落到列级
+`VtSelect`），于是「常态只读胶囊、点开却是下拉」；要真只读得像按钮 ⑦ 那样显式给一个返回 `null`
+的 `renderEditor`，`undefined` 不算「没有」，只算「这一级没配」。
+
+**顺手修了 React 适配层一个真 bug**（`packages/react/src/index.ts`）：组件卸载的 effect cleanup 里
+同步 `root.unmount()` 所有子 root，撞 React 的「Attempted to synchronously unmount a root while
+React was already rendering」—— 只要使用方用 `key` 重挂载 `<VirtTableReact>`（换数据源、换主题、
+本示例换表级 `cellType` 都是这么写的）就**必然**触发。改成先取出 root 列表再 `queueMicrotask`
+里卸载（`mountReact` 替换旧挂载点时早就这么处理了，这里漏了一处）。
+
+**React / Vue 的 ref 刻意不转发 `resolveCellRender`**：它返回的是**包装之后**的配置（`render`
+已被适配层包成「返回 DOM」的函数），不是使用方传进去那个返回 JSX / VNode 的函数，直接暴露只会
+让人以为拿到的是自己那份。要查最终生效的配置走 `ref.getTable()?.resolveCellRender()` —— 示例、
+示例页文档、指南三处都按这个口径写。
+
+**后续（08-17 第五轮）：`guide/cell-render.md` 三份已删除，模型并入 `api/cell.md`。** 起因是把
+1800 行的 `api/index.md` 按作用对象拆成 11 页（见 §7.21），拆出来的 `api/cell.md` 与这份指南
+撞了四成内容：内容层那张 6 行优先级表、`cellType` 取值表、「第 2 条高于第 3 条」的论证、
+容器层一律叠加、`renderEditor` 独立回落 —— 同一个事实两份拷贝，改一处必漏一处。
+现在 `api/cell.md` 一页从模型讲到参考：分层图 → 内容层规则 → `cellType` → `setCellRender` →
+没有「行级」→ 接管层与穿透 → 容器层 → 会话层（含外观归属 / 激活态）→ 编辑校验 → tooltip →
+组件不是链上的一档 → 速查表。**「指南只讲架构，用法进示例」这条对 cell-render 不再适用**
+（其余指南页不变）：模型与参考表本来就该在同一页，示例页仍然承担可运行写法。
+入链一并改掉：三端示例页各 1 处、`vanilla/examples/cell/cell-type-render.md`、
+`vue|react/api/{table,column}.md` 各 1 处、`api/index.md`、`config.ts` 的 guide 侧边栏、
+以及三份 demo 源码头注。react / vue 那两份指南里的源码指针（`packages/{react,vue}/src/plugins/cell-editor.ts`）
+本来就不存在，删掉时顺带作废。
+
+**验证**：三端 CDP 逐个按钮点过，7 个动作的 DOM 变化与 `resolveCellRender()` 输出全部符合预期
+（含「表级切 rich-text 后描述列的 `<b>` 才生效」「重建后单元格级配置随之清空」），三端无控制台
+error/warning；`pnpm -C docs exec vitepress build .` 通过（死链检查在这一步）。
 
 ### 7.18 自然语言查询 `vtAIQuery`（2026-08-12）
 
@@ -1342,7 +1696,7 @@ value」也拦不住，所以 `resolveEnumValue()` 兜底（精确 label → 忽
 `buildColumnFilterPredicate` / `buildComparator`。而 `buildFilterModelPredicate` 对指向未知列的
 条件返回 `null`（= 不筛），于是：
 
-- 用 `vtColumnPanel` 隐藏一列 → 该列的筛选立刻失效、行数突然变多，没有任何提示；
+- 在字段配置面板（当时叫 `vtColumnPanel`）里隐藏一列 → 该列的筛选立刻失效、行数突然变多，没有任何提示；
 - `setState` 还原「隐藏了某列 + 该列有筛选」的状态 → 筛选丢失。
 
 筛选与排序是**数据层**的事，与列可见性无关（AG Grid / Excel 同此语义）。改成在
@@ -1422,3 +1776,427 @@ filterModel 字段」）。推翻的依据是：AGENTS.md 里查不到这条决�
 | stick-to-bottom | 接收中上滚 → 指示器切到 `--paused`；停止后指示器撤掉 |
 | **只为可见窗口付钱** | 5 万行表：首屏 **17 次**调用；滚过 6 屏后 **45 次**（不是 5 万）；同时 `已取消 20` —— 滚走的行把在途请求 abort 了 |
 | 流式写入 | 单元格里能看到逐字累积的片段与 `--computing` 扫光态 |
+
+### 7.21 API 文档按作用对象拆页（2026-08-17）
+
+`docs/vanilla/api/index.md` 长到 **1820 行**，vue / react 各 400 余行。一页装下 Options 全表、
+列全表、渲染模型、单元格组件、插件、类型定义之后，既翻不动也搜不准（浏览器内搜索命中十几处，
+分不清哪处是定义）。按**作用对象**拆成 11 页（三端同构）：
+
+| 分组 | 页面 |
+| --- | --- |
+| 表格级 | `table`（Options 全表 / 加载态 / 主题 / i18n / 状态持久化 / ARIA）· `instance`（方法 + 属性 + 滚动模型）· `data`（分页 / 服务端与无限滚动 / 树形懒加载 / 筛选 / 合计行 / 固定行 / 单选行） |
+| 列级 | `column`（Column 全表 / 功能列 / 排序 / 显隐 / 拖拽）· `group-header`（分组表头与表尾） |
+| 单元格级 | `cell`（分层模型 + 渲染参考，见 §7.17 末尾）· `components`（内置单元格组件）· `merge`（`MergeCell` + `mergeKey`） |
+| 其他 | `plugins`（清单 / 按需引入 / 键盘导航 / 导出打印 / 写插件）· `types` |
+
+`index.md` 只留导航（四组表格 + 每页装了什么）。几条踩点：
+
+- **三端页名必须一致**。`useFramework.ts` 的 `getFrameworkLink` 换框架时只替换第一段路径段，
+  vanilla 有 `api/components` 而 vue 没有就是 404。所以 vue / react 侧的 `cell` / `components` /
+  `plugins` 三页是新写的（封装层特有的部分：VNode/JSX 渲染、`setCellRender` 走 ref、
+  插件与组件的 import 路径、`plugins` 只在 mount 时读一次），再加一条深链指回 vanilla。
+- **锚点保持不变**。VitePress 的 slug 由标题文本决定，标题只升降级不改字就不会失效；跨页链接
+  改的只是路径。全站 63 个文件里指向旧单页 8 个锚点的链接一次性改完
+  （最多的是 `/vanilla/api/#单元格组件` 54 处）。
+- **拆页时顺手修的**：「键盘导航」一节里一对空的表头残留；`[setActiveCell](#方法)` 指向不存在的
+  锚点（标题是「实例方法」）；「见『合并单元格的坐标系』」是纯文本没链。
+- 侧边栏在 `buildApiSidebar()` 里按四组给 `collapsed: true` 的子分组，与示例那八组同一种写法。
+
+
+### 7.22 文档职责分离：api 只放表，示例页放正文（2026-08-17）
+
+上一节把 api 拆成 11 页之后，还有两处混着：**api 页一半是长篇讲解**（`cell.md` 327 行、
+`components.md` 365 行、`table.md` 190 行），查字段要在散文里翻；**示例页每页手抄一段
+「使用的 API」类型块**（三端 203 页），字段说明与 api 各维护一份。反过来 `column/*.md` 里那
+18 份 `VtXxxOptions` 比 api 的「各组件专属选项」表更详细 —— 事实源其实在示例页那边。
+
+现在的分工：
+
+| | 答什么 | 放什么 |
+| --- | --- | --- |
+| `api/*.md` | **有什么** | 字段表 / 方法签名表 / 取值表 / 优先级表 + 最小接口骨架；每张表上方最多一句话，要展开就写「用法与边界见 ⟨示例页⟩」 |
+| `examples/**` | **怎么用、为什么** | 正文（含设计理由与已知代价）+ 一节 `## 相关 API`（本例用到的 3–6 个字段 + 锚点链接）+ demo + 源码 |
+
+搬迁是**双向**的：长篇讲解 api → 示例（`cell.md` 的分层图去了 `cell/render-levels`、日期日历
+去了 `cell/vt-date-range-picker`、状态持久化与滚动模型各新建一页纯文字示例页…）；字段清单
+示例 → api（18 份类型块收进 `api/components.md`，每组件一张小表 + 一个 interface）。
+结果：`cell.md` 327→115 行，全站示例页不再出现手抄类型块。
+
+顺带做的结构重整（同一次改动）：
+
+- **分组名 = md 目录名 = playground demo 目录名**。原来「增强功能」的目录叫 `feature`、
+  「单元格组件」的目录叫 `column`，对不上；现在七组各自对应 `basic` / `feature-columns` / `cell` / `advanced` /
+  `plugins` / `ai` / `merge`，`docs/apps/*/src/components/` 下同名。
+- **「增强功能」并进「高级功能」**。那条界线从来没说清：「树形懒加载」在增强、「树形」在高级；
+  「高级筛选」在高级、「分页」在增强。
+- **「渲染粒度 + 单元格组件」合成一组「单元格渲染」**。拆成两组时读者看不出组件**就是**列级
+  `render` + `renderEditor` 的一种装法。
+- **功能列合成一页**。`index` / `checkbox`（原在基础功能）与 `radio`（原在增强功能）讲的是同一件事
+  （接管层独占单元格），合成 `feature-columns/index.md`（自己一组，排在「单元格渲染」之前 ——
+  分层图里接管层就在内容层之上）；三个 demo 也合成一个（一页只能挂一个
+  `PlaygroundHost` —— 三端 qiankun appName 固定，同页两个实例会冲突）。
+- 侧边栏一级标题**「示例」→「功能」**（与 Demos 的「经典案例」对照），**URL 段仍是 `/examples/`**。
+- 顺手删掉两处死页：`{vue,react}/examples/basic.md`（与 `basic/basic.md` 重复、侧边栏没引用）、
+  `vanilla/examples/experimental/literal.md`（`example-id="literal"` 全仓无注册，打开就是加载失败）；
+  顺手修掉 `plugins/column-drag` / `row-drag` 两页写的 `columnDraggable` / `rowDraggable` ——
+  这两个 option **早就不存在了**，入口只有 `vtColumnDrag()` / `vtRowDrag()`。
+
+**三端已对齐（2026-08-18）**：vue / react 两端的 78 页示例页现在与 vanilla 同一套结构
+（示例 → 源码 → 说明 → 原有小节 → 相关 API），旧的「使用的 API」手抄类型块清零。生成方式分两类：
+
+| 类别 | 页数 | 做法 |
+| --- | --- | --- |
+| 正文框架无关 | 50 | 从 vanilla 页生成，只换标题前缀 / `PlaygroundHost` / `<<<` 路径 / 主包 import；站内互链换本端，**api 链接保留指向 vanilla**（那份是事实源） |
+| 含 vanilla 专属调用 | 27 | **保留端页原有代码块**（框架写法本来就是对的），只注入 vanilla 的「相关 API」+ 统一结构 |
+
+踩到的两个坑，下次批量改端页时注意：
+
+- **别用机械改写把 `new VirtTable(el, {...})` 变成端写法**。带对齐注释的多行 options 一改就散
+  （`columns` 还得从 options 里摘出来 —— 两端它是组件 prop 不是 option），试过一次就回滚了。
+  真要同步这类页，代码块从端页原样保留。
+- `basic/reactive` 与 `cell/render` 这两页**不能从 vanilla 生成**：前者的结论在框架端是反的
+  （vanilla「没有任何响应式」，而两端 `options.list` 换引用会被 watch / effect 接住自动
+  `setList()`），后者 vanilla 根本没有。这两页各端手写。
+
+**验证锚点别靠肉眼**：VitePress 的 slug 规则与「按标题猜」不一致（`### 内容类型（\`cellType\`）`
+→ `#内容类型-celltype`）。`pnpm build:docs` 之后从 `dist/**/*.html` 里 grep `id="..."` 与 md 里的
+`](/vanilla/api/xxx#yyy)` 对一遍，比读源码可靠。
+
+### 7.23 浮动图片：先在核心做完，再整包移到 pro（2026-08-18）
+
+`vtFloatingImage`（全表浮动图片：内容坐标系里摆图，拖动 / 四角缩放 / 旋转 / 点开看大图）
+**已不在本仓库** —— 它是付费插件 `@virt-table-pro/floating-image`。实现细节、CDP 实测数字、
+以及踩过的坑都记在那边的包 README 与 pro 仓库 AGENTS.md 里，这里只留下**对核心有约束的三件事**：
+
+**1. 核心为它新开了一个公开子路径：`@virt-table/vanilla/components/image-viewer`**
+（`src/components/image-viewer.ts` + `_image-viewer.css`，`exports` 里两条：JS 与 CSS）。
+
+付费插件的「点图看大图」要复用内置组件 `VtImage` 那个查看器，而 pro 仓库的第一条铁律是
+**只吃公开契约**（碰 `_xxx` 私有成员的话，核心每次重构都会在客户侧炸掉而 CI 抓不到）。
+所以按那条约定的做法在核心沉淀成公开 API。两个决定：
+
+- **不从 `components` barrel 导出**：那个入口带 19 个单元格组件与整份 `components.css`
+  （55 kB JS + 40 kB CSS）。只想弹个查看器的使用方不该为此付钱。
+- **CSS 拆成 `components/_image-viewer.css`**（`components.css` 与新入口各自 `@import`），
+  与 `plugins/_panel.css` 同一手法。`components-contract.test.ts` 改成两个文件一起读 ——
+  §13 那批断言查的就是它。
+
+pro 仓库的 `verify/consumer/exports.test.mjs` 里有这条子路径的正向断言（含 CSS），
+核心哪天改名或删掉它，那边的 smoke 测立刻红。
+
+**2. `internal/` 里那两个基元被 pro 拷了一份**（`drag.ts` 的 `startDrag` / `swallowNextClick`、
+`auto-scroll.ts` 的 `createAutoScroll`）。判据是**体量与稳定性**：300 行的查看器值得让核心
+开公开面，七十行且语义已稳的手势基元则拷一份更省事（给核心加公开面 = 从此不能随便改签名）。
+所以改这两个文件时不用管 pro —— 它不会自动跟上，也不会被改坏。
+
+**3. 公开文档站仍然演示它，而且只吃 pro 的 `dist`。**
+
+这套消费方式现在服务**两个案例、四个付费插件**：电子表格用 `floating-image` / `formula` /
+`undo`（见 §7.25），项目管理 WBS 用 `gantt`。演示密钥收在
+`docs/apps/vanilla/src/pro/demo-license.ts` —— **一把密钥覆盖全部产品**（`products: '*'`），因为许可是
+模块级单例，各案例各设一把会在画廊里切换时互相覆盖（先看甘特再看电子表格，前者的角标
+会凭空冒出来）。
+
+**三档**（`docs/apps/vanilla/vite.config.ts`）：`dist`（pro 仓库的 `packages/<name>/dist`，
+本地维护者）· `installed`（`node_modules/@virt-table-pro/*`，**不 alias**，CI / 部署）·
+`off`（`docs/apps/vanilla/src/pro/` 下的桩 —— 表格照常跑，只是没有付费能力）。
+自动判定 **dist > installed > off**，`VT_PRO` 显式指定却不满足时**直接报错**、不静默退回，
+每次构建都会打印一行当前档位。类型侧**始终**指向桩，否则本仓库的 `pnpm typecheck`
+会要求另一个私有仓库存在。
+
+**「只吃 dist、绝不吃 src」是这条方案的安全边界**：公开产物里最多出现客户手上同样的字节
+（已压缩、注释已剥、无 sourcemap，已核对 JS 与 CSS 都不剩一条中文注释），没有源码、没有 map。
+它也顺手补上了 pro 仓库「轨道 B」的一环 —— 这是核心之外第一个真正消费 pro `exports` 的地方。
+代价是改完 pro 源码要 `pnpm pro:build` 一次才能在这里看到（插件本身的开发在 pro 的 playground 里做）。
+
+边界由脚本守着而不是注释：`pnpm verify:pro-leak`（`scripts/check-pro-leak.mjs`，已挂在
+`build:docs` 末尾）扫要发布的产物，命中「付费源码专有注释 / `sourceMappingURL` / `.map` /
+指向 pro 源码目录的路径」任一条就让构建红掉，并按目录报「这次有没有把付费插件打进去」。
+反向验证过：塞一个含源码注释的假文件进 `docs/public/micro-apps/`，脚本退出码 1。
+
+案例里那把演示密钥是**域名绑定**的（`keno-lee.github.io` / `kolarorz.github.io`），
+`products: '*'`、2099-12-31 到期 —— 本站的一把长期授权，加新付费插件不用重签，也不会某天
+因为过期自己长出角标。公开放着也没用：换域名只会出现未授权角标 + 一行 warn，功能不降级。
+细节见 `docs/apps/vanilla/src/pro/README.md`。
+
+**`installed` 档是为「带付费能力部署」加的**（2026-08-19）。要点四条，完整说明在
+`docs/apps/vanilla/src/pro/README.md` 与 pro 仓库 AGENTS.md 第十六条：
+
+1. **alias 只在构建期起作用** —— 付费字节被打进 bundle，线上产物自包含。所以问题从来不是
+   「线上跑不起来」，而是**构建那台机器上有没有付费产物**：没有就静默发一个桩档的站，
+   而那件事没有任何外部症状。`VT_PRO` 指定却不满足要报错、构建要打印档位，都是为这条。
+2. **`installed` 不是「CI 版的 dist 档」** —— 它走裸包名 + 包自己的 `exports` 映射（含
+   `./index.css` / `./time` 子路径），而 alias 会把 `exports` 整个绕过去。每次部署因此顺带
+   验了一遍「客户装完那组离线 tgz 真能用」。
+3. **铺包用 `tar` 解压**（`scripts/install-pro-tgz.mjs`）而不是 `npm install`：本仓库是
+   pnpm workspace，混用包管理器动同一个 `node_modules` 极难查；写进 `package.json` 更糟 ——
+   公开仓库一旦声明 `@virt-table-pro/*` 依赖，外部贡献者的 `pnpm install` 立刻 404。
+   代价是那些目录不受 pnpm 管理，**跑过 `pnpm install` 要重新铺一次**。
+4. **tgz 绝不入库**（`.gitignore` 里 `*.tgz` / `.pro-tgz/`）。bundle 里有 dist 字节与一个
+   可直接 `npm i` 的完整包不是一回事 —— 后者等于免费发货。
+5. **发布是手动的**（pro 仓库 `publish.md` 第三节是唯一真源）。⚠️ 而 `static.yml` 仍会在
+   push master 时自动部署 —— runner 上没有付费产物 → `off` 档 → **覆盖掉刚手动部署的站**。
+   手动流程下那个自动部署没有好处只有这个坏处；处理办法见 publish.md（推荐把 `on.push`
+   去掉、只留 `workflow_dispatch`）。
+
+顺带一处命名调整：查看器的 CSS 从 `_image-viewer.css` 改名为 **`image-viewer.css`**（去掉
+内部件的下划线前缀）。它随公开子路径一起对外，文件名必须与 `exports` 里的
+`./components/image-viewer.css` 对齐 —— 否则「吃源码的链路」（playground 的 alias）
+与「吃产物的链路」（客户 / 付费包）引的不是同一个路径，就会出现「monorepo 内引得动、
+装到用户项目里 404」。`components-contract.test.ts` 读的文件名跟着改了。
+
+---
+
+### 7.24 行拖拽改成树形 / 分组通用（2026-08-19）
+
+`vtRowDrag` 原来只会「插到某行前/后」，而 `canReorderRows()` 把**树形**（`_hasTreeCol`）与
+**分组**（`groupConfig`）一并拉黑 —— `moveRow()` 只在 `_originList` 的根层 `findIndex`，
+嵌套结构写不回去。于是表格支持 `type:'tree'` 与 `groupConfig`，行拖拽在这两种最常见的结构下
+反而完全不可用。照 virt-list 的树形拖拽（`tree/VirtTree.ts` 的 `_dragProcess` /
+`_crossLevelDragProcess` / `onMouseup`）把落点模型换掉。
+
+**1. 落点用「父级 + 前一个兄弟」，不用「目标行的前/后」。**
+
+后者在树里说不出「是它的子节点还是它的兄弟」。核心的唯一入口是
+`moveRowTo(sourceKey, { parentKey, prevKey })`，三种父级：数据行（成为子节点）、
+分组行（落进该分组）、空（根层）。`moveRow()` 保留为它的薄包装，扁平表行为不变。
+
+**2. `canDropRow()` 与 `moveRowTo()` 共用一份判定 `_resolveDrop()`。**
+
+指示线每次 pointermove 都要问「这儿能不能放」，落数据时又要问一遍。两份判定必然会漂，
+然后表现成「线画着却放不下」。`_resolveDrop` 返回的是完整执行计划（源数组+下标、目标数组+下标、
+要改哪些字段），`canDropRow` 只看它是不是 null。同一个理由，**「拖回原处」也判成放不下** ——
+指示线跟着消失，比松手才发现没反应好。
+
+⚠️ 由此得到一条约束：`_resolveDrop` **不许有副作用**。第一版在里面给叶子行补
+`children = []`（好让落点数组存在），结果 hover 一路扫过去每个叶子都被挂上空数组。
+改成登记 `attachTo`，由 `moveRowTo` 落数据时才挂。
+
+**3. 分组落点必须改数据，没有别的选项。**
+
+分组行是 `_constructGroups` 按字段值现算出来的合成行，本身不承载数据。所以「拖到分组 B 下」
+只能是**把这行的分组字段改成 B 的取值**。为此给分组行加了 `_groupPath`
+（`{ field, value }[]`，含祖先层）—— 原有的 `_groupField` / `_groupName` 只描述当前层，
+多级分组下还原不出祖先层的取值，改一半会把行送进「新的一级 + 旧的二级」这种不存在的格子。
+
+根层落点（分组之间）同样按 `prevKey` 那行所属的分组同步字段，保证「指示线画在哪就落在哪」；
+第一个分组之前没有对应分组，那里判成放不下。
+
+**4. 层级标尺把分组层与树层合成一把。**
+
+`level = (_groupLevel - 1) + _treeLevel`。视觉上 `.vt-group-indent` 与 `.vt-tree-indent` 同宽
+（都是 `--vt-indent-size`），层级箭头也只能有一把 —— 两把标尺在「分组里套树」的表上会打架。
+父链靠**在扁平列表上往前找第一个层级更小的行**算（`parentAt`），纯数据、不碰 DOM。
+
+**5. 指示线**按层分段，**不是**一条从目标层级画到右边的整线。
+
+`.vt-row-drop-line` 是个 flex 容器，内含 `maxLevel` 个 `.vt-row-drop-seg`：前几段各占一格缩进
+（`--vt-indent-size` 减去段间距 `--vt-drop-line-gap`），最后一段 `flex: 1`；`[min, max]` 区间内
+比目标层级浅的画 `--past`（40% 主色）、目标层级及之后画 `--on`（实色），**比 `min` 更浅的段不上色**
+（那些层级根本选不到，画出来是骗人的）；`.vt-row-drop-arrow`（CSS 三角）挂在目标层级那一段的起点。
+与 virt-list 的 `dragLine` / `levelArrow` 同构。
+
+第一版偷懒画成「一条从目标层级起点开始的线 + 一个圆点」—— 层级信息只剩「线往右缩了多少」，
+可选区间与当前层级都看不出来，实测下来根本读不懂。
+
+**5b. 层级的基准是「第 1 层**内容**的左边缘」，不是行的左边缘。**
+
+树形行的排布是 `缩进 × (层级-1) + 折叠箭头 + gap + 内容`，所以第 1 层的内容已经被
+**一个折叠箭头 + 一段 gap** 顶开了（实测 20 + 6 = 26px）。第一版拿 `.vt-tree-row` 的左边缘
+（= 第 1 层箭头的位置）当基准，整条层级线与箭头就比对应层级的文字左 26px，看着像少了一级。
+
+基准不写死 26px，而是从**任意一个已渲染的数据行**反推：
+`origin = 该行 .vt-tree-content 的 left − (该行层级 − 1) × --vt-indent-size`。
+两种表都对 —— 树形表的基准含箭头与 gap，纯分组表的数据行没有箭头、基准就是缩进块起点；
+箭头宽度或 gap 被改样式改了，基准也自动跟着变。CDP 实测：三级文字起点 97 / 117 / 137，
+线的三段与箭头逐一对齐。
+
+⚠️ 这条换算吃的是「**每加一层，内容起点固定右移一个 `--vt-indent-size`**」这个不变量。
+它由三件事共同保证，而三件都是「改一处就静默错掉」：两种缩进块同宽且等于
+`--vt-indent-size`、折叠箭头宽度也等于它、**叶子的占位箭头仍占位**（`visibility: hidden`
+而不是 `display: none`，否则同层里叶子与非叶子的文字差 26px）。CSS 侧由
+`css-contract.test.ts` 的「树形缩进：每一级步进一致」守，JS 侧（放了几格、箭头有没有放）
+由 `group-indent.dom.test.ts` 的「树形行的缩进结构」守 —— 五种改坏都验过会红。
+
+**6. 开拖先把源节点收起**（virt-list `_dragStartClone` 里那句 `expandNode(key, false)`）。
+
+三个理由，第三个才是关键：① 拖的是整棵子树，收起来 ghost 才对得上「搬走一整块」；
+② 子树留在列表里会跟着晃，落点在自己的行之间来回跳；③ **可放区域会被自己的子树切碎** ——
+落在自己子树里一律放不下，于是源节点下面一大片全是没有指示线的死区，用起来像坏了。
+拖完保持收起（同 virt-list，不还原）。
+
+副作用：`toggleFold` 会派发一次 `onTreeToggle`（使用方看到的是「折叠了这个节点」，其实是拖拽引起的），
+且**「拖进自己子树」在手势层从此不可达** —— 环检查只剩 `moveRowTo` / `canDropRow` 那层还在守
+（`row-reorder.dom.test.ts` 里有直接调用的用例）。
+
+**7. 指示物一律挂 `.vt-client`，不挂行元素。**
+
+virt-list 把指示线 append 进 item 元素，那边没有行 DOM 复用；这里行会被虚拟滚动回收，
+挂进去会跟着被摘走，或者更糟 —— 粘在复用后的另一行上。同理源行的 `.vt-tr--dragging`
+要在 `onRendered` 钩子里每帧重贴。自动滚动的 `onTick` 里也要重算落点，否则行在走、线钉在原地。
+
+**8. 「成为子节点」那一档要按表的结构给。**
+
+没有树形列也没有分组时，中间 1/3 落点核心必拒（`!_hasTreeCol` → 放不下），
+不做判断的话每行中段都成了没有任何反馈的死区。插件开拖时定一次 `structural`，
+不满足就把档位退回上/下对半分。
+
+**9. 顺手修掉的四个真缺陷（都是这次才暴露的）。**
+
+- **ghost 显示错了列**：原来挑标签列用 `find(c => !c.type)`，而 **`type:'tree'` 是数据列**
+  （它只加缩进与箭头，内容仍是字段值）—— 于是树形表上 ghost 跳过名称列、显示的是第二列
+  （「部门」）。这条规则核心里本来就有 4 份字面拷贝（`col.type && col.type !== 'tree'`），
+  抽成 `internal/column.ts` 的 `isFunctionalColumn` / `isDataColumn`，5 处共用一份。
+  放 `internal/` 而不是核心导出：**生产插件代码一律只从 `../index` 做 type 导入**
+  （值导入会把整个核心拽进插件 chunk），能共享值的地方只有 `internal/*`。
+
+- **分组缩进的宿主列**：原来写死 `col === columns[0]`，而表头挂 `type:'drag'` / `type:'checkbox'`
+  是常态 —— 功能列在 `_applyCellContentInner` 里各自早返回，压根走不到缩进那一支，于是
+  分组下的数据行**一格缩进都没有**。改成 `_groupIndentCol()`（第一个非功能列），
+  与树形列那支按 `type:'tree'` 定位是同一条规则。CDP 实测过：修前 `indents: 0`，修后 `1`。
+  顺带这也是行拖拽的层级基准 —— 插件靠 `.vt-tree-row` 的左边缘换算层级，一个都没有就没基准。
+- **触摸期间屏蔽滚动输入**：原来只有列拖拽做（`holdTouch`）。行拖拽现在**横移是用来改层级的**，
+  不拦 `touchmove` 就会一边改层级一边横滚表格。抽成 `createTouchGuard()` 两边共用。
+- **示例的行高不齐**（40 与 61 混着）：faker 造的人名在 160~260px 的列里换行，行高就翻成 61px
+  （正是 §7.11 那个数）。列上补 `textOverflow: 'ellipsis'` 后齐了。这不是核心的问题，
+  但它会把树形缩进衬得很乱，**做树形/层级类示例时列上一律配 `textOverflow`**。
+
+⚠️ 层级基准**不能取悬停行的左边缘**：分组行是一个 `colSpan` 撑满的 `.vt-group-cell`，
+里面没有 `.vt-tree-row`，行左边缘比数据行的缩进起点靠左一整个手柄列（44px）——
+拿它当基准，指针一放到分组行边界上层级就恒等于最深那档。所以基准一律取**任意一个数据行**的
+`.vt-tree-row`（那是列位置，各行一致）。
+
+**10. 分组字段只改被拖那一行，不递归后代。**
+
+后代不参与分组（分组只作用于根行，它们的字段值不影响位置），而静默改写整棵子树的数据太重 ——
+那个字段也可能是逐行不同的业务字段。要级联由使用方在 `onRowMove` 里做，示例里演示了一次。
+
+**示例（`docs/apps/*/src/components/plugins/RowDrag*`）是三个正交开关**：树形 / 分组 / 跨层级，
+**任意组合都成立**（含树形套分组 —— 那时最大缩进 3 层：分组 1 层 + 树 2 层）。
+分组维度刻意用 `region` 而不是树的层级字段：树是「项目 → 模块 → 任务」，分组是「归谁管」，
+两者正交才有「同时开」的意义（拿层级字段分组会变成每个分组下只有一个根节点）。
+树形关掉时喂**拍平后的同一批行**，否则只剩 6 个根行可看；两份列表都在启动时建好、之后各自独立
+（拖拽是就地改数据的，现拍平会让来回切开关像「顺序自己变了」）。
+开关外观是新加的 `.demo-switch`（三份 `docs/apps/*/src/style.css` 同步加了）——
+**互斥的选项仍该用 radio**，这里三个彼此正交才用开关。
+
+CDP 实测过六种组合：数据行高恒 40px（41px 只有分组头行，那是它自己的加强分隔线）、
+分组行与树形箭头能同时出现、切开关时旧实例都被销毁（`.vt-root` 恒为 1 个）。
+
+**测试**：`row-reorder.dom.test.ts` 测引擎（改父 / 分组字段改写 / 环检查 / 老签名回归），
+`plugins/drag-sort.dom.test.ts` 测手势（placement 分档 / 层级夹取 / 同级模式 / 分组落点）。
+后者**刻意 stub 了几何与 `elementFromPoint`**（§5.1 一般不建议）：happy-dom 里几何全是 0
+且根本没有命中测试，不喂进去这套层级归约等于没人守。两份都按 §5.2 的要求验过「改坏会红」
+（改坏 placement 分档 → 6 红；去掉层级夹取 → 2 红；去掉开拖收起 → 2 红；
+分段一律实色 / 不按 min 收窄 / 箭头不跟层级走 → 各 1 红；ghost 退回 `!c.type` → 1 红）。
+
+真实浏览器那一层是**手验 + 一次性 CDP 脚本**（照 `scripts/shoot-demos.mjs` 的 CDP 会话写法，
+`Input.dispatchMouseEvent` 派发真实鼠标序列，脚本没进仓库）。它抓到了两件 happy-dom 测不到的事：
+① 落点摆在容器边缘 40px 内会持续自动滚动、落点跟着变（这是**正确行为**，但写脚本时要避开）；
+② 上面第 7 条那两个缺陷。
+
+---
+
+### 7.25 电子表格案例接上公式与撤销（2026-08-19）
+
+电子表格案例又装了两个付费插件：`@virt-table-pro/formula`（**单元格公式**，第二档）与
+`@virt-table-pro/undo`。消费方式沿用 §7.23 那一套（只吃 dist、桩兜底、类型指桩），
+`src/pro/` 下多了 `formula.ts` / `undo.ts` 两个桩，演示密钥重签成覆盖四个产品。
+这里只记**做法上的判断**，用法与数字在案例文档页里。
+
+**1. 偏差列整列写成公式，不是造数时算一遍。** 65 列的 key 本来就是 `A`…`BM`，所以
+`columns` 给**全部 65 列**：列字母 = 列标题 = 列 key，`I2` 就是表头上那个 I。只挑数字列进去
+的话字母按数组下标重排（`H` 会变成 `A`），fx 栏里的坐标就没人看得懂。
+
+**2. 写公式的入口是 fx 栏，不是格子里的编辑器。** 每一列都已经有自己的单元格组件，
+插件不会覆盖别人的 `renderEditor`（案例写 `editor: false` 把这件事说明白）。
+公式栏的「当前格」来自插件的 `onActiveCellChange` —— 装了框选之后核心的 `getActiveCell()`
+恒为 null，那个回调正是为此存在的。
+
+**3. 装载代价：建表 53ms → 450ms。** `compile()` 必须遍历 rows×cols（650 万格）才能找出公式
+建依赖图，再求 9.75 万条值。之后每次改动走 `recalcFrom`（改一格报「写回 1 格」）。
+这笔钱只付一次，但**它与「案例首屏 36ms」那句话冲突**，所以文档里把两个数字都写出来了，
+没有藏起来。首屏更重要的场景应当把公式收窄到需要的行。
+
+**4. 撤销的粒度是使用方的设计，不是插件的。** 核心没有任何编辑事件，所以数据层一律显式
+`recordChange()`。案例里五处，各用**不同**粒度：
+
+| 动作 | 粒度 | 判据 |
+| --- | --- | --- |
+| 单元格编辑 | 一格旧/新值，**一次编辑一条** | 组件逐键 `commitValue`，逐键记 = 按十下键要撤销十次 |
+| fx 栏写公式 | 那一格的**原文** | 撤销要还原输入；还原结果值等于把公式变成常数 |
+| 清空选区 | 逐格：值 + `_sheetCells` + `_formulas` | 三样都清才叫清空；漏了原文，引擎下一轮又把结果算回来 |
+| 合并 / 取消合并 | 整份 `merges` | 状态只有一份且很小，整份换不会错（`getMerges()` 已经是副本） |
+| 粘贴 | 受影响的**整行**浅拷贝 + 整份 `merges` | 一次粘贴动矩形 + 可能加列 + 带合并区；逐格记要把三样分别对齐 |
+
+编辑的边界靠**包一层 `renderEditor`**（打开 = 变更前）+ `onChange`（更新变更后，只在第一次
+写回时进历史）。`redo` 闭包读的是那个会被后续按键覆盖的字段，所以重做回到的是这次编辑
+**最后**那个值。`VtCheckbox` 不开编辑器 → 没有 begin，布尔的变更前就是取反。
+录制器是个**模块级挂钩**（列定义要在建表前造好，而录制要表格实例），卸载时必须置回 null。
+
+**5. 桩模式要留回落路径。** 偏差列是公式原文，公式插件不在就没人算它 —— 那一列会露出
+`=I2-H2`。案例建表后看 `table.recalculate` 在不在（付费包装上才有），不在就把那一列填回纯值、
+并把统计条里「公式 N 条」清零（那时确实没有公式在跑）。
+
+**6. 顺手修了 pro 侧一处语义**（`packages/formula/src/sheet-engine.ts`）：界内取不到值的格
+之前返回 `undefined`，求值层当成「引用不存在」报 `#REF!`。而本案例的行对象是**稀疏**的
+（一行只写有值的那些列），于是「清空 H2/I2 之后 `=I2-H2` 变成 #REF!」。改成返回 `null`
+（空格 → 算术里当 0，Excel 同）；`#REF!` 只留给越界。区域引用那条路本来就是 `?? null`，
+单格对齐它才自洽。pro 那边补了一条稀疏格的测试。
+
+**验证**：CDP 实测过五条链路 —— 点公式格（fx 栏出原文 + 2 个引用高亮框）、fx 栏写
+`=SUM(N2:BM2)`（J2 → 70）、撤销/重做、双击改 I3 为 99（J3 跟着变 87）、清空 H2:I3
+（依赖格变 0 而不是 #REF!）、合并与粘贴的撤销都能精确还原。`VT_PRO=off` 那一档也过了：
+三个桩各 warn 一行，偏差列回落成纯值，建表 53ms。
+
+### 7.26 滚到边界之后，这次输入交给谁（2026-08-19）
+
+原来的答案是「谁也不给」：表格滚到底继续滚，页面一动不动；手指按在表格上，整页滑不动。
+两条轴、三种输入设备的出口各不相同，且**不对称是刻意的**，所以单独记一节。
+
+**1. 纵向滚轮：一个 `auto` 就够，位移根本不用自己写。** `InputController._onWheel`
+到边界时本来就不 `preventDefault`，事件原样落回浏览器 —— 缺的只是 `.vt-client` 上那句
+`overscroll-behavior-y: contain` 别再掐断链。改成 `auto` 之后 latching、惯性接管全走原生路径。
+
+两个反直觉的点实测证伪过，别再按直觉改回去：
+
+| 直觉 | 实测（Chrome 151 headless，复刻 `_onWheel` 让行逻辑） |
+| --- | --- |
+| `.vt-client` 纵向 `overflow: hidden` 且 `scrollHeight === clientHeight`，浏览器视角完全不可滚，`overscroll-behavior` 应该形同虚设 | **生效**。`contain` 时 `window.scrollY` 始终 0，`auto` 才滚起来（连续 20 格推到 max 后继续滚 11 格 → `scrollY` 1320） |
+| wheel latching 会把整段序列锁在表格上，到底后必须抬手重滚 | **不会**。被 `preventDefault` 的事件不参与 latch，放行的第一格重新 latch 到能滚的祖先。"一路滚到底不松手"与"停一下再滚"都能穿透 |
+
+**2. 横向滚轮：只能 JS 代劳，因为 `none` 把链也掐了。** 横向必须留 `overscroll-behavior-x: none`
+压橡皮筋（理由见 `index.css` 里那段），可那条声明**同时**掐断滚动链 —— 在这条轴上"放行给
+浏览器"等于什么都不发生（真实 demo 实测：放行后祖先 `scrollLeft` 一动不动，页面 `scrollX` 0→0）。
+放宽成 `auto` 链是通了，回弹也一起回来，两件事在这一个属性上二选一。
+
+所以交叉轴改成自己接管：`_findChainTarget()` 算出浏览器本该交给谁，直接写它的 `scrollLeft`，
+然后**无条件 `preventDefault`**。浏览器全程不介入，穿透与不回弹同时成立。
+只在 `raw === 0`（纯横扫）时走这条路 —— 斜向手势一律放行，那时纵向穿透比横向防回弹重要得多。
+
+**3. 触摸：浏览器压根不生成滚动手势，只有 JS 一条路。** `touch-action: pinch-zoom` 之后
+到边界"不 `preventDefault`"不会让外层接手，只会什么都不发生 —— 这就是"整页滑不动"的成因，
+比 iOS 原生（抬手后能滑）还严格。归属按 **iOS 语义**在手势起步那一刻定一次（`_chain`）：
+被锁的那条轴上表格已经到头，这次手势整个交给外层；**中途绝不转手**，一开始由表格滚的手势
+即使滚到底也不会把剩下的位移让出去，想滚外层得抬手重滑。松手后的惯性跟着 latch 目标走。
+
+没照 Chrome / Android 的「到边界就转手」：数据网格里用户常在微调表格位置，滚到底顺势把页面
+带飞很难受，而"抬手"是个明确的交接信号。
+
+**4. 链的终止规则照抄浏览器，两处容易写错。**
+
+| 规则 | 错写成什么样 |
+| --- | --- |
+| `overflow: hidden` 不算可滚（用户滚不动它），但**仍能掐断链** | 只看"有没有余量"→ 会滚到一个用户看不出能滚的容器上 |
+| `overscroll-behavior: contain` 只挡「从我往上传」，**不挡我自己被滚** | 以为 `contain` 一律终止 → 外层有余量时白白不滚 |
+| 页面兜底前必须查 `html` / `body` 的 `overflow` | 少这一步会**绕过 scroll lock**：弹窗锁着背景页，代劳却把页面滚了 |
+
+页面自身的 `overscroll-behavior` 反倒不用看：它管的是页面到头之后往不往浏览器 UI 传
+（下拉刷新、侧滑返回），不阻止页面被滚。
+
+**验证**：virt-list 侧 16 条单测覆盖全部分支（`InputControllerScrollChain.test.ts`）；
+真实 demo（7901）CDP 实测四条 —— 纵向滚到底后页面接上并滚到上限 3147；横向到头 + 页面能横滚
+→ `prevented: true` 且页面 `scrollX` 逐次 0→120→240→360（确认是 JS 在滚，不是浏览器）；
+横向到头 + `html` 横向 scroll lock → 页面 `scrollX` 保持 0 且 `prevented` 全 true（不会回弹）；
+触摸 emulation 下表格有余量时上滑页面不动、表格到底后新手势上滑页面 226→763。

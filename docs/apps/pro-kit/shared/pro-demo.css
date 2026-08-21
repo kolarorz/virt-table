@@ -1,0 +1,222 @@
+/*
+ * 付费插件 demo 的外壳样式，三端共用。
+ *
+ * 从付费仓库 playground 的 `shared/style.css` + `shell.css` 里摘出 demo 真正用到的那些
+ * `pg-*` 类（那边的侧边栏 / 路由 / 内嵌模式样式跟着 playground 一起退役了）。
+ *
+ * ## 两条约束
+ *
+ * 1. **全部收在 `.pro-demo-shell` 之下，令牌也定义在它身上**，不写 `:root`。
+ *    demo 是 qiankun **同文档挂载**（不是 iframe），`:root` 上的令牌会漏进整个文档站，
+ *    而 `.pg-*` 这类短类名撞上文档站自己的样式只是时间问题。
+ *
+ * 2. **令牌优先跟文档站走**：`var(--vp-c-bg, light-dark(...))` —— 嵌在文档站里时用
+ *    VitePress 的值（明暗切换严丝合缝），独立打开 `localhost:790x` 时回落到 `light-dark()`
+ *    跟系统。原来 playground 靠 iframe 下发主题，现在同文档挂载不需要那一层了。
+ */
+
+.pro-demo-shell {
+  --pg-border: var(--vp-c-divider, light-dark(#e5e7eb, #2c2f36));
+  --pg-text: var(--vp-c-text-1, light-dark(#1f2937, #e5e7eb));
+  --pg-muted: var(--vp-c-text-2, light-dark(#6b7280, #9ca3af));
+  --pg-bg: var(--vp-c-bg, light-dark(#fff, #1b1b1f));
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--pg-text);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/*
+ * 视觉顺序：工具栏 → 状态行 → 表格 → 补充信息。
+ *
+ * 用 `order` 而不是靠 DOM 顺序：React / Vue 的 demo 自己渲染工具栏/表格/补充信息，
+ * 外壳只能把状态行**追加**在它们之后（要插在中间就得给 demo 多约定一个插槽）。
+ * demo 的那几个块在 fragment 里，会摊平进这个 flex 容器，所以 order 对它们生效。
+ * vanilla 端的外壳是自己建 DOM 的，顺序本来就对，这几条对它是无害的重申。
+ */
+.pro-demo-shell > .pg-toolbar {
+  order: 1;
+}
+.pro-demo-shell > .pg-status {
+  order: 2;
+}
+.pro-demo-shell > .pg-table {
+  order: 3;
+}
+.pro-demo-shell > .pg-aside {
+  order: 4;
+}
+
+/* ---------- 工具栏 / 状态 / 补充信息 ---------- */
+
+.pro-demo-shell .pg-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 工具栏为空时不留一条空白 */
+.pro-demo-shell .pg-toolbar:empty,
+.pro-demo-shell .pg-aside:empty {
+  display: none;
+}
+
+.pro-demo-shell .pg-status {
+  color: var(--pg-muted);
+  font-size: 13px;
+  /* 状态文字会变长变短，固定一行高度免得表格跟着上下跳 */
+  min-height: 1.5em;
+}
+
+.pro-demo-shell .pg-aside {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pro-demo-shell .pg-aside-box {
+  padding: 8px 10px;
+  border: 1px solid var(--pg-border);
+  border-radius: 8px;
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+/* ---------- 按钮与开关 ---------- */
+
+.pro-demo-shell .pg-btn {
+  /* 图标 + 文字：inline-flex + gap，图标是 1em 的内联 SVG */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  background: var(--pg-bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 禁用态：图标是 currentColor，所以只要把颜色调淡，图标跟着淡 */
+.pro-demo-shell .pg-btn:disabled {
+  color: var(--pg-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.pro-demo-shell .pg-btn:hover:not(:disabled) {
+  border-color: var(--vp-c-brand-1, #3b82f6);
+  color: var(--vp-c-brand-1, #3b82f6);
+}
+
+.pro-demo-shell .pg-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pro-demo-shell .pg-switch:hover {
+  border-color: var(--vp-c-brand-1, #3b82f6);
+}
+
+.pro-demo-shell .pg-switch input {
+  margin: 0;
+  accent-color: var(--vp-c-brand-1, #3b82f6);
+}
+
+/* ---------- 表格容器 ---------- */
+
+/*
+ * 虚拟滚动要一个**明确**的高度才有视口可算。
+ *
+ * 这里按视口算而不是给死值，且给上下限 —— 文档页里 demo 上方还有标题、状态条与说明，
+ * 给一个比可视区还大的高度会把表格底部连**横向滚动条**一起推出屏幕（macOS 的叠加式
+ * 滚动条不占布局，它贴在表体下边缘一起出去），表现是「滚到底部时滚动条不见了」。
+ */
+.pro-demo-shell .pg-table {
+  height: clamp(420px, calc(100vh - 320px), 720px);
+  /* border: 1px solid var(--pg-border); */
+  /* border-radius: 10px; */
+  /* overflow: hidden; */
+}
+
+/* ---------- 金额单元格（shared/money-cell.ts） ---------- */
+
+.pro-demo-shell .pg-money {
+  /* 占比条绝对定位到整格；--pg-money-pct 由 JS 写在条自己身上 */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.pro-demo-shell .pg-money__bar {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  bottom: 3px;
+  /* 从右往左长：金额右对齐，条也从右侧起才不会把视线拉走 */
+  width: var(--pg-money-pct, 0%);
+  border-radius: 3px;
+  background: rgb(59 130 246 / 12%);
+  pointer-events: none;
+}
+
+.pro-demo-shell .pg-money__sym {
+  position: relative;
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+.pro-demo-shell .pg-money__num {
+  position: relative;
+  font-weight: 500;
+}
+
+.pro-demo-shell .pg-money--neg .pg-money__bar {
+  background: rgb(239 68 68 / 14%);
+}
+
+.pro-demo-shell .pg-money--neg .pg-money__sym,
+.pro-demo-shell .pg-money--neg .pg-money__num {
+  color: #ef4444;
+}
+
+.pro-demo-shell .pg-money--empty {
+  justify-content: flex-end;
+  color: var(--pg-muted);
+}
+
+/*
+ * 金额列的编辑器。⚠️ 它由核心的 `vtCellEditor` 渲染，**浮层可能不在 `.pro-demo-shell`
+ * 之内**（取决于核心把浮层挂在哪），所以这一条刻意不加 shell 前缀。
+ * 类名带 `pg-money-` 前缀本身已经够独特，不会撞上文档站。
+ */
+.pg-money-input {
+  width: 100%;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.pg-money-input:focus {
+  outline: none;
+}

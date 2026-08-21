@@ -45,7 +45,7 @@ export function vtColumnFilter<T extends Record<string, any> = any>(
       const panelWidth = options.panelWidth ?? 160;
       let panelEl: HTMLDivElement | null = null;
       let panelCol: VirtTableColumn<T> | null = null;
-      let dismissHandler: ((e: MouseEvent) => void) | null = null;
+      let dismissHandler: ((e: PointerEvent) => void) | null = null;
 
       const dismiss = (): void => {
         if (panelEl) {
@@ -54,7 +54,7 @@ export function vtColumnFilter<T extends Record<string, any> = any>(
         }
         panelCol = null;
         if (dismissHandler) {
-          document.removeEventListener('mousedown', dismissHandler);
+          document.removeEventListener('pointerdown', dismissHandler);
           dismissHandler = null;
         }
       };
@@ -174,14 +174,20 @@ export function vtColumnFilter<T extends Record<string, any> = any>(
         ctx.rootEl.appendChild(panel);
         panelEl = panel;
 
-        dismissHandler = (e: MouseEvent) => {
+        dismissHandler = (e: PointerEvent) => {
           if (panel.contains(e.target as Node)) return;
           // 点图标本身交给 open() 处理收起，避免这里先关再开导致闪一下
           if ((e.target as HTMLElement).closest?.('.vt-filter-icon')) return;
           dismiss();
         };
+        /*
+         * 听 `pointerdown` 而不是 `mousedown`：`vtCellSelection` 的拖选起手在 pointerdown 里
+         * `preventDefault()`，而那会连带取消「派发兼容 mouse 事件」—— 表体内的 mousedown
+         * 根本不存在（CDP 实测点单元格：pointerdown 1 / mousedown 0 / click 1）。
+         * 听 mousedown 的后果就是：点表格里的格子关不掉这个浮层。
+         */
         setTimeout(() => {
-          if (dismissHandler) document.addEventListener('mousedown', dismissHandler);
+          if (dismissHandler) document.addEventListener('pointerdown', dismissHandler);
         }, 0);
       };
 

@@ -97,6 +97,15 @@ export function renderCellContent(
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.className = 'vt-checkbox';
+      /*
+       * 勾选态**必须同时写 defaultChecked**：`checked` 属性映射的是「当前勾选状态」，
+       * 不反射到 `checked` attribute（反射到 attribute 的是 `defaultChecked`）。
+       * 只设 `checked` 的话，任何把节点序列化成 HTML 的调用方都会丢掉勾选态 ——
+       * `renderSpreadsheetCellHtml()` 正是库自己的那一个（它取 `outerHTML`），
+       * 于是电子表格里的布尔列**永远显示未勾选**。核心的 `cellType` 路径是直接
+       * `appendChild(node)`，看不出这个差别，所以这个坑只在序列化路径上现形。
+       */
+      box.defaultChecked = !!value;
       box.checked = !!value;
       box.disabled = true;
       wrap.appendChild(box);

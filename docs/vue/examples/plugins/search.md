@@ -2,24 +2,6 @@
 
 启用内置搜索功能，使用 Cmd/Ctrl+F 打开搜索框查找单元格内容。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-}
-```
-
 ## 示例
 
 <PlaygroundHost framework="vue" example-id="vue-search" />
@@ -29,3 +11,15 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/vue/src/components/plugins/Search.vue
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `vtSearch()` | 全文搜索插件（Cmd/Ctrl+F 打开） | [插件机制](/vanilla/api/plugins) |
+| `--vt-highlight-bg` / `--vt-highlight-border` | 命中高亮配色 | [主题定制](/vue/examples/basic/theme) |
+| `locale.search` | 搜索框文案 | [表格配置 · i18n](/vanilla/api/table#国际化-i18n) |
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 Vue 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 VNode、`ref` 转发了哪些方法 —— 见 [Vue API](/vue/api/table)。

@@ -2,7 +2,7 @@
 
 行列双向虚拟化的高性能表格。十万级数据流畅滚动，同时把「一个后台管理系统的表格需求」补成完整闭环 —— 合并单元格、多级分组表头/表尾、固定行列、树形、分组、编辑器、插件化。
 
-📖 **[文档与在线示例](https://keno-lee.github.io/virt-table/)** · [Vanilla](https://keno-lee.github.io/virt-table/vanilla/guide/started) · [React](https://keno-lee.github.io/virt-table/react/guide/started) · [Vue](https://keno-lee.github.io/virt-table/vue/guide/started)
+📖 **[文档与在线示例](https://kolarorz.github.io/virt-table/)** · [Vanilla](https://kolarorz.github.io/virt-table/vanilla/guide/started) · [React](https://kolarorz.github.io/virt-table/react/guide/started) · [Vue](https://kolarorz.github.io/virt-table/vue/guide/started)
 
 ## 特性
 
@@ -49,19 +49,36 @@ const table = new VirtTable(container, {
 });
 ```
 
-React / Vue 用法见各自的[快速开始](https://keno-lee.github.io/virt-table/)。
+React / Vue 用法见各自的[快速开始](https://kolarorz.github.io/virt-table/)。
 
 ## 本地开发
 
 ```bash
 pnpm i
 pnpm dev          # 文档站 + 三端 demo 全起
-pnpm test         # 1040 个测试
+pnpm test         # 1189 个测试
 pnpm typecheck    # 3 个包 + 文档站 + 3 个 demo
 pnpm build        # 构建三个包（vanilla → react → vue）
 ```
 
 发布流程见 **[PUBLISHING.md](./PUBLISHING.md)**。
+
+### 付费插件（可选，不影响本仓库的开发）
+
+两个经典案例用到四个付费插件（`@virt-table-pro/*`，另一个私有仓库）：
+「电子表格」的**浮动图片 / 单元格公式 / 撤销重做**、「项目管理 WBS」的**甘特时间轴**。
+**没有那个仓库照样能完整开发**：付费能力会自动退回桩，表格照常跑、案例照常打开
+（电子表格少一张浮动图、偏差列回落成算好的纯值、公式栏与撤销按钮点了没反应；
+项目管理 WBS 少右边那层甘特条，左边那张任务表照旧）。
+
+```bash
+pnpm pro:build       # 有 pro 仓库时：去那边 build 一次，本地案例就能看到真插件
+pnpm verify:pro-leak # 公开产物里有没有付费源码痕迹（build:docs 末尾会自动跑）
+VT_PRO=off pnpm build:docs   # 强制构建一个完全不含付费能力的站点
+```
+
+本仓库**只消费付费包的 `dist`**（与客户拿到的字节一致），从不吃它的源码 ——
+方案与边界见 [`docs/apps/vanilla/src/pro/README.md`](./docs/apps/vanilla/src/pro/README.md)。
 
 ## 项目目录
 
@@ -99,7 +116,7 @@ pnpm build        # 构建三个包（vanilla → react → vue）
 表格能力全在 `vanilla` 里，两个封装包只做框架侧桥接（受控 props、`ref` 命令式 API、
 用框架组件渲染单元格）。插件与内置组件**与框架无关**，三端都直接从 vanilla 引。
 
-虚拟滚动内核复用 [virt-list](https://github.com/keno-lee/virt-list) 的 `@virt-list/core`，
+虚拟滚动内核复用 [virt-list](https://github.com/kolarorz/virt-list) 的 `@virt-list/core`，
 不在这里另造一份。
 
 ## 包入口一览
@@ -134,7 +151,7 @@ CDN（UMD 全量）：
 
 ## License
 
-[MIT](./LICENSE) © keno-lee
+[MIT](./LICENSE) © kolarorz(kolarorz@gmail.com)
 
 ## TODO（尚未实现 / 待补齐）
 
@@ -156,7 +173,7 @@ CDN（UMD 全量）：
   - 切片位置：管线里放在**结构展开之前**，切的是**根行** —— 树形/分组在切完的那一页上再展开，父节点不会和子节点被切到两页去（`total` 数的也是根行）。
   - 筛选后回到第 1 页（行集合变了），排序不重置页码；合计行算当前页；与 `infinite` 互斥；翻页后滚回顶部。
   - 三个 manual 开关至此对称：`manualSorting` / `manualFiltering` / `manualPagination` 各自让表格跳过管线里对应的一段。
-  - 页码与每页条数一并进 `getState()`/`setState()`（不含 `total`，它是派生的）。见 `docs/vanilla/examples/feature/pagination-client.md`。
+  - 页码与每页条数一并进 `getState()`/`setState()`（不含 `total`，它是派生的）。见 `docs/vanilla/examples/advanced/pagination-client.md`。
 - [x] **按值自动合并**：已支持。列上配 `mergeKey`（`true` 用 `row[key]`，或给函数自定义键 / 表达条件合并）即相邻同键自动纵向合并，`mergeMaxSpan` 限制段长。分段索引在数据管线末端建（`Int32Array`，100 万行 3.3ms / 781KB），每帧按渲染窗口裁剪 —— 因此**不禁用排序**（与静态 `merges` 的关键差别），10 万行滚动帧耗时零回归。**不做** el-table / vxe 式的逐格 `spanMethod`（虚拟滚动下要么 O(行×列) 全量求值，要么拿不到窗口外的段起点），理由见 `AGENTS.md` §3.1。框选会按合并块扩张成完整矩形（查真实段，选区可远超渲染窗口）；`getMerges()` 给静态配置、`getEffectiveMerges(begin?, end?)` 给真实生效的合并块（三端已转发）。见 `docs/vanilla/examples/merge/auto-merge.md`。
 - [x] **状态持久化**：已支持。`getState()` / `setState(state)` 覆盖列宽 / 列序 / 列显隐 / 排序 / 列头筛选 / 高级筛选，三端已转发。字段全可选，只应用出现的字段（「不给字段」= 保持现状、「给空值」= 清空），带 `version` 做跨版本作废，整套改动批量提交（一次列重建 + 一次管线重算）。分组表头下列序只在同组内还原。见 API 的「状态持久化」。
 - [x] **键盘覆盖**：已补齐。`PageUp` / `PageDown` 翻屏（步长 = 视口能放下的行数，实测 400px/40px → 10 行）、`Ctrl`（或 `Cmd`）`+Home` / `+End` 跳表首尾，Shift 组合同样扩选。**零核心改动**——步长按 `clientHeight / estimatedSize` 估，不读只在合并单元格下才维护的 `_inViewRowBegin`。
@@ -164,15 +181,15 @@ CDN（UMD 全量）：
 
 ### 曾经的缺口清单
 
-- [x] **分页（pagination）**：已支持（当时**仅服务端 UI 模式**，客户端分页见上方「当前缺口」里那条）。传 `pagination` option 渲染分页器（总数 + 每页条数 + 上/下页 + 页码 + 跳页），表格只派发 `onPageChange` 不做数据切片；`total` 外部提供，翻页时在回调里 `setList` + `setTotal`。方法 `setPage`/`setPageSize`/`setTotal`/`getPagination`(三端已转发)。见 `docs/vanilla/examples/feature/pagination.md`。
+- [x] **分页（pagination）**：已支持（当时**仅服务端 UI 模式**，客户端分页见上方「当前缺口」里那条）。传 `pagination` option 渲染分页器（总数 + 每页条数 + 上/下页 + 页码 + 跳页），表格只派发 `onPageChange` 不做数据切片；`total` 外部提供，翻页时在回调里 `setList` + `setTotal`。方法 `setPage`/`setPageSize`/`setTotal`/`getPagination`(三端已转发)。见 `docs/vanilla/examples/advanced/pagination.md`。
 - [x] **多级（分组）表头 / 表尾**：已支持。列配置带 `children` 即成列树，`header-group.ts` 把列树摊成表头网格，表头 / 表尾 / 表体共用同一份网格并一起横向虚拟化；分组格聚合 = 覆盖的「全部叶子列 × 全部行」摊平后聚合，分组标签用 CSS sticky 跟随横滚。见 `docs/vanilla/examples/basic/header-group.md` 与 API 的「多级分组表头 / 表尾」两节。
-- [x] **国际化 i18n**：已支持。所有内置 UI 文案收进 `locale` 字典，内置 `zhCN`（默认）/ `enUS`，`locale` option 深合并覆盖 + `setLocale()` 运行时切换（三端已转发）。见 `docs/vanilla/examples/feature/i18n.md`。
+- [x] **国际化 i18n**：已支持。所有内置 UI 文案收进 `locale` 字典，内置 `zhCN`（默认）/ `enUS`，`locale` option 深合并覆盖 + `setLocale()` 运行时切换（三端已转发）。见 `docs/vanilla/examples/advanced/i18n.md`。
 - [ ] **电子表格公式引擎**：`=SUM()` 等公式计算（独立大工程，范围外）。
-- [x] **服务端数据 / 无限滚动**：已支持。`remote.ts` 是纯状态机（`RemoteController` + `remote.test.ts`），两个入口一套内核：受控层 `onLoadMore` / `onLoadPrev(ctx)` 与糖层 `loadData(req)`；`manualSorting` / `manualFiltering` / `manualPagination` 三个细粒度开关（`dataMode: 'server'` 是三者的快捷方式）会让管线跳过对应阶段，改为重新取数；`infinite` 开无限滚动（down/up/both + manual 按钮态）。见 `docs/vanilla/examples/feature/server-data.md` 与 `feature/infinite.md`。
+- [x] **服务端数据 / 无限滚动**：已支持。`remote.ts` 是纯状态机（`RemoteController` + `remote.test.ts`），两个入口一套内核：受控层 `onLoadMore` / `onLoadPrev(ctx)` 与糖层 `loadData(req)`；`manualSorting` / `manualFiltering` / `manualPagination` 三个细粒度开关（`dataMode: 'server'` 是三者的快捷方式）会让管线跳过对应阶段，改为重新取数；`infinite` 开无限滚动（down/up/both + manual 按钮态）。见 `docs/vanilla/examples/advanced/server-data.md` 与 `feature/infinite.md`。
 
 ### 按值自动合并（已完成）
 
-分四步落地，机制说明见 `AGENTS.md` §3.1 与 §7.4（含实测数据），API 见 `docs/vanilla/api/index.md#按值自动合并-mergekey`。
+分四步落地，机制说明见 `AGENTS.md` §3.1 与 §7.4（含实测数据），API 见 `docs/vanilla/api/merge.md`。
 
 - [x] **第 1 步** — 段索引（`buildMergeRuns`，`Int32Array` 存段起点）+ 每帧窗口裁剪（`clampMergeRunsToWindow`）+ 列 `mergeKey` / `mergeMaxSpan` + 排序解禁 + 固定列守卫。
 - [x] **第 2 步** — 选区按**真实段**扩张（`findMergeRun`；选区可远超渲染窗口，用裁剪结果会被截断）+ `getMerges()` / `getEffectiveMerges(begin?, end?)`，三端已转发。顺带确认 `vtClipboard` / `vtExport` 从来不读合并信息，那边无需接线。
@@ -183,7 +200,7 @@ CDN（UMD 全量）：
 
 ### 插件化改造（进行中）
 
-把「可选的 UI / 交互层」从 5900 行的 `VirtTable` 主类搬进插件，实现按需引入与 tree-shaking。机制说明见 `AGENTS.md` §3.1，API 见 `docs/vanilla/api/index.md#插件机制`。
+把「可选的 UI / 交互层」从 5900 行的 `VirtTable` 主类搬进插件，实现按需引入与 tree-shaking。机制说明见 `AGENTS.md` §3.1，API 见 `docs/vanilla/api/plugins.md`。
 
 **已完成**
 
@@ -193,15 +210,19 @@ CDN（UMD 全量）：
 - [x] **`vtExport`** — 导出 CSV/Excel + 打印（约 130 行，纯命令式无 UI）。
 - [x] **`vtClipboard`** — 选区复制/粘贴（约 230 行，需 `enableCellSelection`）。
 - [x] **`vtSearch`** — Ctrl/Cmd+F 搜索（约 300 行 + 独立 CSS）。搜索词作为**查询状态**留在核心（`setSearchTerm`/`getSearchTerm`，进 `RemoteQuery.search`），搜索框 UI 与命中高亮在插件。
-- [x] **`vtColumnPanel`** — 列设置面板（140 行 + 独立 CSS）。用 `onColumnsChanged` 钩子同步勾选态。复用核心的 `.vt-filter-*` 通用面板样式（那批类同时被列头筛选与 `VtFilterBuilder` 使用，不属于任何单个插件）。
+- [x] **`vtFieldConfig`** — 字段配置面板：勾选显隐 + 拖手柄换序（独立 CSS）。用 `onColumnsChanged` 钩子同步勾选态。复用核心的 `.vt-filter-*` 通用面板样式（那批类同时被列头筛选与 `VtFilterBuilder` 使用，不属于任何单个插件）。原 `vtColumnPanel`（只有显隐）与工具栏内置的那份合并成了这一个，`reorder: false` 退回纯显隐那一档。
+- [x] **`vtFilterConfig` / `vtGroupConfig` / `vtSortConfig`** — 高级筛选 / 分组 / 排序三个面板插件。与上面那个一样有**两种归宿**：装了 `vtToolbar` 就注册成工具栏上的一颗按钮，没装就自己开浮层（`toggleSortConfig(anchor)` 那组 API），两条路是同一份面板实现。面板基元在 `internal/panel-ui.ts`（不装工具栏也要用），浮层壳在 `internal/panel-popup.ts`。
+- [x] **`vtToolbar` 改为空货架**（2026-08-21）—— 工具栏不再自带任何面板项，`vtToolbarPanels()` 提供「那四个面板」的一行预设。推翻「自带四项 + 同 key 覆盖」那一版：贡献点因付费插件必须存在（核心不可能认识甘特配置按钮），内置面板走另一条路就是两套心智；顺带摆脱了「只要排序面板也得吞下筛选管理器 14KB CSS」与「`canToggleColumn` 两处入口」。
+- [x] **`vtRowHeightConfig`** — 行高设置：低 / 中 / 高三档（独立 CSS）。一档同时换密度类与虚拟化行高（30 / 40 / 50，三个数是各档行高等式的解），**只在 `fixedSize: true` 下开放**。落地走核心新增的 `setRowHeight(px)`：它要同时更新使用方那份 `estimatedSize`、虚拟化账本的热快照并重算总高。另派发 `onRowHeightChanged` 给依赖表头几何的插件（付费甘特靠它重解表头内边距）。
 - [x] **`vtCellSelection`** — 单元格框选 + 边缘自动滚动（240 行 + 独立 CSS）。`provide('cellSelection')` 供 4 个插件 inject。**几何换算留核心**（`getSelectionRect` / `expandSelectionForMerges` / `cellFromPoint`）——它们依赖列宽前缀和、固定列偏移与行 DOM 映射，搬进插件就得把那批私有几何全暴露。为它新增了 `onRendered` 钩子（整帧渲染完成）。
 - [x] **`vtKeyboardNav`** — 键盘导航（100 行，`requires: ['vtCellSelection']`，可选 inject `cellEditor` 响应 F2）。**它无法留在核心**：焦点位置就是选区、焦点框就是选区 overlay，框选迁出后它没有状态可依附。
 - [x] **`vtCellEditor`** — 编辑浮层（185 行 + 独立 CSS）。`provide('cellEditor')`。顺带修掉了原先无条件创建 overlay + 绑 4 个监听的浪费。
 - [x] **`vtColumnFilter`** — 列头筛选下拉（215 行，无独立 CSS）。表头漏斗图标走 `onHeaderCellRendered`；筛选状态与谓词留核心（查询状态，进 `RemoteQuery.filters`），所以不装插件时 `setColumnFilter()` 与列上的 `filters[].checked` 初值依然有效。
-- [x] **`vtColumnDrag` / `vtRowDrag`** — 列/行拖拽排序（235 行 + 独立 CSS，同一模块）。重排逻辑留核心（`moveColumn` / `moveRow` / `canReorderRows`，依赖列树与 `_originList`），插件只管手势、ghost 与落点指示线。
+- [x] **`vtColumnDrag` / `vtRowDrag`** — 列/行拖拽排序（同一模块 + 独立 CSS）。行拖拽**支持树形与分组**：落点分上/下/中三档（中档 = 成为子节点或落进分组），行与行之间由指针横向位置决定插入层级，`crossLevel: false` 退化为同级拖拽。重排逻辑留核心（`moveColumn` / `moveRowTo` / `canDropRow` / `canReorderRows`，依赖列树与 `_originList` 的 children 结构），插件只管手势、ghost、指示线与落点归约。
 - [x] **`vtAIQuery`** — 自然语言查询（插件 ~330 行 + 独立 CSS，纯逻辑 `ai-query.ts` ~430 行单独成入口）。一句话 → 筛选/排序/列显隐。**不发网络请求、不绑任何模型厂商**：插件负责「表格 → schema」与「模型 JSON → 校验纠错 → `setState()`」两端，中间调模型由使用方的 `resolve` 回调实现（同 `remote.ts` 做成受控层的理由）。校验层是重点——核心的筛选求值刻意宽容（未知列视为通过），模型幻觉出列名时会变成「筛了却没效果」，所以必须在应用前拦下来。纯逻辑层单独开 `@virt-table/vanilla/ai-query` 入口，零 CSS 零 DOM，可在服务端预校验。机制与取舍见 `AGENTS.md` §7.18。
 - [x] **`vtAIStream`** — 流式表格（插件 ~300 行 + 独立 CSS，纯逻辑 `infer-columns.ts` ~230 行单独成入口）。补的是现有表格库两条隐含假设的反面：**列不是预先定义的**（首批数据到达时 `inferColumns()` 推断类型/标题/宽度/对齐）、**数据不是一次性给全的**（`consumeAIStream()` 吃任何 `AsyncIterable`，攒帧落地 + stick-to-bottom 跟随）。逐行 `appendRows` 会逐行走管线，所以缓冲到一帧只落一次；`maxRowsPerFlush` 防止一批两万行撑爆一帧。见 `AGENTS.md` §7.20。
 - [x] **`vtAIColumn`** — AI 列（~330 行 + 独立 CSS）。一列的值由模型从同行其他列算出，`compute` 返回 `AsyncIterable<string>` 即逐段写进单元格。**虚拟化在这件事上是决定性优势**：一列 AI 值在 10 万行表上全量跑是 10 万次模型调用，而屏幕上只有二十来行——所以默认只为渲染窗口内的行付钱，滚走的行 abort 在途请求（CDP 实测：5 万行表滚过 6 屏 = 45 次调用）。见 `AGENTS.md` §7.20。
+- [x] **`vtFloatingImage`** — 全表浮动图片，**已整包移到付费仓库** `@virt-table-pro/floating-image`（内容坐标系里摆图：拖动 + 边缘自动滚动 / 四角缩放 / 旋转 / 点开看大图）。留在核心的只有一个**新开的公开子路径** `@virt-table/vanilla/components/image-viewer` —— 图片查看器与内置组件 `VtImage` 共用一份实现，付费插件按 open-core 的规矩只吃公开契约、不碰 `_xxx`。公开文档站的电子表格案例仍然演示它（走「可选 alias + 桩」+ 域名绑定的演示密钥）。见 `AGENTS.md` §7.23；同一套方式又接上了 `@virt-table-pro/formula`（单元格公式）与 `@virt-table-pro/undo`（撤销/重做），见 §7.25。
 - [x] **抽出两个 internal 共享工具** — `internal/drag.ts`（`startDrag` / `swallowNextClick`，列宽 resize + 两个拖拽插件共用）、`internal/auto-scroll.ts`（边缘自动滚动，框选 + 行拖拽共用，原先是核心里一个靠 `_cellSelecting || _draggingRow` 双标志判断的 rAF 循环）。
 - [x] **文档站「插件」分组** — 13 个插件示例（vanilla）/ 5 个（vue、react）集中在侧边栏「插件」组，条目按 `插件名 + 中文` 命名；目录结构与侧边栏一致（`docs/*/examples/plugins/` + `docs/apps/*/src/components/plugins/`）。归类标准是「示例主题就是某个插件」——`cell-type-render`（`_cellRenders`）、`validate`（`validator`）、`filter-builder`（独立 Web Component）、`spreadsheet`（实验模式）只是顺带装了插件，仍留原分组。
 
@@ -244,7 +265,7 @@ JS 侧对 Rollup 用户是持平的——旧版是单文件 bundle，Rollup 本�
 
 ### 工程 / 文档待办
 
-- [ ] **三端示例同步**：多数增强功能与插件示例目前仅有 **Vanilla** playground（loading / 键盘导航 / 列拖拽 / 行拖拽 / 合计 / ARIA / radio / 校验 / 富筛选 / 固定行，以及插件里的 `vtExport` / `vtClipboard` / `vtColumnPanel`）；`docs/apps/{react,vue}` 的 `feature/` 与 `plugins/` 尚未补齐。
+- [ ] **三端示例同步**：多数增强功能与插件示例目前仅有 **Vanilla** playground（loading / 键盘导航 / 列拖拽 / 行拖拽 / 合计 / ARIA / radio / 校验 / 富筛选 / 固定行，以及插件里的 `vtExport` / `vtClipboard` / `vtFieldConfig`）；`docs/apps/{react,vue}` 的 `feature/` 与 `plugins/` 尚未补齐。
 - [ ] **DOM 层自动化测试**：环境已就绪（`happy-dom` + 按文件 `// @vitest-environment` 开启，`renderControl` 钉渲染窗口代替 stub 几何，写法见 `AGENTS.md` §5.1），首个文件是 `merge.dom.test.ts`（20 个用例覆盖自动合并的 DOM 产出 / 长段不打穿虚拟化 / 排序与结构联动 / 对外接口）。已有 `internal/drag.dom.test.ts`（10 个用例覆盖 Pointer Events 手势基元）。**仍缺**：键盘导航、loading、主题切换、pinned 行、tooltip 悬停、触屏手势（这些靠 playground + CDP 手测，见 `AGENTS.md` §7.7）。
 
 > 补齐任一功能的改动链路见 `AGENTS.md` §6 末尾说明。

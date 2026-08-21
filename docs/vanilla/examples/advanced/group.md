@@ -2,25 +2,15 @@
 
 通过 `groupConfig` 按字段分组展示数据，支持多级分组与展开/收起。
 
-## 使用的 API
+## 示例
 
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-}
+<PlaygroundHost framework="vanilla" example-id="table-group" />
 
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-  groupConfig: { field: string; sort?: 'asc' | 'desc' }[];  // 分组配置
-  defaultExpandAll: boolean;  // 默认展开所有展开行
-}
-```
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/vanilla/src/components/advanced/group.ts
+:::
 
 ## 分组行外观
 
@@ -41,12 +31,14 @@ type Options = {
 }
 ```
 
-## 示例
+## 相关 API
 
-<PlaygroundHost framework="vanilla" example-id="table-group" />
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `groupConfig` | `{ field, sort? }[]`，按字段层级分组 | [表格配置](/vanilla/api/table#virttableoptions) |
+| `onGroupToggle` / `toggleFold` | 折叠回调与编程控制 | [实例方法](/vanilla/api/instance) |
+| `defaultExpandAll` | 默认全部展开 | [表格配置](/vanilla/api/table#virttableoptions) |
 
-## 源码
+分组行是**整行接管**（接管层），不进单元格内容链 —— 见[渲染粒度](/vanilla/examples/cell/render-levels#四层)。
 
-::: details 点击查看源码
-<<< @/apps/vanilla/src/components/advanced/group.ts
-:::
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。

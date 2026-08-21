@@ -2,24 +2,6 @@
 
 通过 `border: true` 为表格显示边框。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-}
-```
-
 ## 示例
 
 <PlaygroundHost framework="react" example-id="react-border" />
@@ -29,3 +11,13 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/react/src/components/basic/Border.tsx
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `border` | 是否显示边框（表格外框 + 单元格分隔线） | [表格配置](/vanilla/api/table#virttableoptions) |
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 React 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 JSX、`ref` 转发了哪些方法 —— 见 [React API](/react/api/table)。

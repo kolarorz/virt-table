@@ -2,33 +2,6 @@
 
 通过 `align`、`vAlign` 设置列的水平和垂直对齐方式。使用 `headerAlign`、`headerVAlign`、`footerAlign`、`footerVAlign` 分别覆盖表头和表尾的对齐。通过 `cellStyle` 可以为单个单元格独立设置对齐。
 
-## 使用的 API
-
-```ts
-type Column = {
-  align: 'left' | 'center' | 'right';  // 列的水平对齐
-  vAlign: 'top' | 'middle' | 'bottom';  // 列的垂直对齐
-  headerAlign: 'left' | 'center' | 'right';  // 覆盖表头的水平对齐
-  headerVAlign: 'top' | 'middle' | 'bottom';  // 覆盖表头的垂直对齐
-  footerAlign: 'left' | 'center' | 'right';  // 覆盖表尾的水平对齐
-  footerVAlign: 'top' | 'middle' | 'bottom';  // 覆盖表尾的垂直对齐
-}
-
-type Options = {
-  align: 'left' | 'center' | 'right';  // 全局水平对齐
-  vAlign: 'top' | 'middle' | 'bottom';  // 全局垂直对齐
-  headerAlign: 'left' | 'center' | 'right';  // 全局表头水平对齐
-  headerVAlign: 'top' | 'middle' | 'bottom';  // 全局表头垂直对齐
-  footerAlign: 'left' | 'center' | 'right';  // 全局表尾水平对齐
-  footerVAlign: 'top' | 'middle' | 'bottom';  // 全局表尾垂直对齐
-  cellStyle: (column, row) => string;  // 单元格级别样式回调
-}
-```
-
-## 优先级
-
-`column.headerAlign > column.align > options.headerAlign > options.align`
-
 ## 示例
 
 包含两个表格：列级对齐（headerAlign/footerAlign 覆盖 align）和单元格独立对齐（cellStyle 回调）。
@@ -40,3 +13,20 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/react/src/components/basic/Align.tsx
 :::
+
+## 优先级
+
+`column.headerAlign > column.align > options.headerAlign > options.align`
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `align` / `vAlign` | 表身对齐（全局 + 列级覆盖） | [列配置](/vanilla/api/column#virttablecolumn) |
+| `headerAlign` / `headerVAlign` | 表头对齐 | [列配置](/vanilla/api/column#virttablecolumn) |
+| `footerAlign` / `footerVAlign` | 表尾对齐 | [列配置](/vanilla/api/column#virttablecolumn) |
+| `cellStyle` / `cellClass` | 逐格样式回调（容器层，一律叠加） | [表格配置](/vanilla/api/table#virttableoptions) |
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 React 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 JSX、`ref` 转发了哪些方法 —— 见 [React API](/react/api/table)。

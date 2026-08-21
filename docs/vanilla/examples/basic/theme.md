@@ -2,21 +2,23 @@
 
 通过 `theme` 选项或 `setTheme()` 方法显式切换亮色 / 暗色。表格样式基于 `.vt-root` 上的 `--vt-*` CSS 变量，暗色下自动套用暗色 token。
 
+## 示例
+
+<PlaygroundHost framework="vanilla" example-id="table-theme" />
+
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/vanilla/src/components/basic/theme.ts
+:::
+
+## 说明
+
 > 除显式切换外，表格处于 `.dark` 祖先元素下（如 VitePress / Tailwind 暗色）会自动应用暗色，无需手动设置。
 
-## 使用的 API
-
 ```ts
-type Options = {
-  list: T[];
-  itemKey: string;
-  estimatedSize: number;
-  theme?: 'light' | 'dark';   // 初始主题
-};
-
-// 实例方法：运行时切换
-table.setTheme('dark');
-table.setTheme('light');
+new VirtTable(el, { list, columns, itemKey: 'id', estimatedSize: 40, theme: 'dark' });
+table.setTheme('light');   // 运行时切换
 ```
 
 ## 主题定制（CSS 变量）
@@ -141,12 +143,18 @@ root 自己的声明挡住、**完全失效**（实测：父元素上 `--vt-line
 .vt-root--light { }
 ```
 
-## 示例
+### 单元格组件也受行高约束
 
-<PlaygroundHost framework="vanilla" example-id="table-theme" />
+[内置单元格组件](/vanilla/examples/cell/vt-input)的展示元素一律锁高在 `var(--vt-line-height)` 上
+并配 `vertical-align: top`。这不是风格偏好：撑出 22px 就把 40px 的行高顶成 42，`estimatedSize`
+与实际行高对不上，回到上面那条等式失效的后果。`components-contract.test.ts` 静态扫描
+`components.css` 守着这条，**自定义组件样式时请一并遵守**。
 
-## 源码
+## 相关 API
 
-::: details 点击查看源码
-<<< @/apps/vanilla/src/components/basic/theme.ts
-:::
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `options.theme` | 初始主题 `'light' \| 'dark'` | [表格配置 · 主题](/vanilla/api/table#主题) |
+| `setTheme(theme)` | 运行时切换 | [实例方法](/vanilla/api/instance) |
+| `options.estimatedSize` | 行预估高度，**必须与密度档的实际行高一致** | [表格配置](/vanilla/api/table#virttableoptions) |
+| `headerClass` / `rowClass` / `cellClass` / `*Style` | 逐行 / 逐格挂类名与内联样式 | [表格配置](/vanilla/api/table#virttableoptions) |

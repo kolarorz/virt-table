@@ -2,26 +2,6 @@
 
 通过 `fixed` 冻结左右列，并结合 `merges` 实现表身单元格合并。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-  fixed: 'left' | 'right';  // 冻结列方向
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-  merges: MergeCell[];  // 表身合并单元格
-}
-```
-
 ## 示例
 
 <PlaygroundHost framework="vue" example-id="vue-fixed" />
@@ -31,3 +11,16 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/vue/src/components/basic/Fixed.vue
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `col.fixed` | `'left' \| 'right'`；写在分组上会下发给全部后代 | [列配置](/vanilla/api/column#virttablecolumn) |
+| `--vt-fixed-shadow-color` / `-size` | 固定列阴影 | [主题定制](/vue/examples/basic/theme) |
+
+固定列不在合并坐标系里（`merges` 的 `colIndex` 只数非固定列），见[坐标系](/vue/guide/notes#合并单元格的坐标系)。
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 Vue 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 VNode、`ref` 转发了哪些方法 —— 见 [Vue API](/vue/api/table)。

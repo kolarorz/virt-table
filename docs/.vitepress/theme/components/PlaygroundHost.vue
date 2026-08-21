@@ -28,10 +28,26 @@ let currentApp: MicroApp | null = null;
 const isDev = (import.meta as ImportMeta & { env: { DEV: boolean } }).env.DEV;
 
 const base = (import.meta as any).env.BASE_URL || '/';
-const appEntries: Record<FrameworkKind, string> = {
-  vanilla: isDev ? 'http://localhost:7901/' : `${base}micro-apps/vanilla/`,
-  vue: isDev ? 'http://localhost:7902/' : `${base}micro-apps/vue/`,
-  react: isDev ? 'http://localhost:7903/' : `${base}micro-apps/react/`,
+
+const devPorts: Record<FrameworkKind, number> = {
+  vanilla: 7901,
+  vue: 7902,
+  react: 7903,
+};
+
+/**
+ * dev 下微应用 entry 必须跟随当前页面的 origin：写死 localhost 时，
+ * 从局域网 IP 打开文档站会让浏览器去请求**访问者自己**的 localhost:790x，
+ * 直接 failed to fetch。用 location 的协议 + hostname 拼端口即可两种入口都通。
+ */
+const resolveEntry = (fw: FrameworkKind): string => {
+  if (!isDev) return `${base}micro-apps/${fw}/`;
+  // SSR 阶段没有 window，兜底回 localhost（entry 只在浏览器里被真正使用）
+  const { protocol, hostname } =
+    typeof window === 'undefined'
+      ? { protocol: 'http:', hostname: 'localhost' }
+      : window.location;
+  return `${protocol}//${hostname}:${devPorts[fw]}/`;
 };
 
 const appNames: Record<FrameworkKind, string> = {
@@ -86,7 +102,7 @@ const mountApp = async () => {
     // 先存局部常量：currentApp 是被多个闭包写入的 let，await 后类型收窄会失效
     const app = api.loadMicroApp({
       name: appNames[targetFramework],
-      entry: appEntries[targetFramework],
+      entry: resolveEntry(targetFramework),
       container: containerRef.value,
       props: {
         framework: targetFramework,

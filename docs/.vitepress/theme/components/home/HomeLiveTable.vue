@@ -57,18 +57,31 @@ let windowStart = 0;
  * 10 万行要在一帧里造完，所以**除了编号列，所有值都从池里按下标取引用**——
  * 没有 per-cell 的字符串拼接，也没有 Date 格式化。
  * -------------------------------------------------------------------------- */
-const STATUSES = [
-  { label: '运行中', color: '#10b981' },
-  { label: '排队', color: '#f59e0b' },
-  { label: '已完成', color: '#2563eb' },
-  { label: '失败', color: '#ef4444' },
-  { label: '已暂停', color: '#8b5cf6' },
+/**
+ * 状态 / 优先级走内置 `VtTag` 的**字典**（`options`：值 → 文案 + 配色）。
+ *
+ * 行里存的是 code（`'run'` / `'P0'`），不是 `{ label, color }` 对象 —— 这才是真实
+ * 业务里的形状，也正好演到字典这层能力：颜色优先级只有 `_tag-chip.ts` 一处实现
+ * （`options[].color` > `options[].variant` > 列级 `color` > 列级 `variant` > 默认主色），
+ * 所以「纯展示的标签」与「选出来的标签」必然长得一样。
+ *
+ * 为什么不是 `VtSelect({ display: 'tag', disabled: true })`：那两者渲染结果**逐字符相同**
+ * （实测过），但 `VtSelect.options` 是候选集且必填，只读场景会写成
+ * `options: [], disabled: true` —— 候选集为空、照样显示值、又不给选。分界线是
+ * 「有没有候选集」而不是「能不能编辑」，见 api/components.md 里那张决策表。
+ */
+const STATUS = [
+  { value: 'run', label: '运行中', color: '#10b981' },
+  { value: 'queued', label: '排队', color: '#f59e0b' },
+  { value: 'done', label: '已完成', color: '#2563eb' },
+  { value: 'failed', label: '失败', color: '#ef4444' },
+  { value: 'paused', label: '已暂停', color: '#8b5cf6' },
 ];
-const PRIORITIES = [
-  { label: 'P0', color: '#ef4444' },
-  { label: 'P1', color: '#f59e0b' },
-  { label: 'P2', color: '#2563eb' },
-  { label: 'P3', color: '#98a2b3' },
+const PRIORITY = [
+  { value: 'P0', label: 'P0', color: '#ef4444' },
+  { value: 'P1', label: 'P1', color: '#f59e0b' },
+  { value: 'P2', label: 'P2', color: '#2563eb' },
+  { value: 'P3', label: 'P3', color: '#98a2b3' },
 ];
 const OWNERS = ['陈昱', '林洛', '赵斯', '孙茗', '周砚', '吴桉', '郑玥', '钱屿'];
 const TEAMS = ['数据平台', '交易中台', '风控引擎', '增长实验', '基础架构', '结算'];
@@ -105,8 +118,8 @@ function buildRows() {
       id: i,
       code: 'JOB-' + (100000 + i),
       job: JOBS[i % JOBS.length],
-      status: STATUSES[(i * 3) % STATUSES.length],
-      priority: PRIORITIES[i % PRIORITIES.length],
+      status: STATUS[(i * 3) % STATUS.length].value,
+      priority: PRIORITY[i % PRIORITY.length].value,
       owner: OWNERS[i % OWNERS.length],
       /**
        * team / region 逐行轮换（`i % N`）而不是成段。
@@ -128,22 +141,39 @@ function buildRows() {
   return rows;
 }
 
-function buildColumns() {
+/**
+ * 内容列尽量用**内置单元格组件**（`VtProgress` 进度条、`VtPerson` 人员），不自己写一套。
+ *
+ * 它是动态 import 进来的（与 VirtTable 同一批），所以只能当参数传进来 ——
+ * 首页在进入视口前不加载任何表格代码，这条不能破。
+ *
+ * 为什么不再手写 `render` + 一段 `.vth-bar` CSS（原来就是那样）：
+ * 1. 首页「能力全景」写着「18 个内置单元格组件」（当时是 17 个），而两张 demo 一个都没用 ——
+ *    照着首页抄的人会以为进度条得自己画；
+ * 2. 内置组件的公共外层 `.vt-comp-cell` 把高度锁在 `var(--vt-line-height)` 上，
+ *    并且有 `components-contract.test.ts` 守着（连修饰类都不许重新声明 height）。
+ *    手写那套没人守 —— 汇总带 pill 撑高行、把 `fixedSize` 的账本顶出几像素缝
+ *    那个 bug，就是从这个缺口进来的。
+ *
+ * 渐变照旧：`--vt-comp-progress-color` 落在 `background`（不是 `background-color`）上，
+ * 所以 `color` 直接收一个 `linear-gradient()`，不需要给组件加任何 API。
+ */
+type Comps = typeof import('@virt-table/vanilla/components');
+
+function buildColumns({ VtProgress, VtPerson, VtTag }: Comps) {
   return [
     { key: '_idx', title: '#', type: 'index', width: 56, fixed: 'left', align: 'center' },
     { key: 'code', title: '任务编号', width: 116, fixed: 'left' },
     { key: 'team', title: '团队', width: 104 },
     { key: 'job', title: '任务', width: 168 },
-    { key: 'status', title: '状态', width: 100, cellType: 'option' },
-    { key: 'priority', title: '优先级', width: 88, cellType: 'option', align: 'center' },
-    {
+    VtTag({ key: 'status', title: '状态', width: 100, options: STATUS }),
+    VtTag({ key: 'priority', title: '优先级', width: 88, options: PRIORITY, align: 'center' }),
+    VtProgress({
       key: 'progress',
       title: '进度',
       width: 132,
-      // 返回字符串 → 走 innerHTML。只有渲染窗口内的格子会调用（约 20 行 × 1 列）
-      render: ({ value }: { value: number }) =>
-        `<span class="vth-bar"><i style="width:${value}%"></i></span><b>${value}%</b>`,
-    },
+      color: 'linear-gradient(90deg, var(--vtd-primary, #2563eb), #22d3ee)',
+    }),
     { key: 'qps', title: '吞吐 / s', width: 100, cellType: 'number', align: 'right' },
     {
       key: 'p95',
@@ -159,7 +189,7 @@ function buildColumns() {
       align: 'right',
       render: ({ value }: { value: number }) => `${(value / 100).toFixed(2)}%`,
     },
-    { key: 'owner', title: '负责人', width: 92 },
+    VtPerson({ key: 'owner', title: '负责人', width: 92 }),
     { key: 'region', title: '地域', width: 116 },
     { key: 'updatedAt', title: '更新时间', width: 132 },
     { key: 'note', title: '备注', width: 300, textOverflow: 'tooltip' },
@@ -308,8 +338,11 @@ function backToTop() {
 
 /* -------------------------------------------------------------------------- */
 onMounted(async () => {
-  const [{ VirtTable }] = await Promise.all([
+  const [{ VirtTable }, comps] = await Promise.all([
     import('@virt-table/vanilla'),
+    // 内置单元格组件走自己的子路径入口；它的样式由 components.css 随模块自带，
+    // 使用方不需要再引一份 CSS（`components/shared.ts` 顶部就 import 了它）
+    import('@virt-table/vanilla/components'),
     // 样式与实现分开引，与文档里给用户的用法逐字一致（alias 见 .vitepress/config.ts）
     import('@virt-table/vanilla/core.css'),
   ]);
@@ -321,7 +354,7 @@ onMounted(async () => {
 
   table.value = new VirtTable(mount, {
     list: buildRows(),
-    columns: buildColumns() as any,
+    columns: buildColumns(comps) as any,
     itemKey: 'id',
     estimatedSize: ROW_H,
     buffer: 4,
@@ -431,28 +464,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style>
-/**
- * 进度条列的 render 产物。**不能用 scoped** —— 这些节点由 VirtTable 用 innerHTML 写进
- * `<td>`，拿不到 Vue 的 `data-v-*` 属性。所以走 `.vth-bar` 这个专属类名，
- * 且刻意不出现任何裸元素选择器（首页里嵌的是真表格，见文件头注第 3 条）。
- */
-.vth-bar {
-  display: inline-block;
-  width: 56px;
-  height: 5px;
-  margin-right: 7px;
-  border-radius: 999px;
-  background: var(--vtd-bg-mute, #eef1f5);
-  overflow: hidden;
-  vertical-align: middle;
-}
-
-.vth-bar > i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--vtd-primary, #2563eb), #22d3ee);
-}
-</style>

@@ -19,9 +19,18 @@ const MARKER_ATTR = 'data-vp-example';
  * `display: block`、把单元格内边距顶成 8/16px，colgroup 列宽体系与虚拟滚动的
  * 行高账本一起崩（详见 styles/styles-contract.test.ts 的头注）。
  *
- * 所以**新增任何嵌 demo 的路径都要登记到这里**，`/ai/` 就是这么进来的。
+ * 所以**新增任何嵌 demo 的路径都要登记到这里**，`/ai/` 与 `/enterprise/` 都是这么进来的。
+ *
+ * 漏登记的症状很好认，但**不会报错**：表头高度不对、表头与表身之间多出 1px 缝
+ * （`.vp-doc th` 的 `border-bottom` 与 8/16px 内边距）。付费插件的文档页就漏过一次 ——
+ * 那些页比 `/examples/` 的重得多（250~530 行参考文档），当时误以为「摘掉 .vp-doc 会毁掉
+ * 排版」而没登记。其实不会：`[data-vp-example]` 是 vp-doc 的**全量替代**（除表格规则），
+ * 而 markdown 表格走 `.vtd-table`，两个容器下都生效。
+ *
+ * `/enterprise/` 这一条同时覆盖了无框架维度的定价页（它不嵌 demo）。那一页因此也走
+ * `[data-vp-example]` —— 由于是全量替代，观感不变。
  */
-const DEMO_HOSTING_SEGMENTS = ['/examples/', '/ai/'];
+const DEMO_HOSTING_SEGMENTS = ['/examples/', '/ai/', '/demos/', '/enterprise/'];
 const isExamplePage = (path: string): boolean =>
   DEMO_HOSTING_SEGMENTS.some((seg) => path.includes(seg));
 

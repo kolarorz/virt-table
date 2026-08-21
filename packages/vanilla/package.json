@@ -1,18 +1,18 @@
 {
   "name": "@virt-table/vanilla",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "行列双向虚拟化的高性能表格，零框架依赖：合并单元格、分组表头/表尾、固定行列、树形、编辑器、插件化",
   "type": "module",
   "license": "MIT",
-  "author": "keno-lee <keno.lee@foxmail.com>",
-  "homepage": "https://keno-lee.github.io/virt-table/",
+  "author": "kolarorz <kolarorz@gmail.com>",
+  "homepage": "https://kolarorz.github.io/virt-table/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/keno-lee/virt-table.git",
+    "url": "git+https://github.com/kolarorz/virt-table.git",
     "directory": "packages/vanilla"
   },
   "bugs": {
-    "url": "https://github.com/keno-lee/virt-table/issues"
+    "url": "https://github.com/kolarorz/virt-table/issues"
   },
   "keywords": [
     "virtual-table",
@@ -60,6 +60,17 @@
       "require": { "types": "./dist/components/index.d.cts", "default": "./dist/components/index.cjs" }
     },
     "./components/index.css": "./dist/components/index.css",
+    "./components/image-viewer": {
+      "import": {
+        "types": "./dist/components/image-viewer.d.ts",
+        "default": "./dist/components/image-viewer.js"
+      },
+      "require": {
+        "types": "./dist/components/image-viewer.d.cts",
+        "default": "./dist/components/image-viewer.cjs"
+      }
+    },
+    "./components/image-viewer.css": "./dist/components/image-viewer.css",
     "./components/vt-filter-builder": {
       "import": {
         "types": "./dist/components/vt-filter-builder.d.ts",
@@ -74,6 +85,10 @@
     "./infer-columns": {
       "import": { "types": "./dist/infer-columns.d.ts", "default": "./dist/infer-columns.js" },
       "require": { "types": "./dist/infer-columns.d.cts", "default": "./dist/infer-columns.cjs" }
+    },
+    "./scrollbar": {
+      "import": { "types": "./dist/scrollbar.d.ts", "default": "./dist/scrollbar.js" },
+      "require": { "types": "./dist/scrollbar.d.cts", "default": "./dist/scrollbar.cjs" }
     },
     "./ai-query": {
       "import": { "types": "./dist/ai-query.d.ts", "default": "./dist/ai-query.js" },

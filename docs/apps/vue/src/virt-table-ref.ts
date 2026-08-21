@@ -53,6 +53,7 @@ export type VirtTableVueInstance = {
   // ---- 展开 / 树形 ----
   toggleExpand: (rowKey: string) => void;
   toggleFold: (rowKey: string) => void;
+  isFolded: (rowKey: string) => boolean | undefined;
   expandAll: () => void;
   collapseAll: () => void;
   // ---- 筛选 ----
@@ -105,10 +106,18 @@ export type VirtTableVueInstance = {
   nextMatch: () => void;
   prevMatch: () => void;
   getSearchMatches: () => any[];
-  toggleColumnPanel: (anchor?: HTMLElement) => void;
-  openColumnPanel: (anchor?: HTMLElement) => void;
-  closeColumnPanel: () => void;
-  isColumnPanelOpen: () => boolean;
+  toggleFieldConfig: (anchor?: HTMLElement) => void;
+  openFieldConfig: (anchor?: HTMLElement) => void;
+  closeFieldConfig: () => void;
+  isFieldConfigOpen: () => boolean;
+  // ---- 工具栏（vtToolbar）----
+  toggleToolbarPanel: (key: string, anchor?: HTMLElement) => void;
+  openToolbarPanel: (key: string, anchor?: HTMLElement) => void;
+  closeToolbarPanel: () => void;
+  isToolbarPanelOpen: (key?: string) => boolean;
+  /** 返回反注册函数 —— 组件卸载时要调，否则热更新会越加越多 */
+  registerToolbarItem: (item: any) => () => void;
+  refreshToolbar: () => void;
   getCellSelection: () => { startRow: number; startCol: number; endRow: number; endCol: number } | null;
   setCellSelection: (range: any | null) => void;
   clearCellSelection: () => void;

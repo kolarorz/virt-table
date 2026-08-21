@@ -12,13 +12,19 @@
 .vt-th--draggable {
   cursor: grab;
   /*
-   * 触屏：横向手势交给我们（列拖拽本来就是横向的），纵向留给浏览器滚动。
+   * 触屏：两条轴都不给浏览器。横向归列拖拽（本来就是横向手势），纵向归
+   * `InputController` 的表格滚动 —— 表头是它的输入源（见核心 `index.ts` 的 `sources`）。
    *
-   * 不能用 `none` —— 那会连纵向滚动一起吃掉。用 `pan-y` 的代价是「在表头上横滑
-   * 滚动表格」失效，但装了 vtColumnDrag 就等于声明了「拖表头 = 换列序」，两个横向
-   * 手势本来就冲突，只能选一个；表体上横滑照旧可用。
+   * 曾经是 `pan-y`，注释写着「纵向留给浏览器滚动」。那个前提在纵向改由 JS 接管之后
+   * 就不成立了：表头是 `absolute` 挂在根上的浮层，浏览器眼里它不在任何可滚容器里，
+   * 放行纵向 pan 只会去滚**外层页面**（那正是「表头上滑不动表格」的一半原因）。
+   *
+   * 两个横向手势的冲突照旧只能选一个：装了 vtColumnDrag 就等于声明「拖表头 = 换列序」，
+   * 表头上横滑不再横滚表格（表体上照旧）。纵向不受影响 —— 插件对 `startDrag` 传了
+   * `axis: 'x'`，纵滑压根不会拽起一列。
    */
-  touch-action: pan-y;
+  touch-action: none;
+  touch-action: pinch-zoom;
 }
 
 .vt-col-drag-ghost,
@@ -51,14 +57,96 @@
   pointer-events: none;
 }
 
+/* ---- 行落点的层级提示线 ---------------------------------------------------
+ *
+ * 不是一条整线，而是**每层一段**的 flex 容器（与 virt-list 的 `dragLine` 同构）：
+ * 整条从第 1 层缩进的左边缘开始，分成 `maxLevel` 段，已经走过的层级画淡色、
+ * 目标层级起点插一个箭头、之后画实色。于是光看线就知道「现在插在第几层、
+ * 还能左右调几格」—— 这是跨层级拖拽唯一能表达层级的地方。
+ *
+ * `left` / `width` / `top` 与各段的类名由 JS 逐帧写入，所以这里不写死 `left`。
+ *
+ * 它挂在 `.vt-client` 上而不是行元素里：行 DOM 会被虚拟滚动回收，挂进去会跟着被摘走，
+ * 或者更糟 —— 粘在复用后的另一行上。
+ * ------------------------------------------------------------------------- */
+
+.vt-root {
+  /* 段与段之间留的缝，让「一格缩进」看得出边界 */
+  --vt-drop-line-gap: 4px;
+  /* 已走过层级的线色（不支持 color-mix 时的兜底） */
+  --vt-drop-line-past: rgb(37 99 235 / 40%);
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-root {
+    --vt-drop-line-past: color-mix(in srgb, var(--vt-color-primary) 40%, transparent);
+  }
+}
+
 .vt-row-drop-line {
   position: absolute;
   left: 0;
+  display: none;
   width: 100%;
   height: 2px;
-  background: var(--vt-color-primary);
-  box-shadow: 0 0 0 1px var(--vt-color-primary-soft);
+  gap: var(--vt-drop-line-gap);
   z-index: 40;
   pointer-events: none;
+}
+
+/* 一段 = 一层缩进。最后一段吃掉剩余宽度（它代表「目标层级及更深」那一头） */
+.vt-row-drop-seg {
+  position: relative;
+  width: calc(var(--vt-indent-size) - var(--vt-drop-line-gap));
+  height: 100%;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+
+.vt-row-drop-seg--tail {
+  flex: 1;
+}
+
+/* 比目标层级浅的那几段：能选但当前没选中 */
+.vt-row-drop-seg--past {
+  background: var(--vt-drop-line-past);
+}
+
+/* 目标层级及之后：当前落点 */
+.vt-row-drop-seg--on {
+  background: var(--vt-color-primary);
+}
+
+/* 层级箭头：CSS 三角，挂在目标层级那一段的起点上 */
+.vt-row-drop-arrow {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 4px solid var(--vt-color-primary);
+}
+
+/*
+ * 「成为这一行的子节点」的覆盖框（分组行上则是「落进这个分组」）。
+ * 同样是挂在 `.vt-client` 上的浮层，理由见上面那条线。
+ */
+.vt-row-drop-into {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 39;
+  pointer-events: none;
   display: none;
+  box-sizing: border-box;
+  border: 2px solid var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-color-primary-soft);
+}
+
+/* 正在被拖走的那一行：留个淡影表示「它要走了」 */
+.vt-tr--dragging > .vt-td {
+  opacity: 0.45;
 }

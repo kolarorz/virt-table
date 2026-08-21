@@ -6,6 +6,7 @@ import {
   INPUT_CSS,
   commitValue,
   pickColumnProps,
+  wrapWithClear,
 } from './shared';
 
 export interface VtAutocompleteOptions<T = any> extends BaseColumnOptions<T> {
@@ -187,7 +188,20 @@ export function VtAutocomplete<T = any>(opts: VtAutocompleteOptions<T>): VirtTab
       if (opts.triggerOnFocus !== false) request(input.value);
     });
 
-    return input;
+    /**
+     * `clearable` 此前是个**死选项**：`BaseColumnOptions` 里有、文档也写了，但这一支从没渲染
+     * 那个 `×`（传了只是静默无效）。默认仍是**关**（输入类那一档：这是个真的文本框，全选 +
+     * Backspace 就清得掉），只是传 `true` 时现在真的有叉了。
+     *
+     * 浮层的锚点仍是 `input`（外壳收窄 22px，所以建议列表也跟着窄一点点）—— 这一支刻意没传
+     * `geometry`，改成拿外壳当锚点会连位置一起动，不在这次的范围里。
+     */
+    return wrapWithClear(input, !!opts.clearable, () => {
+      input.value = '';
+      commitValue(opts, ctx, '');
+      closePopup();
+      input.focus();
+    });
   };
 
   return col;

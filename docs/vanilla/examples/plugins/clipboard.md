@@ -2,6 +2,16 @@
 
 由 `vtClipboard` 插件提供：把当前框选区域复制成 TSV（可直接粘到 Excel），也支持从外部粘贴写回。
 
+## 示例
+
+<PlaygroundHost framework="vanilla" example-id="table-clipboard" />
+
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/vanilla/src/components/plugins/clipboard.ts
+:::
+
 ## 装载
 
 ```ts
@@ -57,12 +67,12 @@ plugins: [
 ]
 ```
 
-## 示例
+## 相关 API
 
-<PlaygroundHost framework="vanilla" example-id="table-clipboard" />
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `vtClipboard(options?)` | 选区复制 / 粘贴（`requires: vtCellSelection`） | [插件机制](/vanilla/api/plugins) |
+| `vtCellSelection()` | 前置依赖：复制的就是当前框选区域 | [插件机制](/vanilla/api/plugins) |
+| `col.exportValue` | 覆盖取值（复制与导出共用） | [插件机制 · 导出](/vanilla/api/plugins#导出-打印) |
 
-## 源码
-
-::: details 点击查看源码
-<<< @/apps/vanilla/src/components/plugins/clipboard.ts
-:::
+不读合并信息（逐行取值），要还原合并结构自己用 `getEffectiveMerges()`，见[按值自动合并](/vanilla/examples/merge/auto-merge#与选区-导出的联动)。

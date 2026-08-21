@@ -17,7 +17,8 @@ docs/public/micro-apps
 # vitepress 每次启动都会在 config 旁边落一个临时的编译产物
 docs/.vitepress/*.timestamp-*
 
-# `npm pack` / `pnpm pack` 的产物
+# `npm pack` / `pnpm pack` 的产物，以及 CI 从付费仓库取下来的离线包。
+# 后者绝不能入库：可直接 `npm i` 的完整付费包与「bundle 里有 dist 字节」不是一回事。
 *.tgz
 
 # tsc 误 emit 到源码目录的声明文件残留。
@@ -30,3 +31,7 @@ docs/.vitepress/*.timestamp-*
 #
 # 注意：类型级断言用的 `*.test-d.ts` 不匹配这条规则（后缀是 `-d.ts` 而非 `.d.ts`）。
 packages/*/src/**/*.d.ts
+# `pnpm build:docs` 打出来的付费包 tgz（scripts/pro-tgz.mjs 产出，随后铺进三个 app 的
+# node_modules）。刻意不叫 release/ —— 那是付费仓库给客户交付用的名字。
+# 绝不入库：里面是可直接 `npm i` 的完整付费包，与「bundle 里有 dist 字节」不是一回事。
+.pro-tgz/

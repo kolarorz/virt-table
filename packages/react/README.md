@@ -1,8 +1,8 @@
 # @virt-table/react
 
-[virt-table](https://github.com/keno-lee/virt-table) 的 React 封装 —— 行列双向虚拟化的高性能表格，十万级数据流畅滚动。
+[virt-table](https://github.com/kolarorz/virt-table) 的 React 封装 —— 行列双向虚拟化的高性能表格，十万级数据流畅滚动。
 
-📖 **[完整文档](https://keno-lee.github.io/virt-table/react/guide/started)** · [在线示例](https://keno-lee.github.io/virt-table/react/examples/basic/basic) · [API](https://keno-lee.github.io/virt-table/react/api/)
+📖 **[完整文档](https://kolarorz.github.io/virt-table/react/guide/started)** · [在线示例](https://kolarorz.github.io/virt-table/react/examples/basic/basic) · [API](https://kolarorz.github.io/virt-table/react/api/)
 
 表格能力（合并单元格、分组表头、树形、筛选、插件…）全部来自 [`@virt-table/vanilla`](https://www.npmjs.com/package/@virt-table/vanilla)，这个包只做 React 侧的桥接：受控 props、`ref` 命令式 API、用 React 组件渲染单元格。
 
@@ -63,4 +63,4 @@ import { VtSelect, VtSwitch } from '@virt-table/vanilla/components';
 
 ## License
 
-[MIT](./LICENSE) © keno-lee
+[MIT](./LICENSE) © kolarorz(kolarorz@gmail.com)

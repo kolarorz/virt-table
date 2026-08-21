@@ -2,6 +2,16 @@
 
 右键菜单由 `vtContextMenu` 插件提供（插件与框架无关，`@virt-table/vue` 直接透传 vanilla 的实现与类型）。
 
+## 示例
+
+<PlaygroundHost framework="vue" example-id="vue-context-menu" />
+
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/vue/src/components/plugins/ContextMenu.vue
+:::
+
 ## 关键写法
 
 ```vue
@@ -42,12 +52,14 @@ const options = { list, itemKey: 'id', estimatedSize: 40, plugins: [vtContextMen
 
 完整语义（上下文字段、菜单项结构、`selection` 依赖、边界回收）见 [Vanilla · 右键菜单](/vanilla/examples/plugins/context-menu)。
 
-## 示例
+## 相关 API
 
-<PlaygroundHost framework="vue" example-id="vue-context-menu" />
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `vtContextMenu({ items })` | 右键菜单插件；`items` 可以是数组或 `(ctx) => items` | [插件机制](/vanilla/api/plugins) |
+| 菜单项 | `{ label, action, disabled?, divider? }` | [插件机制](/vanilla/api/plugins) |
+| `hideContextMenu()` | 程序化关闭（插件注入，三端 ref 自动透出） | [实例方法](/vanilla/api/instance) |
 
-## 源码
-
-::: details 点击查看源码
-<<< @/apps/vue/src/components/plugins/ContextMenu.vue
-:::
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 Vue 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 VNode、`ref` 转发了哪些方法 —— 见 [Vue API](/vue/api/table)。

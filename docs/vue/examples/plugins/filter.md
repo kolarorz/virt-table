@@ -2,26 +2,8 @@
 
 为列配置 `filters` 与 `filterMethod`，在表头进行单选或多选筛选。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-  filters: Array<{label, value, checked?}>;  // 筛选选项
-  filterMultiple: boolean;  // 是否多选筛选
-  filterMethod: (value, row) => boolean;  // 自定义筛选方法
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-}
-```
+> 这是列筛选的第一种入口（表头快捷筛选）。需要「A 且（B 或 C）」这类复合条件时，
+> 用第二种入口 [高级筛选（筛选管理器）](../advanced/filter-builder)，两者可同时使用，结果取交集。
 
 ## 示例
 
@@ -32,3 +14,18 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/vue/src/components/plugins/Filter.vue
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `col.filters` | 枚举候选 `{ label, value, checked? }[]` | [数据与远程](/vanilla/api/data#列头筛选) |
+| `col.filterMultiple` | 是否允许多选 | [数据与远程](/vanilla/api/data#列头筛选) |
+| `col.filterMethod` | 自定义筛选逻辑 | [数据与远程](/vanilla/api/data#列头筛选) |
+| `setColumnFilter` / `clearAllFilters` / `getActiveFilters` | 编程式筛选 | [实例方法](/vanilla/api/instance) |
+
+文本 / 数值区间 / 日期区间等类型见[富筛选类型](/vue/examples/plugins/rich-filter)；跨列 AND/OR 见[高级筛选](/vue/examples/advanced/filter-builder)。
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。
+>
+> 上面的字段在 Vue 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 VNode、`ref` 转发了哪些方法 —— 见 [Vue API](/vue/api/table)。

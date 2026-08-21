@@ -1,5 +1,5 @@
 import { VirtTable, type VirtTableColumn } from '@virt-table/vanilla';
-import { vtColumnPanel } from '@virt-table/vanilla/plugins';
+import { vtFieldConfig } from '@virt-table/vanilla/plugins';
 
 /**
  * 多级分组表头 / 表尾 + 横向虚拟列表。
@@ -107,7 +107,7 @@ export function bootstrapTableHeaderGroup(root: HTMLElement): () => void {
 
   root.innerHTML = `
     <div class="virt-table-controls">
-      <button class="virt-table-btn virt-table-btn-primary" id="btnCols">列设置</button>
+      <button class="virt-table-btn virt-table-btn-primary" id="btnCols">字段配置</button>
       <button class="virt-table-btn" id="btnScrollMid">横向滚到中间</button>
       <button class="virt-table-btn" id="btnScrollEnd">横向滚到最右</button>
       <button class="virt-table-btn" id="btnHalf">只留一半数据（看表尾联动）</button>
@@ -130,7 +130,7 @@ export function bootstrapTableHeaderGroup(root: HTMLElement): () => void {
     stripe: true,
     // 开启后表尾按同一棵列树渲染成多级分组表尾
     showSummary: true,
-    plugins: [vtColumnPanel()],
+    plugins: [vtFieldConfig()],
   });
 
   const leafCount = table.getVisibleColumns().length;
@@ -144,7 +144,7 @@ export function bootstrapTableHeaderGroup(root: HTMLElement): () => void {
   const btnEnd = root.querySelector('#btnScrollEnd') as HTMLElement;
   const btnHalf = root.querySelector('#btnHalf') as HTMLElement;
   let halved = false;
-  const onCols = () => table.toggleColumnPanel(btnCols);
+  const onCols = () => table.toggleFieldConfig(btnCols);
   const onMid = () => table.scrollToCell(0, Math.floor(leafCount / 2));
   const onEnd = () => table.scrollToCell(0, leafCount - 1);
   const onHalf = () => {

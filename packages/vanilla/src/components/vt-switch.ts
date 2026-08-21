@@ -1,4 +1,5 @@
 import type { VirtTableColumn } from '../index';
+import { createSwitch } from './_switch';
 import {
   type BaseColumnOptions,
   type BoolValueOptions,
@@ -41,40 +42,29 @@ export function VtSwitch<T = any>(opts: VtSwitchOptions<T>): VirtTableColumn<T> 
     ...pickColumnProps(opts),
     render: (ctx) => {
       const wrap = makeCellWrap('switch');
-      let checked = isBoolChecked(ctx.value, opts);
+      /*
+       * 开关本体走 `createSwitch()`（`_switch.ts`）—— 那份也被插件的配置面板用着。
+       * 一处实现的意思是：`role="switch"` / `aria-checked` / 轨道与滑块的结构只有一份，
+       * 改了两边一起变。这里只补「列组件那一层」的事：写回与阻断单元格干扰。
+       */
+      const sw = createSwitch({
+        checked: isBoolChecked(ctx.value, opts),
+        disabled: opts.disabled,
+        activeText: opts.activeText,
+        inactiveText: opts.inactiveText,
+        // 自己更新视图而不是 forceUpdate()：整表重渲染只为了翻一个开关太贵，
+        // 而这里的 DOM 状态本身就是视图的全部（`createSwitch` 已经画好了）
+        onChange: (checked) => commitValue(opts, ctx, boolWriteBack(checked, opts)),
+      });
+      /*
+       * 把它的子节点搬到单元格外壳里，而不是把 `sw.el` 整个塞进来：`createSwitch` 自带
+       * 一层 `.vt-comp-cell .vt-comp-switch` 外壳（表单里它就是最外层），这里外面已经有
+       * `makeCellWrap('switch')` 了 —— 两层锁高会打架（契约测试盯着「锁高只能有一处」）。
+       * 搬完 handle 上的引用照样有效（`setChecked` 操作的是 track / 文案本身）。
+       */
+      wrap.append(...sw.el.childNodes);
 
-      const track = document.createElement('button');
-      track.type = 'button';
-      track.className = 'vt-comp-switch-track';
-      track.setAttribute('role', 'switch');
-      track.setAttribute('aria-checked', String(checked));
-      if (opts.disabled) track.disabled = true;
-
-      const thumb = document.createElement('span');
-      thumb.className = 'vt-comp-switch-thumb';
-      track.appendChild(thumb);
-      wrap.appendChild(track);
-
-      const hasText = opts.activeText !== undefined || opts.inactiveText !== undefined;
-      let textEl: HTMLElement | null = null;
-      if (hasText) {
-        textEl = document.createElement('span');
-        textEl.className = 'vt-comp-switch-text';
-        textEl.textContent = (checked ? opts.activeText : opts.inactiveText) ?? '';
-        wrap.appendChild(textEl);
-      }
-
-      if (!opts.disabled) {
-        track.addEventListener('click', () => {
-          checked = !checked;
-          track.setAttribute('aria-checked', String(checked));
-          // 自己更新视图而不是 forceUpdate()：整表重渲染只为了翻一个开关太贵，
-          // 而这里的 DOM 状态本身就是视图的全部
-          if (textEl) textEl.textContent = (checked ? opts.activeText : opts.inactiveText) ?? '';
-          commitValue(opts, ctx, boolWriteBack(checked, opts));
-        });
-        stopCellInterference(wrap);
-      }
+      if (!opts.disabled) stopCellInterference(wrap);
 
       return wrap;
     },

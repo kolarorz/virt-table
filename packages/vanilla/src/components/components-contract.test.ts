@@ -19,7 +19,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const css = readFileSync(fileURLToPath(new URL('./components.css', import.meta.url)), 'utf8');
+/**
+ * 两个文件一起读：查看器那 300 行已经拆到 `image-viewer.css`（`VtImage` 与
+ * `vtFloatingImage` 两个入口共用，走 CSS `@import` 内联），但它仍然是这份契约的一部分 ——
+ * 下面 §13 那批断言查的就是它。构建时两者本来也会被内联成同一份产物。
+ */
+const css = ['./components.css', './image-viewer.css']
+  .map((f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8'))
+  .join('\n');
 
 /** 去掉注释，避免注释里的示例代码被当成规则 */
 const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -153,6 +160,101 @@ describe('components.css：面板项的对齐', () => {
   });
 });
 
+describe('components.css：可交互的东西要在光标上说出来', () => {
+  /**
+   * 用户反馈「人员 hover 的时候应该用手指样式」：`.vt-comp-person` 悬停会弹名片、点一下
+   * 进选人面板，却顶着默认的文本光标 —— 看起来就是一段普通文字。
+   *
+   * 做成清单式断言而不是只查人员一处：这批「常态里就可交互」的展示元素（锚点、人员胶囊、
+   * 清除叉）都必须是 pointer，以后再加一个也该进这个清单。
+   */
+  it('常态可交互的展示元素都声明 cursor: pointer', () => {
+    for (const sel of [
+      '.vt-comp-person',
+      '.vt-comp-anchor',
+      '.vt-comp-clear',
+      '.vt-comp-image-item',
+    ]) {
+      expect(ruleOf(sel).body, `${sel} 缺 cursor: pointer`).toMatch(/cursor:\s*pointer/);
+    }
+  });
+});
+
+describe('components.css：图片缩略图的尺寸只跟随行高', () => {
+  /**
+   * `VtImage` 刻意**不提供尺寸选项**：缩略图写死 56px 会把 40px 的行顶到 75px，而
+   * `estimatedSize` 还是 40 —— 正是 §7.11 那条「滚不到底」。所以它的尺寸只能是
+   * 「外层锁住的行内容高 × 1:1 方框」，要大图就把行配高。
+   *
+   * 这一条比「锁高清单」更严：清单里那些元素是**自己**锁在 `--vt-line-height` 上，
+   * 而缩略图必须**跟随**外层，一旦有人给它补一个 px 高度，行高不变量就破了。
+   */
+  it('.vt-comp-image-item 跟随外层高度（100% + 1:1），不写死像素', () => {
+    const body = ruleOf('.vt-comp-image-item').body;
+    expect(body).toMatch(/height:\s*100%/);
+    expect(body).toMatch(/aspect-ratio:\s*1/);
+    expect(body, '写死 px 高度会把行顶高').not.toMatch(/height:\s*[\d.]+(px|em|rem)/);
+  });
+
+  it('没有别的单元格内的 .vt-comp-image* 规则再声明 height', () => {
+    const offenders = rules
+      // 只查**单元格内**那几个类：查看器（`-viewer-*`）是铺满视口的模态浮层，
+      // 它的按钮、切换箭头有自己的固定尺寸，与行高不变量无关
+      .filter((r) => /^\.vt-comp-image[\w-]*$/.test(r.selector))
+      .filter((r) => !r.selector.includes('-viewer'))
+      .filter((r) => r.selector !== '.vt-comp-image-item')
+      .filter((r) => /(^|[;{\s])height:/.test(r.body))
+      .map((r) => r.selector);
+    // `.vt-comp-image-img` 是 100%/100%（填满占位盒），不算自己定尺寸 —— 它在下面单独查
+    expect(offenders.filter((s) => s !== '.vt-comp-image-img')).toEqual([]);
+    expect(ruleOf('.vt-comp-image-img').body).toMatch(/height:\s*100%/);
+  });
+});
+
+describe('components.css：图片查看器的层级', () => {
+  /**
+   * 这条钉的是一个**真实被用户撞到的 bug**：第一版舞台是 `position: absolute; inset: 0`
+   * （铺满整个浮层），顶栏也是 absolute —— 两个都不带 z-index 的定位元素里后写的赢，于是
+   * 舞台整片盖住工具栏，真实鼠标点「放大」命中的是舞台、被判成「点了幕布」→ 查看器关掉。
+   *
+   * 修法是改成流内 flex 列（顶栏 / 舞台 / 说明 / 列表条四个流内项）。happy-dom 没有布局引擎、
+   * 更没有命中判定，测不出「按钮能不能点到」，所以只能在这里守住「舞台不许再铺满」。
+   */
+  it('舞台是流内 flex 项，不是铺满浮层的绝对定位层', () => {
+    const stage = ruleOf('.vt-comp-image-viewer-stage').body;
+    expect(stage, '舞台一旦 absolute inset 就会盖住工具栏').not.toMatch(
+      /position:\s*absolute/,
+    );
+    expect(stage).toMatch(/flex:\s*1/);
+    // flex 项不写 min-height: 0 的话内容撑不下时不肯缩，图会顶穿底部的列表条
+    expect(stage).toMatch(/min-height:\s*0/);
+  });
+
+  it('顶栏与说明也在流里（没有一个压在另一个上面）', () => {
+    for (const sel of ['.vt-comp-image-viewer-bar', '.vt-comp-image-viewer-caption']) {
+      expect(ruleOf(sel).body, `${sel} 不该绝对定位`).not.toMatch(/position:\s*absolute/);
+    }
+  });
+
+  /**
+   * 第二个同源的 bug（也是真实鼠标才撞出来的）：舞台不裁剪时，**放大后的图会盖住工具栏**
+   * —— transform 过的元素自成层叠上下文、画在流内内容之上，于是点一次「放大」之后旋转 /
+   * 缩小 / 还原全部落在图上，没有任何反应。裁剪 + 操作区抬层两条都要。
+   */
+  it('舞台裁掉放大的图，操作区（顶栏 / 说明 / 列表条）在它之上', () => {
+    expect(ruleOf('.vt-comp-image-viewer-stage').body, '不裁剪，放大的图会压住工具栏').toMatch(
+      /overflow:\s*hidden/,
+    );
+    for (const sel of [
+      '.vt-comp-image-viewer-bar',
+      '.vt-comp-image-viewer-caption',
+      '.vt-comp-image-viewer-strip',
+    ]) {
+      expect(ruleOf(sel).body, `${sel} 缺 z-index`).toMatch(/z-index:\s*1/);
+    }
+  });
+});
+
 describe('components.css：复用而不是另写一套', () => {
   it('面板皮肤走 CSS @import 内联，不在 JS 里 import', () => {
     // 走 JS import 会被 Rollup 提成 hash 命名的公共 chunk，使用方引不到（AGENTS.md §3.1）
@@ -165,5 +267,32 @@ describe('components.css：复用而不是另写一套', () => {
     const own = rules.find((r) => r.selector === '.vt-comp-popup');
     expect(own, '.vt-comp-popup 规则没找到').toBeDefined();
     expect(own!.body).not.toMatch(/(^|[;{\s])(background|border|box-shadow):/);
+  });
+});
+
+describe('components.css：表格之外的表单件', () => {
+  /*
+   * `createSelectField` 的下拉框要和**表格里的选择单元格**看着是一套东西：一样的字号
+   * （`--vt-font-size`，不是面板那档 sm —— 里面回显的是数据）、一样的圆角与边框令牌，
+   * 展开时主色边框 + focus 环（照 `.vt-cell-cover` 的路子，只把 2px 收成 1px）。
+   */
+  const field = ruleOf('.vt-field-select').body;
+
+  it('字号跟着单元格走，不用面板那档 sm', () => {
+    expect(field).toMatch(/font-size:\s*var\(--vt-font-size\)/);
+  });
+
+  it('高度用 min-height（字号 / 密度变了跟着长，不把文字挤扁）', () => {
+    expect(field).toMatch(/min-height:/);
+    // 只该有 min-height，不该另有一个写死的 height（`min-height` 自身要排除掉）
+    expect(field.replace(/min-height/g, '')).not.toMatch(/\bheight:\s*\d/);
+  });
+
+  it('展开态给主色边框 + focus 环（与编辑浮层同一套表达）', () => {
+    const open = ruleOf(
+      ".vt-field-select:focus-visible,\n.vt-field-select[aria-expanded='true']",
+    ).body;
+    expect(open).toMatch(/border-color:\s*var\(--vt-color-primary\)/);
+    expect(open).toMatch(/box-shadow:\s*0 0 0 3px var\(--vt-focus-ring-color\)/);
   });
 });

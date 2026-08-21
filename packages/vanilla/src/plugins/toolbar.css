@@ -1,0 +1,213 @@
+/* ==========================================================================
+ * vtToolbar 插件样式 —— **只有按钮条**（外壳 + 按钮 + 徽标 + 与表格拼成一块板子）。
+ *
+ * 面板那半边不在这里，也**不该**在这里：每个面板是一个独立插件，它的样式跟着它自己走
+ * （`field-config.css` / `filter-config.css` / `group-config.css` / `sort-config.css` /
+ * `row-height-config.css`）。装了哪个引哪个 —— 这也是「只要排序面板」不必吞下筛选管理器
+ * 那 14KB 的原因。
+ *
+ * 面板基元（标题 / 行 / 规则行 / 分段 / 页脚）在 `_panel-ui.css`：本文件也 `@import` 它，
+ * 因为**贡献方可以只借基元画自己的面板**（付费甘特的「甘特图配置」就是这么画的，它的
+ * `ctx.ui` 全部来自这里），那时使用方手上只有 `toolbar.css`。
+ * ========================================================================== */
+@import './_panel-ui.css';
+
+/* ==========================================================================
+ * 1. 按钮条
+ * ========================================================================== */
+
+/**
+ * 自动包出来的那层外壳（没有别的插件提供槽时）。
+ *
+ * 纵向 flex：按钮条在上、表格吃掉剩下的高度。**必须给 `min-height: 0`** ——
+ * flex 子项的默认 `min-height: auto` 会让 `.vt-root` 按内容撑高，于是十万行的表把页面
+ * 拉到几百万像素（虚拟化本来就靠容器高度算窗口）。
+ */
+.vt-toolbar-shell {
+  /*
+   * **必须是定位元素**：面板浮层是 `position: absolute` 的，参照系就是这一层
+   * （`createPopup` 把 `top` / `left` 算成相对宿主 padding-box 的偏移）。
+   * 不给的话参照会跑到更外面某个定位祖先上，面板落点会整体偏掉。
+   */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.vt-toolbar-shell > .vt-root {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/**
+ * 按钮条是一条**浅色槽**，按钮在槽里是白的 —— 白/灰的对比本身就把每颗按钮分出来了，
+ * 所以按钮不画边框（见下面 `.vt-toolbar-button`）。底色取表头那份，工具栏于是读起来是
+ * 「表格的一部分」，不是压在表格上的另一个组件。
+ */
+.vt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  box-sizing: border-box;
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color);
+  background: var(--vt-header-bg);
+  color: var(--vt-text-color);
+  font-family: var(--vt-font-family);
+  font-size: var(--vt-font-size);
+}
+
+/*
+ * 一侧一组。组内 gap 比条上的 gap 小一档：同侧的按钮是**一伙的**，挨紧一点才读得出
+ * 「它们与另一侧不是一回事」。
+ *
+ * 靠右那组用 `margin-left: auto` 而不是给条 `justify-content: flex-end` ——
+ * 后者会把条里**所有**东西都推到右边，而使用方可能往这条槽里塞自己的节点。
+ */
+.vt-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vt-toolbar-group--end {
+  margin-left: auto;
+}
+
+/**
+ * 按钮：**白色药片，不画边框**。
+ *
+ * 高度单独一个变量而**不是**沿用 `--vt-control-height`（面板里的下拉、分段、小按钮那档）——
+ * 工具栏是常驻的一条，比浮层里的控件宽松一档才不局促；而那个变量一动，面板里所有控件
+ * 跟着变，那是另一件事。想统一改就覆盖 `--vt-toolbar-button-height`。
+ *
+ * 不画边框的理由：一排按钮各画一圈 1px，读起来是「五个独立的输入框」；而它们是同一条
+ * 工具栏上的五个入口。白底压在浅色槽上已经分得开，边框只是噪音。
+ */
+.vt-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--vt-toolbar-button-height, 28px);
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--vt-radius-md);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font: inherit;
+  font-size: var(--vt-font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+}
+
+/**
+ * 图标比文字浅一档。
+ *
+ * 一颗按钮里文字才是「这是什么」，图标是辅助识别；同色的话一排图标会比文字更抢眼
+ * （线条密度高）。hover / 打开时它跟着文字一起走主色，于是整颗按钮是一个整体。
+ */
+.vt-toolbar-button > svg {
+  flex: 0 0 auto;
+  color: var(--vt-text-secondary);
+  transition: color var(--vt-transition-fast) linear;
+}
+
+.vt-toolbar-button:hover:not(:disabled) {
+  background: var(--vt-fill-color);
+}
+
+/** 面板正开着：底色再深一档 + 文字主色，一眼看出「那张浮层是这颗按钮开的」 */
+.vt-toolbar-button.is-open {
+  background: var(--vt-fill-color-hover);
+  color: var(--vt-color-primary);
+}
+
+/**
+ * 「这颗按钮上有生效的东西」= **图标走主色**。
+ *
+ * 有生效设置是常态（分组开着能开一整天），所以不点亮整颗、不加边框 —— 那种状态下一排
+ * 蓝边就成了背景噪音。也**刻意不用字重**：500 与 400 的宽度不同，一排按钮会在开关分组时
+ * 轻微位移。图标上色不动任何盒子，配上前置的那个数字，「这颗有内容 / 有几条」都读得出来。
+ */
+.vt-toolbar-button.is-active > svg {
+  color: var(--vt-color-primary);
+}
+
+/** 打开时图标跟文字一起走主色（写在 is-active 之后：同特异度，后者赢） */
+.vt-toolbar-button.is-open > svg {
+  color: inherit;
+}
+
+.vt-toolbar-button:disabled {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+.vt-toolbar-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/**
+ * 生效数量：筛选有几条条件、分组有几级、排序有几条、隐藏了几列（行高那颗放的是档位名）。
+ *
+ * **排在文字前面、和文字一行读下来**——「1 分组」「3 筛选」。做成右上角那种蓝色小圆点的话，
+ * 它与文字是两个东西，眼睛要先看标签再找角标；而这里它本来就是标签的一部分：
+ * 用户回到界面时的问题是「我分了几级组」，不是「这颗按钮有没有被动过」。
+ *
+ * 主色 + 半档字重让它在一行里立得住，`tabular-nums` 保证 1 → 10 时宽度不跳。
+ */
+.vt-toolbar-badge {
+  flex: 0 0 auto;
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 按钮文字。窄容器里先让**文字**省略，而不是让整颗按钮被挤变形 ——
+ * 图标与徽标是定宽的，它们才是「这颗按钮是什么」的最后一道信息。
+ */
+.vt-toolbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ==========================================================================
+ * 1.1 与表格拼成一块板子
+ *
+ * 表格开了 `border` 时它是一张**圆角卡片**（`.vt-root--border`：1px 边框 +
+ * `--vt-radius-root`），而按钮条默认只是一条平的槽。两者同宽地摞在一起，读起来是
+ * **两个组件**：上面方角、下面圆角，中间还差两条侧边框。
+ *
+ * 所以让按钮条接管卡片的上半截：上面两个圆角归它，左右与上边框补齐，
+ * **下边框去掉** —— 那道缝由表格自己的上边框承担，两条 1px 叠起来会变成 2px 粗线。
+ * ========================================================================== */
+
+.vt-toolbar--card {
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-bottom-width: 0;
+  border-top-left-radius: var(--vt-radius-root);
+  border-top-right-radius: var(--vt-radius-root);
+}
+
+/*
+ * 上面两个圆角既然归了按钮条，表格那两个就得改方 —— 不改的话按钮条那条平底压在一段
+ * 圆弧上，中间会露出**两个小三角的容器底色**（与甘特左表挨着时间轴那两个角同一个毛病）。
+ *
+ * 用兄弟选择器而不是给表格加类：这是「谁在我上面」的关系，本来就该由关系表达
+ * （按钮条不在时这条规则压根不命中，表格照旧圆四个角）。
+ */
+.vt-toolbar-shell > .vt-toolbar + .vt-root {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}

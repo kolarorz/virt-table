@@ -40,7 +40,7 @@ import '@virt-table/vanilla/components/vt-filter-builder.css'; // VtFilterBuilde
 import '@virt-table/vanilla/style.css';
 ```
 
-哪些插件带独立 CSS，见 [插件机制](../api/#插件机制)。
+哪些插件带独立 CSS，见 [插件机制](../api/plugins)。
 
 ## 触屏支持范围
 

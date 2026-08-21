@@ -83,7 +83,7 @@ const activeExampleId = computed(
   () => `${ID_PREFIX[props.framework]}-${activeScenario.value.key}`,
 );
 const fullExampleHref = computed(() =>
-  withBase(`/${props.framework}/examples/plugins/${activeScenario.value.key}`),
+  withBase(`/${props.framework}/examples/ai/${activeScenario.value.key}`),
 );
 </script>
 

@@ -2,6 +2,7 @@ import type { VirtTableColumn } from '../index';
 import { createPopup } from './_popup';
 import {
   type BaseColumnOptions,
+  clearableOn,
   commitValue,
   makeAnchor,
   pickColumnProps,
@@ -44,6 +45,9 @@ export interface VtCascaderOptions<T = any> extends BaseColumnOptions<T> {
  *
  * 选中叶子（或 `checkStrictly` 下点任意节点）立即写回并关闭面板；展开父级只改面板，
  * 不动数据。
+ *
+ * `clearable` **默认开**（锚点上一个 `×`，`Delete` / `Backspace` 同效）：面板里只能换选别的
+ * 节点，没有「选回空」这一项，不给清除就意味着这一列填过一次就填不回空。
  */
 export function VtCascader<T = any>(opts: VtCascaderOptions<T>): VirtTableColumn<T> {
   const sep = opts.separator ?? ' / ';
@@ -98,11 +102,12 @@ export function VtCascader<T = any>(opts: VtCascaderOptions<T>): VirtTableColumn
       /** 面板里当前展开/选中的路径 */
       let path = resolvePath(ctx.value);
 
-      // clearable → 锚点右侧一个「×」。清空写回的形状跟着 valueType 走
+      // 锚点右侧一个「×」（`Delete` / `Backspace` 同效），**默认给** —— 级联的锚点没有别的
+      // 「变回空」的手段，见 `clearableOn`。清空写回的形状跟着 valueType 走
       // （`serialize([])`：path 是 `[]`、leaf 是 `''`），不用在这里再判一次
       const anchor = makeAnchor(
         opts.placeholder,
-        opts.clearable
+        clearableOn(opts)
           ? () => {
               path = [];
               syncAnchor();
@@ -186,6 +191,13 @@ export function VtCascader<T = any>(opts: VtCascaderOptions<T>): VirtTableColumn
 
       syncAnchor();
       paint();
+      /**
+       * 锚点要聚焦。`_enum.ts` 与 `_date-editor.ts` 都有这一句，**只有这里漏了** ——
+       * 于是这一列的键盘事件全落在 `document.body` 上：CDP 实测点开级联后按 `Delete`
+       * 毫无反应（另两个组件同样的键正常清空），`Esc` 也只能靠 `_popup` 的 document 级
+       * 监听兜住。focus 必须等元素进了文档才有效，所以放在 rAF 里。
+       */
+      requestAnimationFrame(() => anchor.el.focus());
       return anchor.el;
     };
   }

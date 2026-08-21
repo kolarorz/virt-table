@@ -2,7 +2,14 @@ import type { VirtTableColumn } from '../index';
 import { zhCN, type VtCalendarTexts } from '../locale';
 import { formatDay, formatRange, type DayStr, type VtDateShortcutsOption } from './_calendar';
 import { createDateEditor } from './_date-editor';
-import { type BaseColumnOptions, INPUT_CSS, commitValue, pickColumnProps } from './shared';
+import {
+  type BaseColumnOptions,
+  INPUT_CSS,
+  clearableOn,
+  commitValue,
+  pickColumnProps,
+  wrapWithClear,
+} from './shared';
 
 interface VtDateRangeCommon<T> extends BaseColumnOptions<T> {
   /** 常态与锚点回显的分隔符，默认 `' ~ '` */
@@ -66,6 +73,9 @@ interface EditCtx<T> {
  * 键盘：`←→` 跨天、`↑↓` 跨周、`PageUp/Down` 跨月（配 `Shift` 跨年）、`Home/End` 到周首末、
  * `Enter` 确认、`Esc` 关闭。
  *
+ * `clearable` **默认开**（两条支路都给）：面板支路是锚点上一个 `×` 且 `Delete` / `Backspace`
+ * 同效，原生支路是外壳上那个 `×`；清空写回 `['', '']`。传 `clearable: false` 关掉。
+ *
  * 改造前这里是两个原生 `input[type=date]` 并排，起止得分两次点开各自的原生日历分别选；
  * `native: true` 保留那条路。两支在 `min`/`max` 上的语义不同：原生支路把它们交给浏览器
  * （各家对越界输入的处理不一致），自绘支路是确定的 —— 越界格不可点，整段越界的快捷项不
@@ -109,7 +119,8 @@ function panelEdit<T>(opts: VtDateRangePickerPanelOptions<T>) {
       panels: opts.panels ?? 2,
       shortcuts: opts.shortcuts,
       placeholder: opts.placeholder,
-      clearable: opts.clearable,
+      // 与单日版同一条规则：锚点没有「变回空」的手段，× 默认给（见 `clearableOn`）
+      clearable: clearableOn(opts),
       read: (v) => (Array.isArray(v) ? [formatDay(v[0]), formatDay(v[1])] : ['', '']),
       write: (range: [DayStr, DayStr]) => [range[0], range[1]],
       // 空值沿用改造前的形状（`['', '']`），别换成 null —— 排序/导出/剪贴板都按老形状在用
@@ -160,6 +171,19 @@ function nativeEdit<T>(opts: VtDateRangePickerNativeOptions<T>) {
 
     wrap.append(startInput, sepSpan, endInput);
     requestAnimationFrame(() => startInput.focus());
-    return wrap;
+
+    /**
+     * 原生支路也要那个 `×`。
+     *
+     * 改造前这一支根本没有清除按钮（`clearable` 在这里是个死选项），于是「区间列填过一次
+     * 就填不回空」—— 两个原生 `input[type=date]` 各自只能改选日期。套 `.vt-comp-wrap` 与
+     * 单日版的原生支路同款：留白扣在外壳上，`×` 落在两个原生日历图标右边。
+     */
+    return wrapWithClear(wrap, clearableOn(opts), () => {
+      startInput.value = '';
+      endInput.value = '';
+      // 空值沿用既有形状（`['', '']`），与面板支路的 `emptyValue` 一致
+      commitValue(opts, ctx as never, ['', ''] as never);
+    });
   };
 }

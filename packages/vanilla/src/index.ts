@@ -128,6 +128,8 @@ export { type VirtTableLocale, type DeepPartial, zhCN, enUS, mergeLocale } from 
 import { pageCount, clampPage, buildPagerItems } from './pagination';
 export { pageCount, clampPage, buildPagerItems, type PagerItem } from './pagination';
 import { createAutoScroll } from './internal/auto-scroll';
+import { isOutsidePointer } from './internal/outside-cell';
+import { isDataColumn, isFunctionalColumn } from './internal/column';
 import { startDrag, isPrimaryPointer } from './internal/drag';
 import { createTooltip, type TooltipController } from './internal/tooltip';
 import {
@@ -135,6 +137,8 @@ import {
   type VirtTablePlugin,
   type CellSelectionRange,
   type SelectionRect,
+  type ColumnRange,
+  type RowRect,
 } from './plugin';
 export { PluginRuntime } from './plugin';
 export type {
@@ -146,6 +150,8 @@ export type {
   VirtTableHost,
   CellSelectionRange,
   SelectionRect,
+  ColumnRange,
+  RowRect,
   SelectionRows,
   CellSelectionService,
 } from './plugin';
@@ -154,6 +160,8 @@ export type {
 // 下面两个类型给 VirtTablePluginApi 用；`import type` 不产生任何运行时引用。
 import type { ExportOptions } from './plugins/export';
 import type { SearchMatch } from './plugins/search';
+import type { RowHeightLevel } from './plugins/row-height-config';
+import type { ToolbarItem } from './plugins/toolbar';
 import type { AIQueryResult } from './plugins/ai-query';
 import type { AIQuery, AITableSchema } from './ai-query';
 import type { AIStreamState, AIStreamChunk, AIStreamConsumeOptions } from './plugins/ai-stream';
@@ -212,6 +220,12 @@ import {
   renderCellContent,
   type CellContentType,
 } from './cell-type';
+
+/**
+ * 「用户点了哪一格」用的事件名（`highlightSelectRow/Col/Cell` 靠它落当前行列）。
+ * 抽成常量是因为绑定与解绑在两个相隔几千行的方法里，写歪过一次（绑 mousedown 解 click）。
+ */
+const BODY_POINTER_EVENT = 'pointerdown';
 
 /** `VirtTableState` 的结构版本。改动状态形状时 +1，旧状态会被 setState 告警忽略 */
 const VIRT_TABLE_STATE_VERSION = 1;
@@ -314,6 +328,50 @@ export interface VirtTableRowExtras<T = any> {
   readonly _hasChildren?: boolean;
   /** 只读，内核写入：合成行类型（分组行 / 展开行），数据行为 undefined */
   readonly _rowType?: 'group' | 'expand';
+  /** 只读，内核写入，**只有分组行有**：这一层分组的字段名与取值 */
+  readonly _groupField?: string;
+  readonly _groupName?: string;
+  /** 只读，内核写入，**只有分组行有**：该分组下的数据条数（分组行右侧那个计数徽标） */
+  readonly _groupCount?: number;
+  /** 只读，内核写入，**只有展开行有**：它依附的数据行 key */
+  readonly _parentId?: string;
+  /**
+   * 只读，内核写入，**只有分组行有**：这一层分组对应的完整字段路径。
+   *
+   * 多级分组下 `_groupField` / `_groupName` 只描述**当前层**，还原不出祖先层的取值；
+   * 而「把行拖进这个分组」必须把路径上**每一个** field 都改写成对应值，
+   * 否则行会落进「新的一级分组 + 旧的二级分组」这种不存在的格子里。
+   */
+  readonly _groupPath?: readonly { field: string; value: string }[];
+}
+
+/**
+ * 行拖拽的落点，语义与 virt-list 树形拖拽的 `dragend({ node, prevNode, parentNode })` 对齐：
+ * **父级 + 前一个兄弟**唯一确定一个插入位置，而且它在树里也成立（「插到某行之后」不行 ——
+ * 那说不出「作为它的子节点还是它的兄弟」）。
+ */
+export interface RowDropTarget {
+  /**
+   * 新父行 key：
+   * - 数据行 → 成为它的子节点（叶子行也可以，它会因此长出 `children`）
+   * - 分组行 → 落进该分组（核心据此改写行上的分组字段）
+   * - `null` / 省略 → 根层
+   */
+  parentKey?: string | null;
+  /** 落在这个兄弟**之后**；`null` / 省略 = 落到该父级下的第一个 */
+  prevKey?: string | null;
+}
+
+/** `onRowMove` 的回调详情 */
+export interface RowMoveDetail<T = any> {
+  /** 被移动的行（落进分组时它的分组字段**已被改写**） */
+  row: T;
+  /** 新父行；分组行也算；落到根层时为 null */
+  parentRow: T | null;
+  /** 落点前一个兄弟；落到父级下第一个时为 null */
+  prevRow: T | null;
+  /** 移动后的完整原始列表（等于 `_originList`） */
+  list: T[];
 }
 
 export interface VirtTableColumn<T = any> {
@@ -406,6 +464,13 @@ export interface VirtTableColumn<T = any> {
    */
   mergeMaxSpan?: number;
   resizable?: boolean;
+  /**
+   * 是否允许拖拽换序（`vtColumnDrag`）。默认允许。
+   *
+   * 给「本身没有独立语义、只是某个结构里的一格」的列用：甘特的时间桶列被拖到任务列
+   * 中间就成了乱码，而列面板已经有 `hideable` 可关，换序原本无处可关。
+   */
+  draggable?: boolean;
   minWidth?: number;
   maxWidth?: number;
   filters?: Array<{ label: string; value: unknown; checked?: boolean }>;
@@ -445,6 +510,18 @@ export interface VirtTableColumn<T = any> {
   hidden?: boolean;
   /** 是否允许在列设置面板中切换显隐（默认 true） */
   hideable?: boolean;
+}
+
+/**
+ * 一级分组：按 `field` 的取值聚合，`sort` 决定这一级的分组**标题**怎么排
+ * （不给就按数据里第一次出现的顺序）。
+ *
+ * 具名而不是内联在 `groupConfig` 上，是因为 `setGroupConfig()` / `getGroupConfig()`
+ * 也要用它 —— 三处各写一遍字面量的话，加字段时会漏。
+ */
+export interface GroupSpec {
+  field: string;
+  sort?: 'asc' | 'desc';
 }
 
 export interface VirtTableOptions<T extends Record<string, any>>
@@ -495,6 +572,18 @@ export interface VirtTableOptions<T extends Record<string, any>>
   highlightSelectRow?: boolean;
   highlightSelectCol?: boolean;
   highlightSelectCell?: boolean;
+  /**
+   * 点到**单元格以外**时收起激活态（当前单元格描边 / 当前行列高亮），默认 `true`。
+   *
+   * 「以外」= 表头、表体空白处、别的组件（付费甘特的时间轴 pane 就在表格根节点之外）、
+   * 页面别处。**不含**：另一个单元格（那是换格）、编辑浮层与各类弹层（那是还在操作这一格）、
+   * 右键与中键。判断见 `internal/outside-cell.ts`。
+   *
+   * 关掉它就回到「描边一旦设上就只被点另一格替换」：Excel 那种语义 —— 点工具栏做操作时
+   * 当前格必须还在。**同时也要关掉 `vtCellSelection` 的 `clearOnOutside`**，
+   * 否则选区收了、描边还亮着，两个信号对不上。
+   */
+  clearActiveCellOnOutside?: boolean;
   headerClass?: string;
   headerStyle?: string;
   rowClass?: string | ((row: T, index: number) => string);
@@ -502,7 +591,13 @@ export interface VirtTableOptions<T extends Record<string, any>>
   cellClass?: string | ((column: VirtTableColumn<T>, row: T) => string);
   cellStyle?: string | ((column: VirtTableColumn<T>, row: T) => string);
   defaultExpandAll?: boolean;
-  groupConfig?: { field: string; sort?: 'asc' | 'desc' }[];
+  /**
+   * 分组层级，一项一级（第一项是最外层）。运行期换维度用 `setGroupConfig()`。
+   *
+   * 层级由**视图**在字段上聚合出来，数据始终是平的 —— 与树形（`children` 嵌套 +
+   * `type: 'tree'`）是两回事，两者可以并存。
+   */
+  groupConfig?: GroupSpec[];
   /** 选区变化回调（由 `vtCellSelection` 插件派发；也可写在插件配置的 onChange 里） */
   onCellSelectionChange?: (range: { startRow: number; startCol: number; endRow: number; endCol: number } | null) => void;
   /**
@@ -544,8 +639,16 @@ export interface VirtTableOptions<T extends Record<string, any>>
   summaryText?: string;
   /** 列顺序变化回调 */
   onColumnOrderChange?: (columns: VirtTableColumn<T>[]) => void;
-  /** 行顺序变化回调 */
+  /**
+   * 行顺序变化回调。**只在根层同父换位时触发**（扁平表的老语义），参数是老三样。
+   * 树形改父、落进分组这类结构性移动请听 `onRowMove` —— 那里才说得清「移到哪儿了」。
+   */
   onRowOrderChange?: (list: T[], from: number, to: number) => void;
+  /**
+   * 行拖拽落位回调，**任何一次成功的行移动都会触发**（含根层换位）。
+   * 拿到的是「移完之后」的状态：`row` 上的分组字段已按落点改写，`list` 是新的原始列表。
+   */
+  onRowMove?: (detail: RowMoveDetail<T>) => void;
   /** 置顶固定行（不参与虚拟滚动，冻结在表头下方） */
   pinnedTop?: T[];
   /** 置底固定行（冻结在表尾上方） */
@@ -848,6 +951,8 @@ export class VirtTable<T extends Record<string, any>> {
   private _selectColKey: string | null = null;
   private _activeCellOverlayEl: HTMLDivElement | null = null;
   private _boundOnBodyClick: ((e: MouseEvent) => void) | null = null;
+  /** 点到单元格以外时收起激活态的 document 监听（`clearActiveCellOnOutside`） */
+  private _boundOnOutsidePointer: ((e: PointerEvent) => void) | null = null;
 
   /** `textOverflow: 'tooltip'` 的浮层，首个这样的单元格渲染时才创建 */
   private _tooltip: TooltipController | null = null;
@@ -1434,6 +1539,28 @@ export class VirtTable<T extends Record<string, any>> {
     this._core.scrollFromUser(this._core.getOffset() + dy);
   }
 
+  /**
+   * 当前横向偏移量。与 `getOffset()`（纵向）成对。
+   *
+   * 横向位移仍由原生 `scrollLeft` 承载（自绘横条只是驱动它，不接管位移本身），
+   * 所以这里就是读它。给一个具名读取口是为了让插件不必依赖这个事实。
+   */
+  getScrollLeft(): number {
+    return this._clientEl?.scrollLeft ?? 0;
+  }
+
+  /**
+   * 横向相对滚动。拖拽到左右边缘时的自动滚动走这条。
+   *
+   * 写 `scrollLeft` 会照常触发原生 `scroll` → `_onHScroll`，固定列、列虚拟化与
+   * 自绘横条的滑块位置都会跟上，不需要额外同步。
+   */
+  scrollByX(dx: number): void {
+    if (!this._clientEl) return;
+    const max = this._maxScrollLeft();
+    this._clientEl.scrollLeft = Math.max(0, Math.min(max, this._clientEl.scrollLeft + dx));
+  }
+
   scrollToCell(rowIndex: number, colIndex: number): void {
     this._core.scrollIntoView(rowIndex);
 
@@ -1491,7 +1618,7 @@ export class VirtTable<T extends Record<string, any>> {
     const col = this._findColumnByKey(colKey);
     if (!col) return;
     col.hidden = !visible;
-    // 面板勾选态的同步由 vtColumnPanel 插件通过 onColumnsChanged 钩子接管
+    // 面板勾选态的同步由 vtFieldConfig 插件通过 onColumnsChanged 钩子接管
     this.setColumns([...this._allColumns]);
   }
 
@@ -1675,6 +1802,35 @@ export class VirtTable<T extends Record<string, any>> {
   forceUpdate(): void {
     this._clearItemPool();
     this._core.forceUpdate();
+  }
+
+  /**
+   * 运行时改行高。**`fixedSize: true` 下才是「行高」**，否则它只是未测量行的估算值
+   * （不定高模式下实际高度由内容决定，ResizeObserver 说了算）—— `vtRowHeightConfig`
+   * 因此只在固定行高下开放那三档。
+   *
+   * 为什么要走一条具名方法而不是让插件自己碰 `_core.updateOptions`：
+   * `estimatedSize` 有**两份**（`this._options` 是使用方那份，虚拟化账本里另有一份热快照），
+   * 只改一份的表现是「滚动几何按旧行高算」——行会重叠或行间留白。而 `updateOptions` 只刷快照、
+   * **不重算总高**（fixedSize 下总高是 `n × 行高`，只在 `forceUpdate` / 列表变化时重算），
+   * 所以这里必须补一次 `forceUpdate()`。三件事漏一件都只在滚动时才看出来。
+   */
+  setRowHeight(size: number): void {
+    if (!Number.isFinite(size) || size <= 0) {
+      console.warn(`[VirtTable] setRowHeight(${size}) 被忽略：行高必须是正数。`);
+      return;
+    }
+    if (this._options.estimatedSize === size) return;
+    this._options.estimatedSize = size;
+    this._core.updateOptions({ estimatedSize: size });
+    this.forceUpdate();
+    // 表头几何也可能跟着密度变，那件事 `onRendered` 读不出来（见钩子注释）
+    this._pluginRuntime?.emitRowHeightChanged(size);
+  }
+
+  /** 当前行高（`fixedSize` 下即每行实际高度，否则是未测量行的估算值） */
+  getRowHeight(): number {
+    return this._options.estimatedSize;
   }
 
   // --------------- 单元格级渲染 ---------------
@@ -1914,8 +2070,13 @@ export class VirtTable<T extends Record<string, any>> {
     this._clientEl.removeEventListener('scroll', this._boundOnHScroll);
     this._widthResizeObserver?.disconnect();
     this._widthResizeObserver = null;
+    if (this._boundOnOutsidePointer) {
+      document.removeEventListener('pointerdown', this._boundOnOutsidePointer);
+      this._boundOnOutsidePointer = null;
+    }
     if (this._boundOnBodyClick) {
-      this._tbodyEl.removeEventListener('click', this._boundOnBodyClick as EventListener);
+      // 事件名必须与上面绑定处一致 —— 这里曾经写成 'click'（绑的是 mousedown），等于没解绑
+      this._tbodyEl.removeEventListener(BODY_POINTER_EVENT, this._boundOnBodyClick as EventListener);
     }
     if (this._options.showHeader !== false && this._headerWrapEl) {
       this._core.unobserveSlotEl(this._headerWrapEl);
@@ -2455,9 +2616,19 @@ export class VirtTable<T extends Record<string, any>> {
     this._rootEl.appendChild(this._scrollbarX.el);
 
     /**
-     * 纵向输入接管。`overflow-y: hidden` 之后浏览器不再提供任何纵向滚动手段，
-     * 滚轮 / 触摸 / 惯性都得自己实现。横向不接管（`horizontal: false`）——
-     * 那边仍是原生 scrollport，触摸板横扫与 shift+滚轮由浏览器处理。
+     * 输入接管。`overflow-y: hidden` 之后浏览器不再提供任何纵向滚动手段，
+     * 滚轮 / 触摸 / 惯性都得自己实现（`horizontal: false` = 纵向是主轴）。
+     *
+     * **横向作为交叉轴一并交给它**（`crossEl`），虽然那边仍是原生 scrollport：
+     * `preventDefault` 没有"只拦一条轴"的粒度，主轴一拦，同一个事件里的横向分量
+     * 也一起没了 —— 曾经不传 `crossEl` 的后果是移动端「竖着滚起来之后横向完全滚不动，
+     * 只有竖向分量恰好为 0 或已顶到边界时才横滚得动」，桌面端触摸板斜向横扫同样被吃掉。
+     * 位移机制没变：横向仍是 `scrollLeft`，`sticky` 的固定列 / 分组标签照旧以它为参照
+     * （见 `index.css` 的 `.vt-client`），这里只是接过了"谁在什么时候写 `scrollLeft`"。
+     * 写进去照常触发原生 `scroll` → `_onHScroll`，横条显形与固定列阴影一行都不用改。
+     *
+     * 两条轴的触摸手势由 `InputController` 统一做起步阈值 + iOS 式方向锁定：
+     * 竖滚时列不会横漂，横滚也不再需要"手指绝对水平"才触发。
      *
      * 键盘在装了 `vtKeyboardNav` 时必须让给插件：该插件在 `_rootEl` 上监听 keydown，
      * 而 InputController 挂在 `_clientEl`（`_rootEl` 的后代）上，冒泡时**先**于它触发
@@ -2482,7 +2653,26 @@ export class VirtTable<T extends Record<string, any>> {
         onActivity: () => this._scrollbarY?.notifyActivity(),
       },
       false,
-      { keyboard: !hasKeyboardNav },
+      {
+        keyboard: !hasKeyboardNav,
+        // 横向 scrollport 就是 `_clientEl` 自己（不像 virt-list 那样另有一层滚动层）
+        crossEl: this._clientEl,
+        /**
+         * 表头 / 表尾也当输入源。
+         *
+         * 它们挂在 `_rootEl` 上、是 `_clientEl` 的**兄弟**（为了 z-index 压过内容，
+         * 见 §7.12），所以那里的滚轮与触摸冒泡不到挂在视口上的 `InputController`
+         * —— 2026-08-14 报的第四个问题「表头和表尾上滚不动」，PC 与移动端都中。
+         * 固定行（`pinnedTop`/`pinnedBottom`）渲染在这两段里，一并覆盖。
+         *
+         * ⚠️ 不能图省事传 `_rootEl`：插件浮层（列面板、筛选面板、单元格编辑器）也挂在
+         * 根上，它们自己内部要滚，冒泡到这里会变成「滚浮层里的长列表时表格跟着动」。
+         *
+         * ⚠️ 表尾 wrap 只在 `showSummary` 时才建，且这里取的是**建表时**的引用；
+         * 将来若支持运行时切换 showSummary，得连带重挂输入源。
+         */
+        sources: [this._headerWrapEl, this._footerWrapEl],
+      },
     );
 
     // 首次量出滑块长度与启用状态。轨道是浮层、不影响任何几何变量，
@@ -2554,7 +2744,7 @@ export class VirtTable<T extends Record<string, any>> {
     const flat = (cols: VirtTableColumn<T>[]): VirtTableColumn<T>[] =>
       cols.flatMap((c) => (c.children?.length ? flat(c.children) : [c]));
     for (const col of flat(this._options.columns)) {
-      if (col.type && col.type !== 'tree' && (col.render || col.renderEditor || col.cellType)) {
+      if (isFunctionalColumn(col) && (col.render || col.renderEditor || col.cellType)) {
         console.warn(
           `[virt-table] 列 "${col.key}" 的 type="${col.type}" 是功能列，独占单元格内容 —— ` +
             '同时配的 render / renderEditor / cellType 会被忽略。要整列自定义内容请去掉 type，' +
@@ -2789,11 +2979,28 @@ export class VirtTable<T extends Record<string, any>> {
     return result;
   }
 
+  /**
+   * 分组缩进画在哪一列：**第一个不是功能列的可见列**（回落到第一列）。
+   *
+   * 不能直接取 `columns[0]` —— 表格头上挂个 `type:'drag'` / `type:'checkbox'` 是常态，
+   * 而功能列在 `_applyCellContentInner` 里各自早返回，压根走不到缩进那一支：
+   * 于是分组下的数据行**一格缩进都没有**，看不出它挂在哪个分组下（实测踩过）。
+   * 树形列那一支本来就是按 `type:'tree'` 定位的，这里等于把同一条规则补给分组。
+   */
+  private _groupIndentCol(): VirtTableColumn<T> | undefined {
+    return this._columns.find(isDataColumn) ?? this._columns[0];
+  }
+
   private _constructGroups(list: T[]): T[] {
     const gc = this._options.groupConfig;
     if (!gc || gc.length === 0) return list;
 
-    const buildLevel = (items: T[], levelIdx: number, parentPath: string): T[] => {
+    const buildLevel = (
+      items: T[],
+      levelIdx: number,
+      parentPath: string,
+      ancestors: { field: string; value: string }[],
+    ): T[] => {
       if (levelIdx >= gc.length) return items;
       const { field, sort } = gc[levelIdx];
       const groups = new Map<string, T[]>();
@@ -2809,12 +3016,15 @@ export class VirtTable<T extends Record<string, any>> {
       const itemKey = this._options.itemKey;
       return keys.map((k) => {
         const groupPath = parentPath ? `${parentPath}/${field}:${k}` : `${field}:${k}`;
-        const children = buildLevel(groups.get(k)!, levelIdx + 1, groupPath);
+        // 整条路径（含本层）：行拖拽落进这个分组时要照它逐个改写字段，见 `_applyGroupPath`
+        const path = [...ancestors, { field, value: k }];
+        const children = buildLevel(groups.get(k)!, levelIdx + 1, groupPath, path);
         return {
           [itemKey]: `__group_${groupPath}`,
           _rowType: 'group',
           _groupName: k,
           _groupField: field,
+          _groupPath: path,
           // 该分组下的数据条数（用于分组行右侧计数徽标）
           _groupCount: groups.get(k)!.length,
           children,
@@ -2822,7 +3032,7 @@ export class VirtTable<T extends Record<string, any>> {
       });
     };
 
-    return buildLevel(list, 0, '');
+    return buildLevel(list, 0, '', []);
   }
 
   toggleExpand(rowKey: string): void {
@@ -2866,6 +3076,74 @@ export class VirtTable<T extends Record<string, any>> {
     };
     walk(this._originList);
     return found;
+  }
+
+  /**
+   * 在 `_originList` 树里定位一行：它**所在的那个兄弟数组**、下标、父行。
+   *
+   * 与 `_findOriginRow` 的差别就是这个「所在数组」—— 拖拽要把行从原位 splice 出来，
+   * 只拿到行对象是不够的，还得知道它挂在谁的 `children` 上。
+   */
+  private _locateRow(
+    key: string,
+  ): { siblings: T[]; index: number; parent: T | null } | null {
+    const itemKey = this._options.itemKey;
+    let hit: { siblings: T[]; index: number; parent: T | null } | null = null;
+    const walk = (items: T[], parent: T | null): void => {
+      for (let i = 0; i < items.length; i++) {
+        if (hit) return;
+        const it = items[i];
+        if (String(it[itemKey]) === key) {
+          hit = { siblings: items, index: i, parent };
+          return;
+        }
+        const kids = (it as any).children as T[] | undefined;
+        if (Array.isArray(kids) && kids.length) walk(kids, it);
+      }
+    };
+    walk(this._originList, null);
+    return hit;
+  }
+
+  /** `ancestorKey` 是不是 `key` 的祖先（含自身）。拦「把父节点拖进自己的子树」 */
+  private _isAncestorRow(ancestorKey: string, key: string): boolean {
+    if (ancestorKey === key) return true;
+    const root = this._findOriginRow(ancestorKey);
+    if (!root) return false;
+    const itemKey = this._options.itemKey;
+    let found = false;
+    const walk = (items: T[]): void => {
+      for (const it of items) {
+        if (found) return;
+        if (String(it[itemKey]) === key) {
+          found = true;
+          return;
+        }
+        const kids = (it as any).children as T[] | undefined;
+        if (Array.isArray(kids) && kids.length) walk(kids);
+      }
+    };
+    const kids = (root as any).children as T[] | undefined;
+    if (Array.isArray(kids) && kids.length) walk(kids);
+    return found;
+  }
+
+  /**
+   * 在**展示列表**里按 key 找行。分组行只存在于这里（`_constructGroups` 每次重建都新造），
+   * `_originList` 里找不到它们，所以拖拽解析落点时必须走这条。
+   *
+   * 先查 `_rowDataMap`（渲染窗口内的行，O(1)）再退化为全表扫描 —— 落点解析会沿层级
+   * 往上走，走到的祖先分组行经常已经滚出窗口。
+   */
+  private _findDisplayRow(key: string): T | null {
+    const hit = this._rowDataMap.get(key);
+    if (hit) return hit.item;
+    const itemKey = this._options.itemKey;
+    const list = this._options.list ?? [];
+    for (const it of list) {
+      if (String(it[itemKey]) === key) return it;
+    }
+    return null;
   }
 
   /** 给某行的树形箭头切换加载态（只碰这一行的 DOM，不整表重建） */
@@ -2950,6 +3228,15 @@ export class VirtTable<T extends Record<string, any>> {
     this._rebuildData();
   }
 
+  /**
+   * 该树 / 分组节点当前是否折叠。叶子行恒为 `false`（它没有折叠态）。
+   *
+   * 配 `toggleFold` 用：行拖拽悬停在折叠节点中段要「自动展开」，得先问一句现在是不是折的。
+   */
+  isFolded(rowKey: string): boolean {
+    return !!this._foldMap[rowKey];
+  }
+
   toggleFold(rowKey: string): void {
     // 子节点正在取：忽略点击。否则连点会按奇偶翻转折叠态，
     // 数据到达时展开与否变得随机（箭头此时是 spinner，本就不该可点）
@@ -3008,6 +3295,53 @@ export class VirtTable<T extends Record<string, any>> {
       this._foldMap[key] = true;
     }
     this._reflatten();
+  }
+
+  /** 当前分组层级（拷贝，与 `getSortState()` 同风格：改返回值不影响表格） */
+  getGroupConfig(): GroupSpec[] {
+    return (this._options.groupConfig ?? []).map((g) => ({ ...g }));
+  }
+
+  /**
+   * 运行期换分组维度。`null` / `[]` = 取消分组。
+   *
+   * 分组是**视图**上的聚合（数据始终是平的，分组行由 `_constructGroups` 每次重建合成），
+   * 所以换维度只需改配置 + 重算一次管线 —— 不碰 `_originList`，也不需要重建列或表头。
+   *
+   * ## 为什么要有这个方法（原来只有构造期 option）
+   *
+   * 「这周按阶段看、下周按负责人看」是分组最主要的用法，而它原来只能在 `new VirtTable`
+   * 时定死：换维度得销毁重建整张表（滚动位置、折叠态、勾选全丢）。付费插件那侧更僵 ——
+   * 插件只能通过 `PluginContext` 触达宿主，白名单里没有这条就压根做不了分组入口
+   * （`@virt-table-pro/gantt` 的工具栏「分组」按钮就是为它加的）。
+   *
+   * ## 刻意不做的两件事
+   *
+   * - **不进 `VirtTableState` / `getState()`**。加字段就得把 `version` 加一，而版本不匹配时
+   *   `setState` 会整体忽略并告警 —— 所有已经存在 localStorage 里的视图会当场作废。
+   *   要持久化分组的话自己存 `getGroupConfig()` 的结果。
+   * - **不动 `canReorderRows()`**。它现在不含分组是对的：分组下 `moveRowTo()` 支持把行落进
+   *   某个分组（核心会顺带改写分组字段），拒绝重排反而会关掉一个能用的功能。
+   *
+   * 折叠态（`_foldMap`）刻意**不清**：分组行的 key 是 `__group_<字段:值/…>` 这条路径，
+   * 换维度后旧 key 自然不再被命中，而换回来时上次的展开/折叠状态还在。
+   */
+  setGroupConfig(config: GroupSpec[] | null | undefined): void {
+    this._options.groupConfig = config && config.length > 0 ? config.map((g) => ({ ...g })) : undefined;
+    /*
+     * **偏移要原样写回。**
+     *
+     * `_rebuildData` 换掉 list 之后，virt-list 会按「让原来那一行仍停在原处」重新锚定 ——
+     * 开分组时新插进来的是若干**分组行**，于是偏移被悄悄推后正好一个分组行的高度，
+     * 而画面看着没动。后果是：在顶部开分组，第一个分组标题被顶到视口上方一行，
+     * 用户看到的是「分组好像没生效」（CDP 实测：offset 0 → 40，`renderBegin` 从 0 变 1）。
+     *
+     * 对「换个维度看」这件事，正确的语义是**留在原来的像素位置**：位置上方的内容本来就
+     * 全变了，锚回某一行毫无意义，而顶部就该看见第一个分组头。
+     */
+    const offset = this.getOffset();
+    this._rebuildData();
+    if (this.getOffset() !== offset) this.scrollToOffset(offset);
   }
 
   private _forEachItem(items: T[], fn: (item: T) => void): void {
@@ -3553,9 +3887,37 @@ export class VirtTable<T extends Record<string, any>> {
     if (this._options.highlightSelectRow || this._options.highlightSelectCol || this._options.highlightSelectCell) {
       const handler = this._onBodyClick.bind(this);
       this._boundOnBodyClick = handler;
-      this._tbodyEl.addEventListener('mousedown', handler as EventListener);
+      /*
+       * 听 `pointerdown`，**不能听 `mousedown`**：装了 `vtCellSelection` 时它的拖选起手会在
+       * pointerdown 里 `preventDefault()`，那会连带取消「派发兼容 mouse 事件」——
+       * 表体内的 mousedown 根本不存在（CDP 实测点单元格：pointerdown 1 / mousedown 0 / click 1），
+       * 于是三个 highlightSelect* 会集体失效。事件名要与 destroy() 里的解绑保持一致。
+       */
+      this._tbodyEl.addEventListener(BODY_POINTER_EVENT, handler as EventListener);
     }
 
+    /*
+     * 点到单元格以外 → 收起激活态。
+     *
+     * **不受 `highlightSelect*` 门控**：激活态还有第二个来源 —— `setActiveCell()`
+     * （`vtCellEditor` 点开一格就调它），那条路一个开关都不用开。所以监听按
+     * `clearActiveCellOnOutside` 单独判断。
+     *
+     * 挂 `document` 而不是 `.vt-root`：「别处」经常**不在** root 里 —— 付费甘特的时间轴
+     * pane 与 root 是兄弟节点，工具栏按钮条也在 root 外面（自己包的那层壳里）。
+     * 挂 root 的话那两处点了都不算离开，而它们恰恰是最常点的地方。
+     *
+     * handler 首行就早退（没有激活态时什么都不做），所以常态下这个监听不花钱。
+     */
+    if (this._options.clearActiveCellOnOutside !== false) {
+      const onOutside = (e: PointerEvent): void => {
+        if (!this._selectRowKey && !this._selectColKey) return;
+        if (!isOutsidePointer(e, this._tbodyEl)) return;
+        this._setCurrentCell(null, null);
+      };
+      this._boundOnOutsidePointer = onOutside;
+      document.addEventListener('pointerdown', onOutside);
+    }
 
     this._setupPlugins();
   }
@@ -4019,6 +4381,17 @@ export class VirtTable<T extends Record<string, any>> {
       e.preventDefault();
       this._startResize(e, col, th);
     });
+    /**
+     * 触屏上拖列宽时别顺带滚表格。
+     *
+     * 表头现在是 `InputController` 的输入源（见 `_initScrollbars` 里的 `sources`），
+     * 而拖拽走的是 Pointer Events —— 同一根手指会同时产生 touch 与 pointer 两套事件，
+     * 不拦的话「拖列宽」和「滚表格」会一起发生。这里只 `stopPropagation`（不
+     * `preventDefault`，那是 `touch-action: none` 的活），把这 8px 手柄整个让给拖拽。
+     */
+    const swallowTouch = (e: Event): void => e.stopPropagation();
+    trigger.addEventListener('touchstart', swallowTouch, { passive: true });
+    trigger.addEventListener('touchmove', swallowTouch, { passive: true });
     th.appendChild(trigger);
   }
 
@@ -4041,7 +4414,7 @@ export class VirtTable<T extends Record<string, any>> {
     headerRow = 0,
   ): void {
     // 与表体功能列保持一致的表头对齐/内边距
-    if (col.type && col.type !== 'tree') {
+    if (isFunctionalColumn(col)) {
       th.classList.add(`vt-th--${col.type}`);
     }
     if (col.type === 'checkbox') {
@@ -4698,7 +5071,7 @@ export class VirtTable<T extends Record<string, any>> {
       td.classList.add('current-column');
     }
     // 功能列（序号/勾选/单选/拖拽/展开）加类型类，供样式收窄内边距并居中
-    if (col.type && col.type !== 'tree') {
+    if (isFunctionalColumn(col)) {
       td.classList.add(`vt-td--${col.type}`);
     }
 
@@ -4732,11 +5105,8 @@ export class VirtTable<T extends Record<string, any>> {
      * ⚠️ 穿透只改 UI，不改选择态语义：勾选框没画出来，但该行仍在 `_checkedRows` 的
      * 作用域里，表头全选照样会选中它。要真禁止选中得自己在 `onCheckChange` 里挡。
      */
-    // `col.type` 判断放在前面短路：普通列（绝大多数格）不必为此多查一次配置表
-    const pierced =
-      col.type !== undefined &&
-      col.type !== 'tree' &&
-      this._hasCellContentOverride(col, item);
+    // 功能列判断放在前面短路：普通列（绝大多数格）不必为此多查一次配置表
+    const pierced = isFunctionalColumn(col) && this._hasCellContentOverride(col, item);
 
     if (col.type === 'index' && !pierced) {
       td.textContent = String(rowIndex + 1);
@@ -4855,20 +5225,37 @@ export class VirtTable<T extends Record<string, any>> {
       return;
     }
 
+    /**
+     * 分组下的**数据行**：首列按分组层级缩进。
+     *
+     * 缩进块与内容必须包在一个 flex 行里（`.vt-tree-row`，与分组行那一支同款）。
+     * 早先是把 `span.vt-group-indent` 直接 append 到 `td`，紧随其后的
+     * `.vt-td-text` 是**块级**元素 —— 于是 inline-block 的缩进占一行、文字另起一行，
+     * 行高从 40 变成 61（21×2 + 9×2 + 1）。而 `fixedSize: true` 按 `estimatedSize`
+     * 建滚动几何，模型比实际矮 21px/行，正是 AGENTS.md §7.11 那个「滚不到底」。
+     *
+     * `.vt-group-indent` 上那句 `flex-shrink: 0` 本来就是为这个 flex 容器写的 ——
+     * 它一直缺的是容器本身。
+     */
     const groupLevel = ((item as any)._groupLevel as number) || 0;
-    if (
-      groupLevel > 1 &&
-      !this._hasTreeCol &&
-      col === this._options.columns[0]
-    ) {
+    // 自动合并的 primary 格：内容交给 sticky 内层承载（见 _mergeCellSlot）
+    const slot = this._mergeCellSlot(td, col, rowIndex);
+    let contentHost: HTMLElement = slot;
+    if (groupLevel > 1 && !this._hasTreeCol && col === this._groupIndentCol()) {
+      const row = document.createElement('div');
+      row.className = 'vt-tree-row';
+      slot.appendChild(row);
       for (let l = 1; l < groupLevel; l++) {
         const sp = document.createElement('span');
         sp.className = 'vt-group-indent';
-        td.appendChild(sp);
+        row.appendChild(sp);
       }
+      const content = document.createElement('div');
+      content.className = 'vt-tree-content';
+      row.appendChild(content);
+      contentHost = content;
     }
-    // 自动合并的 primary 格：内容交给 sticky 内层承载（见 _mergeCellSlot）
-    this._fillCellContent(this._mergeCellSlot(td, col, rowIndex), col, item, rowIndex);
+    this._fillCellContent(contentHost, col, item, rowIndex);
   }
 
   /**
@@ -5121,11 +5508,23 @@ export class VirtTable<T extends Record<string, any>> {
     const centerCount = tr.children.length - L - R - 1;
 
     const pool = new Map<number, HTMLTableCellElement>();
+    /**
+     * 左右两个列虚拟化占位格（`.vt-cell-pad`）也要进池。
+     *
+     * 它们没有 `_ci`（不对应任何列），早先因此每帧都走「remove + createElement」——
+     * CDP 实测（自动合并 demo，触摸滚动 3×700px）：tbody 的 3595 条 DOM 变更里
+     * **3264 条就是 pad 的删+建**（`-td.vt-cell-pad ×1632` / `+td.vt-cell-pad ×1632`），
+     * 占 90%；同样距离下无合并的 `table-basic` 总变更只有 71 条。
+     * 它们身上唯一会变的就是 `colSpan`，重建纯属浪费。
+     */
+    const padPool: HTMLTableCellElement[] = [];
     for (let i = 0; i < centerCount; i++) {
       const td = tr.children[L + i] as HTMLTableCellElement;
       const ci = (td as any)._ci as number | undefined;
       if (ci !== undefined) {
         pool.set(ci, td);
+      } else if (td.classList.contains('vt-cell-pad')) {
+        padPool.push(td);
       }
     }
 
@@ -5145,6 +5544,8 @@ export class VirtTable<T extends Record<string, any>> {
     for (let i = centerCount - 1; i >= 0; i--) {
       const td = tr.children[L + i] as HTMLTableCellElement;
       const ci = (td as any)._ci as number | undefined;
+      // 池里的 pad 留着：下面按 plan 重新排位并改 colSpan，用不上的在末尾统一摘掉
+      if (ci === undefined && td.classList.contains('vt-cell-pad')) continue;
       if (ci === undefined || !neededCols.has(ci)) {
         td.remove();
         if (ci !== undefined) pool.delete(ci);
@@ -5156,9 +5557,16 @@ export class VirtTable<T extends Record<string, any>> {
       let td: HTMLTableCellElement;
 
       if (cell.type === 'pad') {
-        td = document.createElement('td');
-        td.className = 'vt-cell-pad';
-        td.colSpan = cell.colSpan;
+        const reused = padPool.pop();
+        if (reused) {
+          td = reused;
+          // 唯一会变的属性；相等时不写，省掉一次无谓的属性变更（MutationObserver 也少一条）
+          if (td.colSpan !== cell.colSpan) td.colSpan = cell.colSpan;
+        } else {
+          td = document.createElement('td');
+          td.className = 'vt-cell-pad';
+          td.colSpan = cell.colSpan;
+        }
       } else {
         const existing = pool.get(cell.colIndex);
         if (existing) {
@@ -5186,6 +5594,9 @@ export class VirtTable<T extends Record<string, any>> {
       }
       prevNode = td;
     }
+
+    // plan 里的 pad 比上一帧少时（列窗口滚到两端），多出来的摘掉
+    for (const td of padPool) td.remove();
 
     const hTd = tr.lastElementChild as HTMLElement;
     if (hTd?.classList.contains('vt-cell-h')) {
@@ -5314,6 +5725,21 @@ export class VirtTable<T extends Record<string, any>> {
   }
 
   /**
+   * 拖拽手柄列（`type: 'drag'`）不参与高亮 —— 那一格的语义是「按住我拖行」，不是「选中」。
+   *
+   * 判断由 `_setCurrentCell` / `setActiveCell` 统一门控，因为点击**不是唯一入口**：
+   *   - `_onBodyClick`：听的是 `pointerdown`（见 `_buildDOM` 里的注释），与 `vtRowDrag`
+   *     的拖拽起手是同一个事件 —— 不挡的话每次拖行都会顺手把当前行/列/描边搬到手柄上；
+   *   - `vtCellEditor`：它的 `setActive` 刻意「点到哪格就是哪格，与能不能编辑无关」，
+   *     于是 `trigger: 'dblclick'` 下双击手柄格照样激活（经典案例·项目 WBS 正是这个组合）；
+   *   - `setActiveCell()` 程序化入口，含三端 ref 透传。
+   * 只在第一个入口挡就会漏掉后两个。
+   */
+  private _isHighlightExemptColumn(colKey: string): boolean {
+    return this._findColumnByKey(colKey)?.type === 'drag';
+  }
+
+  /**
    * 落地「当前行 / 当前列 / 当前单元格」三件事。
    *
    * 从 `_onBodyClick` 里抽出来，因为点击不再是唯一入口：`vtCellEditor` 打开编辑器时
@@ -5322,6 +5748,9 @@ export class VirtTable<T extends Record<string, any>> {
    * 所以这里无条件维护 —— 状态只有一份，谁开了哪个开关是渲染的事。
    */
   private _setCurrentCell(rowKey: string | null, colKey: string | null): void {
+    // 手柄列整个操作忽略（而不是传 `colKey: null`）：拖行是操作，不该把用户已激活的那格清掉
+    if (colKey && this._isHighlightExemptColumn(colKey)) return;
+
     if (this._selectRowKey !== rowKey) {
       if (this._selectRowKey) {
         const prev = this._tbodyEl.querySelector(`tr[data-row-key="${this._selectRowKey}"]`);
@@ -5363,6 +5792,8 @@ export class VirtTable<T extends Record<string, any>> {
    * 传 `null` 清除。描边的跟随（滚动、排序、列窗口变化）已由核心统一处理。
    */
   setActiveCell(rowKey: string | null, colKey: string | null): void {
+    // 手柄列直接不受理，连浮层都不必建（见 `_isHighlightExemptColumn`）
+    if (colKey && this._isHighlightExemptColumn(colKey)) return;
     if (rowKey && colKey) this._ensureActiveCellOverlay();
     this._setCurrentCell(rowKey, colKey);
   }
@@ -5567,44 +5998,229 @@ export class VirtTable<T extends Record<string, any>> {
   }
 
   /**
-   * 当前行序是否可拖拽重排。排序/筛选/树形/分组下都不行——
-   * 那些情况下「视图顺序」与「原始数据顺序」不是一回事，拖拽结果无法预期。
+   * 当前行序是否可拖拽重排。排序 / 筛选 / 自动合并下不行 ——
+   * 那三种情况下「视图顺序」与「原始数据顺序」不是一回事，拖拽结果无法预期。
+   *
+   * **树形与分组是支持的**（它们曾经也在这份黑名单里）：落点走 `moveRowTo`，
+   * 按「父级 + 前一个兄弟」写回 `_originList` 的 `children` 结构；
+   * 落进分组时改写行上的分组字段（分组行是合成的，它本身不承载数据）。
    */
   canReorderRows(): boolean {
     return !(
       this._sortState.length > 0 ||
       this.hasActiveFilters() ||
-      this._hasTreeCol ||
-      !!this._options.groupConfig ||
       // 自动合并下把一行拖出所属段没有语义
       this._hasAutoMerge()
     );
   }
 
   /**
-   * 把行移到目标行的前/后（作用于 `_originList` 原始顺序）。成功返回 true。
+   * 这个落点能不能放（**只判定，不改数据**）。
    *
-   * 留在核心：依赖 `_originList` 与 `_rebuildData` 管线；
-   * `vtRowDrag` 插件只负责手柄、ghost 与指示线。
+   * `vtRowDrag` 用它决定指示线画不画 —— 拖到放不下的地方就该干脆没有任何指示物，
+   * 而不是让人松了手才发现没反应。「拖回原处」也算放不下（结果与现状相同）。
    */
-  moveRow(fromKey: string, toKey: string, insertAfter: boolean): boolean {
-    if (fromKey === toKey || !this.canReorderRows()) return false;
-    const key = this._options.itemKey;
-    const from = this._originList.findIndex((r) => String(r[key]) === fromKey);
-    const to = this._originList.findIndex((r) => String(r[key]) === toKey);
-    if (from < 0 || to < 0) return false;
+  canDropRow(sourceKey: string, target: RowDropTarget): boolean {
+    return this._resolveDrop(sourceKey, target) !== null;
+  }
 
-    let insertIdx = insertAfter ? to + 1 : to;
-    if (from < insertIdx) insertIdx -= 1;
-    if (insertIdx === from) return false;
+  /**
+   * 把行移到「某个父级下、某个兄弟之后」。成功返回 true。
+   *
+   * 这是行拖拽落数据的**唯一入口**，语义与 virt-list 树形拖拽的
+   * `dragend({ node, prevNode, parentNode })` 对齐 —— 用「父级 + 前一个兄弟」而不是
+   * 「目标行的前/后」，因为后者在树里说不出「是它的子节点还是它的兄弟」。
+   *
+   * 三种父级：
+   * - `parentKey` 是数据行 → 成为它的子节点（叶子行也行，它会因此长出 `children` 与箭头）
+   * - `parentKey` 是分组行 → 落进该分组：按分组行的 `_groupPath` 把行上**每一层**的分组
+   *   字段改写成对应值，行随即出现在这个分组下（分组是从字段值派生的，改字段才是改分组）
+   * - `parentKey` 空 → 根层。此时若 `groupConfig` 生效，会按 `prevKey` 那行所属的分组
+   *   同步字段，保证「指示线画在哪就落在哪」
+   *
+   * 留在核心：依赖 `_originList`、`_foldMap` 与 `_rebuildData` 管线；
+   * `vtRowDrag` 插件只负责手势、ghost、指示线与落点归约。
+   */
+  moveRowTo(sourceKey: string, target: RowDropTarget): boolean {
+    const plan = this._resolveDrop(sourceKey, target);
+    if (!plan) return false;
 
+    const { source, dest, insertIdx, groupPath, attachTo, parentRow, prevRow } = plan;
+    const row = source.siblings[source.index];
+
+    source.siblings.splice(source.index, 1);
+    dest.splice(insertIdx, 0, row);
+    if (attachTo) (attachTo as any).children = dest;
+
+    if (groupPath) {
+      for (const seg of groupPath) (row as any)[seg.field] = seg.value;
+    }
+    // 落进某个节点：把它展开，否则新来的子节点直接藏在折叠的父级里，看着像丢了
+    if (parentRow && (parentRow as any)._rowType !== 'group') {
+      this._foldMap[String(parentRow[this._options.itemKey])] = false;
+    }
+
+    // 换新数组：`_computeDisplayList` 的快路径会把 `_originList` 按引用交出去，
+    // 使用方（尤其 React）靠引用变化判定「列表变了」
     const next = [...this._originList];
-    const [moved] = next.splice(from, 1);
-    next.splice(insertIdx, 0, moved);
     this._originList = next;
     this._rebuildData();
-    this._options.onRowOrderChange?.(next, from, insertIdx);
+
+    this._options.onRowMove?.({ row, parentRow, prevRow, list: next });
+    // 老回调只在**根层同父换位**时触发：它的 (from, to) 是根层下标，
+    // 嵌套数组里的下标表达不了「移到哪儿了」，那种情况该听 onRowMove
+    if (plan.rootReorder) {
+      this._options.onRowOrderChange?.(next, source.index, insertIdx);
+    }
     return true;
+  }
+
+  /**
+   * 把行移到目标行的前/后。成功返回 true。
+   *
+   * `moveRowTo` 的薄包装（把「目标行 + 前/后」翻成「父级 + 前一个兄弟」），
+   * 保留是因为它是老的公开签名；扁平表上行为与从前完全一致，顺带获得了树形支持。
+   */
+  moveRow(fromKey: string, toKey: string, insertAfter: boolean): boolean {
+    if (fromKey === toKey) return false;
+    const to = this._locateRow(toKey);
+    if (!to) return false;
+    const itemKey = this._options.itemKey;
+    const prevSibling = to.index > 0 ? to.siblings[to.index - 1] : null;
+    return this.moveRowTo(fromKey, {
+      parentKey: to.parent ? String(to.parent[itemKey]) : null,
+      prevKey: insertAfter
+        ? toKey
+        : prevSibling
+          ? String(prevSibling[itemKey])
+          : null,
+    });
+  }
+
+  /**
+   * 落点归约：把 `{ parentKey, prevKey }` 解析成「从哪个数组的哪一格搬到哪个数组的哪一格、
+   * 顺带改哪些字段」。放不下时返回 null。
+   *
+   * 单独抽出来是因为 `canDropRow`（画指示线，每次 pointermove 都问）与 `moveRowTo`
+   * （真落数据）必须用**同一套判定** —— 两份判定必然会漂，然后表现成「线画着却放不下」。
+   */
+  private _resolveDrop(
+    sourceKey: string,
+    target: RowDropTarget,
+  ): {
+    source: { siblings: T[]; index: number; parent: T | null };
+    dest: T[];
+    insertIdx: number;
+    groupPath: readonly { field: string; value: string }[] | null;
+    attachTo: T | null;
+    parentRow: T | null;
+    prevRow: T | null;
+    rootReorder: boolean;
+  } | null {
+    if (!this.canReorderRows()) return null;
+    const itemKey = this._options.itemKey;
+    const hasGroup = !!this._options.groupConfig?.length;
+
+    const source = this._locateRow(sourceKey);
+    if (!source) return null;
+
+    const parentKey = target.parentKey ?? null;
+    let prevKey = target.prevKey ?? null;
+    // 落到自己身上 / 自己的子树里 —— 那会把子树从树上摘下来
+    if (parentKey && this._isAncestorRow(sourceKey, parentKey)) return null;
+
+    const parentRow = parentKey ? this._findDisplayRow(parentKey) : null;
+    if (parentKey && !parentRow) return null;
+    const parentIsGroup = !!parentRow && (parentRow as any)._rowType === 'group';
+
+    let dest: T[];
+    let groupPath: readonly { field: string; value: string }[] | null = null;
+    /** 落点数组还没挂到树上（叶子行第一次收子节点），落数据时才挂 */
+    let attachTo: T | null = null;
+
+    if (parentIsGroup) {
+      if (!hasGroup) return null;
+      groupPath = (parentRow as any)._groupPath as
+        | readonly { field: string; value: string }[]
+        | undefined ?? null;
+      if (!groupPath) return null;
+      // 分组是从字段值派生的合成层：行本身仍然住在根层
+      dest = this._originList;
+      // prevKey 指向分组行自己 = 「这一组的开头」，用 null 表达
+      if (prevKey === parentKey) prevKey = null;
+    } else if (parentRow) {
+      // 没有树形列时「成为某行的子节点」渲染不出来，等于让行凭空消失
+      if (!this._hasTreeCol) return null;
+      const kids = (parentRow as any).children as T[] | undefined;
+      if (Array.isArray(kids)) {
+        dest = kids;
+      } else {
+        // 叶子行第一次收子节点：数组现在**不能**建 —— `canDropRow` 每次 pointermove
+        // 都会走到这里，在只判定的路径上写数据会给沿途每个叶子挂一个空 children
+        dest = [];
+        attachTo = parentRow;
+      }
+    } else {
+      dest = this._originList;
+      if (hasGroup) {
+        // 根层 + 分组：行只能落在某个分组里（分组之间没有「行」这一层），
+        // 所以按 prevKey 所属的分组同步字段
+        const prevDisplay = prevKey ? this._findDisplayRow(prevKey) : null;
+        if (!prevDisplay) return null; // 落在第一个分组之前，没有对应的分组，放不下
+        if ((prevDisplay as any)._rowType === 'group') {
+          groupPath = (prevDisplay as any)._groupPath ?? null;
+          if (!groupPath) return null;
+          prevKey = null; // 「这一组的开头」
+        } else {
+          groupPath = this._options.groupConfig!.map((g) => ({
+            field: g.field,
+            value: String((prevDisplay as any)[g.field] ?? ''),
+          }));
+        }
+      }
+    }
+
+    // ---- 插入下标（先按「还没把源行摘掉」的坐标算，再补偿）----
+    let insertIdx: number;
+    const prevIdx = prevKey
+      ? dest.findIndex((r) => String(r[itemKey]) === prevKey)
+      : -1;
+    if (prevIdx >= 0) {
+      insertIdx = prevIdx + 1;
+    } else if (groupPath && dest === this._originList) {
+      // 「这一组的开头」：落在该组第一个成员之前；一个成员都没有就落到末尾
+      const head = dest.findIndex((r) =>
+        groupPath!.every((seg) => String((r as any)[seg.field] ?? '') === seg.value),
+      );
+      insertIdx = head >= 0 ? head : dest.length;
+    } else {
+      insertIdx = 0;
+    }
+
+    const sameArray = dest === source.siblings;
+    if (sameArray && source.index < insertIdx) insertIdx -= 1;
+
+    const fieldsChanged =
+      !!groupPath &&
+      groupPath.some(
+        (seg) =>
+          String((source.siblings[source.index] as any)[seg.field] ?? '') !== seg.value,
+      );
+    // 拖回原处：不算一次移动（也让指示线消失）
+    if (sameArray && insertIdx === source.index && !fieldsChanged) return null;
+
+    const prevRow = prevIdx >= 0 ? dest[prevIdx] : null;
+    return {
+      source,
+      dest,
+      insertIdx,
+      groupPath: fieldsChanged ? groupPath : null,
+      attachTo,
+      parentRow,
+      prevRow,
+      // 根层同父换位（分组内换位也算：分组行是合成层，行仍住在根层）
+      rootReorder: sameArray && dest === this._originList && !fieldsChanged,
+    };
   }
 
   private _initFiltersFromChecked(): void {
@@ -5727,11 +6343,61 @@ export class VirtTable<T extends Record<string, any>> {
   getSelectionRect(sel: CellSelectionRange): SelectionRect | null {
     const { startRow: r0, endRow: r1, startCol: c0, endCol: c1 } = sel;
 
+    // 横向：与 getColumnRange 共用同一份列几何换算（免受占位 merge 干扰）
+    const xRange = this.getColumnRange(c0, c1);
+    if (!xRange) return null;
+
+    // ── 纵向：由已渲染行的 DOM 位置算出 ──
     const clientRect = this._clientEl.getBoundingClientRect();
+    let topPx = Infinity;
+    let bottomPx = -Infinity;
+    let found = false;
+
+    const trs = this._tbodyEl.querySelectorAll<HTMLElement>('tr.vt-tr');
+    for (const tr of trs) {
+      const rowKey = tr.dataset.rowKey;
+      if (!rowKey) continue;
+      const rd = this._rowDataMap.get(rowKey);
+      if (!rd || rd.rowIndex < r0 || rd.rowIndex > r1) continue;
+
+      const trRect = tr.getBoundingClientRect();
+      topPx = Math.min(topPx, trRect.top);
+      bottomPx = Math.max(bottomPx, trRect.bottom);
+      found = true;
+    }
+
+    if (!found) return null;
+
+    const height = bottomPx - topPx;
+    if (height <= 0) return null;
+
+    return {
+      // 不再加 `scrollTop`（overflow-y: hidden，恒为 0）：两个 rect 之差就是
+      // 相对容器可视区上缘的距离，而框选浮层正是按这个定位的
+      top: topPx - clientRect.top,
+      left: xRange.left,
+      width: xRange.width,
+      height,
+    };
+  }
+
+  /**
+   * 列区间的横向像素范围（`.vt-client` 内容坐标）。
+   *
+   * 纯列宽前缀和算术，**不依赖渲染窗口** —— 横向窗口外的列一样算得出来，
+   * 这是甘特条（横跨几十个时间桶）与图表对齐列所必须的。
+   *
+   * 固定列的处理与 `getSelectionRect` 一致：固定列是 `position: sticky`，它的内容坐标
+   * 随 `scrollLeft` 走，所以要把当前横向偏移加回去；中间段的列则是稳定的前缀和。
+   */
+  getColumnRange(startCol: number, endCol: number): ColumnRange | null {
+    if (!this._clientEl) return null;
+    const c0 = Math.min(startCol, endCol);
+    const c1 = Math.max(startCol, endCol);
+    if (c0 < 0 || c1 >= this._columns.length) return null;
+
     const scrollLeft = this._clientEl.scrollLeft;
     const leftFixedCount = this._leftFixedCols.length;
-
-    // ── 横向：由列几何算出（免受占位 merge 干扰） ──
     const cCenter0 = c0 - leftFixedCount;
     const cCenter1 = c1 - leftFixedCount;
 
@@ -5755,37 +6421,56 @@ export class VirtTable<T extends Record<string, any>> {
         scrollLeft + (this._leftFixedOffsets[c1] ?? 0) + (fixedCol ? this._colWidth(fixedCol) : 0);
     }
 
-    // ── 纵向：由已渲染行的 DOM 位置算出 ──
-    let topPx = Infinity;
-    let bottomPx = -Infinity;
-    let found = false;
+    const width = contentRight - contentLeft;
+    if (width <= 0) return null;
+    return { left: contentLeft, width };
+  }
 
-    const trs = this._tbodyEl.querySelectorAll<HTMLElement>('tr.vt-tr');
-    for (const tr of trs) {
+  /**
+   * 渲染窗口内所有数据行的纵向位置，按 `rowIndex` 升序。
+   *
+   * 一次全表查询 + 每行一次 rect 读取。**要按行摆 N 个浮层就用它**，别对每行分别调
+   * `getSelectionRect` —— 那是 N 次全表查询 + N 次强制布局。
+   */
+  getRenderedRowRects(): RowRect[] {
+    if (!this._tbodyEl || !this._clientEl) return [];
+    const clientTop = this._clientEl.getBoundingClientRect().top;
+    const out: RowRect[] = [];
+    for (const tr of this._tbodyEl.querySelectorAll<HTMLElement>('tr.vt-tr')) {
       const rowKey = tr.dataset.rowKey;
       if (!rowKey) continue;
       const rd = this._rowDataMap.get(rowKey);
-      if (!rd || rd.rowIndex < r0 || rd.rowIndex > r1) continue;
-
-      const trRect = tr.getBoundingClientRect();
-      topPx = Math.min(topPx, trRect.top);
-      bottomPx = Math.max(bottomPx, trRect.bottom);
-      found = true;
+      if (!rd) continue;
+      const rect = tr.getBoundingClientRect();
+      out.push({ rowIndex: rd.rowIndex, top: rect.top - clientTop, height: rect.height });
     }
+    out.sort((a, b) => a.rowIndex - b.rowIndex);
+    return out;
+  }
 
-    if (!found) return null;
+  /**
+   * 单行的纵向位置，**渲染窗口外的行也给值**。
+   *
+   * 窗口外靠「已渲染行做锚点 + 行位置账本求差」外推，而不是自己去拼
+   * `stickyHeaderSize + leadingSize - offset`：那套残差布局是 `_applyBodyOffset` 的实现
+   * 细节，复制一遍就等于把它冻死在这里。取一个真实渲染行的屏幕位置做锚点，
+   * 谁改了布局方式这里都还是对的。
+   */
+  getRowRect(rowIndex: number): RowRect | null {
+    const rendered = this.getRenderedRowRects();
+    if (rendered.length === 0) return null;
+    const hit = rendered.find((r) => r.rowIndex === rowIndex);
+    if (hit) return hit;
 
-    const width = contentRight - contentLeft;
-    const height = bottomPx - topPx;
-    if (width <= 0 || height <= 0) return null;
-
+    // 锚点取最近的一行：不定高模式下未测量行只能按 estimatedSize 估，离得越近误差越小
+    const anchor =
+      rowIndex < rendered[0].rowIndex ? rendered[0] : rendered[rendered.length - 1];
+    const anchorPos = this._core.getItemPosByIndex(anchor.rowIndex);
+    const pos = this._core.getItemPosByIndex(rowIndex);
     return {
-      // 不再加 `scrollTop`（overflow-y: hidden，恒为 0）：两个 rect 之差就是
-      // 相对容器可视区上缘的距离，而框选浮层正是按这个定位的
-      top: topPx - clientRect.top,
-      left: contentLeft,
-      width,
-      height,
+      rowIndex,
+      top: anchor.top + (pos.top - anchorPos.top),
+      height: pos.current,
     };
   }
 
@@ -6192,14 +6877,88 @@ export interface VirtTablePluginApi {
   /** 当前全部命中项（`vtSearch`） */
   getSearchMatches(): SearchMatch[];
 
-  /** 打开/关闭列设置面板（`vtColumnPanel`） */
-  toggleColumnPanel(anchor?: HTMLElement): void;
-  /** 打开列设置面板（`vtColumnPanel`） */
-  openColumnPanel(anchor?: HTMLElement): void;
-  /** 关闭列设置面板（`vtColumnPanel`） */
-  closeColumnPanel(): void;
-  /** 列设置面板是否打开（`vtColumnPanel`） */
-  isColumnPanelOpen(): boolean;
+  /*
+   * 四个面板插件（`vtFieldConfig` / `vtFilterConfig` / `vtGroupConfig` / `vtSortConfig`）。
+   *
+   * `anchor` 是浮层贴的那个元素（一般就是你自己那颗按钮）。**装了 `vtToolbar` 时这几条
+   * 转发给工具栏**（面板贴工具栏上那颗按钮，除非你给了 `anchor`），所以不会出现「点按钮开一个、
+   * 调 API 又开一个」两张面板同时在。
+   */
+  /** 开合字段配置面板（`vtFieldConfig`） */
+  toggleFieldConfig(anchor?: HTMLElement): void;
+  /** 打开字段配置面板；已经开着就什么都不做（`vtFieldConfig`） */
+  openFieldConfig(anchor?: HTMLElement): void;
+  /** 关闭字段配置面板（`vtFieldConfig`） */
+  closeFieldConfig(): void;
+  /** 字段配置面板是否打开（`vtFieldConfig`） */
+  isFieldConfigOpen(): boolean;
+
+  /** 开合高级筛选面板（`vtFilterConfig`） */
+  toggleFilterConfig(anchor?: HTMLElement): void;
+  /** 打开高级筛选面板；已经开着就什么都不做（`vtFilterConfig`） */
+  openFilterConfig(anchor?: HTMLElement): void;
+  /** 关闭高级筛选面板（`vtFilterConfig`） */
+  closeFilterConfig(): void;
+  /** 高级筛选面板是否打开（`vtFilterConfig`） */
+  isFilterConfigOpen(): boolean;
+
+  /** 开合分组配置面板（`vtGroupConfig`） */
+  toggleGroupConfig(anchor?: HTMLElement): void;
+  /** 打开分组配置面板；已经开着就什么都不做（`vtGroupConfig`） */
+  openGroupConfig(anchor?: HTMLElement): void;
+  /** 关闭分组配置面板（`vtGroupConfig`） */
+  closeGroupConfig(): void;
+  /** 分组配置面板是否打开（`vtGroupConfig`） */
+  isGroupConfigOpen(): boolean;
+
+  /** 开合排序配置面板（`vtSortConfig`） */
+  toggleSortConfig(anchor?: HTMLElement): void;
+  /** 打开排序配置面板；已经开着就什么都不做（`vtSortConfig`） */
+  openSortConfig(anchor?: HTMLElement): void;
+  /** 关闭排序配置面板（`vtSortConfig`） */
+  closeSortConfig(): void;
+  /** 排序配置面板是否打开（`vtSortConfig`） */
+  isSortConfigOpen(): boolean;
+
+  /**
+   * 切到某一档行高（`vtRowHeightConfig`）：`'compact'` 30px / `'default'` 40px / `'loose'` 50px。
+   *
+   * 一次改两件事 —— 密度类与虚拟化行高。**没开 `fixedSize: true` 时不生效**（那时行高由内容
+   * 决定），会 warn 一次说明原因。
+   */
+  setRowHeightLevel(level: RowHeightLevel): void;
+  /** 当前行高档（`vtRowHeightConfig`） */
+  getRowHeightLevel(): RowHeightLevel;
+  /** 开合行高面板（`vtRowHeightConfig`） */
+  toggleRowHeightConfig(anchor?: HTMLElement): void;
+  /** 打开行高面板；已经开着就什么都不做（`vtRowHeightConfig`） */
+  openRowHeightConfig(anchor?: HTMLElement): void;
+  /** 关闭行高面板（`vtRowHeightConfig`） */
+  closeRowHeightConfig(): void;
+  /** 行高面板是否打开（`vtRowHeightConfig`） */
+  isRowHeightConfigOpen(): boolean;
+
+  /**
+   * 开合工具栏上某一项的面板（`vtToolbar`）。
+   *
+   * `key` 是内置项（`'columns'` / `'filter'` / `'group'` / `'sort'`）或注册进去的自定义项。
+   * `anchor` 给了就贴那个元素 —— **`bar: false` 时必须给**（那时工具栏没有按钮可当锚点）。
+   */
+  toggleToolbarPanel(key: string, anchor?: HTMLElement): void;
+  /** 打开工具栏面板；已经开着就什么都不做（`vtToolbar`） */
+  openToolbarPanel(key: string, anchor?: HTMLElement): void;
+  /** 关闭当前打开的工具栏面板（`vtToolbar`） */
+  closeToolbarPanel(): void;
+  /** 工具栏面板是否打开；给了 `key` 则问的是这一项（`vtToolbar`） */
+  isToolbarPanelOpen(key?: string): boolean;
+  /**
+   * 往工具栏加一项，返回反注册函数（`vtToolbar`）。
+   *
+   * 使用方**不写插件**也能加自己的按钮：`table.registerToolbarItem({ key, label, onClick })`。
+   */
+  registerToolbarItem(item: ToolbarItem): () => void;
+  /** 重算工具栏所有按钮的徽标与禁用态（`vtToolbar`） */
+  refreshToolbar(): void;
 
   /** 当前框选区域（`vtCellSelection`） */
   getCellSelection(): CellSelectionRange | null;

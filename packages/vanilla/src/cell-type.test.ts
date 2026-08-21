@@ -70,6 +70,20 @@ describe('renderCellContent', () => {
     expect(((off as any).node as HTMLElement).querySelector('input')!.checked).toBe(false);
   });
 
+  /**
+   * 勾选态要活过 `outerHTML`。
+   *
+   * `renderSpreadsheetCellHtml()` 就是把这里的节点序列化成 HTML 字符串再插进单元格的
+   * （官方路径，见 spreadsheet.ts 的头注），而 `checked` 属性不反射到 attribute ——
+   * 少了 `defaultChecked`，电子表格里的布尔列会永远显示未勾选。
+   */
+  it('checkbox 的勾选态能活过 outerHTML 序列化', () => {
+    const on = renderCellContent('checkbox', true) as { node: HTMLElement };
+    expect(on.node.outerHTML).toContain('checked');
+    const off = renderCellContent('checkbox', false) as { node: HTMLElement };
+    expect(off.node.outerHTML).not.toContain('checked');
+  });
+
   it('未知类型返回 null，由调用方回落默认取值', () => {
     expect(renderCellContent('nope' as any, 'x')).toBeNull();
   });

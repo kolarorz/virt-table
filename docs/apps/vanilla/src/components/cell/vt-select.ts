@@ -1,0 +1,132 @@
+import { VirtTable, type VirtTableColumn } from '@virt-table/vanilla';
+import { vtCellEditor } from '@virt-table/vanilla/plugins';
+import { VtSelect, type VtSelectOption } from '@virt-table/vanilla/components';
+
+export function bootstrapTableVtSelect(root: HTMLElement): () => void {
+  const rowCount = 5000;
+
+  const statusOptions = [
+    { value: 'active', label: '活跃', variant: 'success' as const },
+    { value: 'inactive', label: '停用', variant: 'default' as const },
+    { value: 'pending', label: '待审核', variant: 'warning' as const },
+  ];
+
+  const deptOptions = [
+    { value: 'eng', label: '工程部', variant: 'primary' as const },
+    { value: 'design', label: '设计部', variant: 'success' as const },
+    { value: 'product', label: '产品部', variant: 'warning' as const },
+    { value: 'hr', label: '人事部', variant: 'danger' as const },
+    { value: 'finance', label: '财务部', variant: 'default' as const },
+  ];
+
+  const levelOptions = [
+    { value: 1, label: '初级' },
+    { value: 2, label: '中级' },
+    { value: 3, label: '高级' },
+    { value: 4, label: '专家' },
+  ];
+
+  const cityOptions = [
+    { value: 'hz', label: '杭州' },
+    { value: 'nb', label: '宁波' },
+    { value: 'sh', label: '上海' },
+    { value: 'bj', label: '北京' },
+    { value: 'gz', label: '广州' },
+    { value: 'sz', label: '深圳' },
+    { value: 'cd', label: '成都' },
+    { value: 'wh', label: '武汉' },
+    { value: 'xa', label: '西安' },
+    { value: 'nj', label: '南京' },
+  ];
+
+  /** 两种展示形态共用的列基础参数（`display` 由 buildColumns 按模式补） */
+  interface SelectBase {
+    key: string;
+    title: string;
+    width: number;
+    options: VtSelectOption[];
+    multiple?: boolean;
+    valueType?: 'array' | 'string';
+    placeholder?: string;
+    clearable?: boolean;
+    disabled?: boolean;
+    searchable?: boolean;
+    searchPlaceholder?: string;
+  }
+
+  /**
+   * 列定义按当前的展示形态生成。
+   *
+   * `display` 只是 `VtSelect` 的一个参数（`'text'` | `'tag'`）：**同一列、同一份数据、同一套
+   * 选择逻辑**，切换它只换「选中的值画成什么样」—— 这正是「样式是参数、不是组件名」的意思。
+   */
+  const buildColumns = (display: 'text' | 'tag'): VirtTableColumn[] => {
+    const col = (base: SelectBase): VirtTableColumn =>
+      display === 'tag'
+        ? VtSelect({ ...base, display: 'tag' })
+        : VtSelect({ ...base, display: 'text' });
+
+    return [
+      { key: 'id', title: 'ID', width: 80, align: 'center' },
+      // 「×」默认就有（锚点没有别的「变回空」的手段），必填列显式 clearable: false 关掉
+      col({ key: 'status', title: '状态（不可清空）', width: 180, options: statusOptions, placeholder: '请选择状态', clearable: false }),
+      col({ key: 'dept', title: '部门', width: 180, options: deptOptions, placeholder: '请选择部门' }),
+      col({ key: 'level', title: '级别', width: 160, options: levelOptions, placeholder: '请选择级别' }),
+      // 候选多时打开搜索框（默认关：3~8 项的枚举列多一行搜索框是噪音）
+      col({ key: 'city', title: '城市（可搜索）', width: 190, options: cityOptions, placeholder: '请选择城市', searchable: true, searchPlaceholder: '搜索城市' }),
+      col({ key: 'fixed', title: '只读', width: 160, options: statusOptions, disabled: true }),
+    ];
+  };
+
+  const list = Array.from({ length: rowCount }, (_, i) => ({
+    id: i,
+    status: statusOptions[i % statusOptions.length].value,
+    dept: deptOptions[i % deptOptions.length].value,
+    level: levelOptions[i % levelOptions.length].value,
+    city: cityOptions[i % cityOptions.length].value,
+    fixed: statusOptions[i % statusOptions.length].value,
+  }));
+
+  root.innerHTML = `
+  <div class="virt-table-controls">
+    <button class="virt-table-btn virt-table-btn-primary" id="btnDisplay">🏷️ 一键切换标签样式</button>
+    <span id="displayLabel" class="demo-note">当前：display: 'text'（纯文本）</span>
+  </div>
+  <div id="status" class="status-text"></div>
+  <div style="width:1030px;height:560px;" class="demo-container" id="vtContainer"></div>
+`;
+
+  const container = root.querySelector('#vtContainer') as HTMLElement;
+  const status = root.querySelector('#status') as HTMLElement;
+
+  const table = new VirtTable(container, {
+    list,
+    columns: buildColumns('text'),
+    itemKey: 'id',
+    estimatedSize: 40,
+    buffer: 4,
+    border: true,
+    textOverflow: 'ellipsis',
+    // 编辑态走 renderEditor，必须装 vtCellEditor 才会被触发
+    plugins: [vtCellEditor()],
+  });
+
+  let display: 'text' | 'tag' = 'text';
+  const btn = root.querySelector('#btnDisplay') as HTMLButtonElement;
+  const label = root.querySelector('#displayLabel') as HTMLElement;
+  btn.onclick = () => {
+    display = display === 'text' ? 'tag' : 'text';
+    // 只换列定义：行数据一个字节都不动
+    table.setColumns(buildColumns(display));
+    btn.textContent = display === 'text' ? '🏷️ 一键切换标签样式' : '🔤 切回文本样式';
+    label.textContent =
+      display === 'text' ? "当前：display: 'text'（纯文本）" : "当前：display: 'tag'（彩色胶囊）";
+  };
+
+  status.textContent = `VtSelect 单值选择：${rowCount} 行。编辑态是自绘面板（复用列头筛选那套皮肤，跟暗色主题），不是原生 <select> —— 后者的下拉列表由操作系统渲染，吃不到 --vt-* 令牌。↑↓ 选、Enter 确认、Esc 关闭；清除「×」在控件右侧、**默认就有**（面板里只能换选另一项，没有「选回空」这一项），激活后按 Delete / Backspace 同效 —— 第 2 列传了 clearable: false，所以它既没有叉也不吃 Delete。「城市」列开了 searchable（默认关，搜索框里有词时 Backspace 归输入框）。点上面的按钮可以一键把这些列切成标签样式（display: 'tag'）—— 同一份数据、同一套选择逻辑，只换画法`;
+
+  return () => {
+    table.destroy();
+    root.innerHTML = '';
+  };
+}

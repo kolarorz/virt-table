@@ -26,7 +26,7 @@ import {
   type VirtTableState,
 } from '@virt-table/vanilla';
 
-export type { VirtTableOptions, VirtTableColumn, MergeCell, CellRenderConfig, CellContentType, VirtTableRowExtras, CellRenderContext, CellEditContext, HeaderRenderContext, ExpandRenderContext, FooterRenderContext, SortOrder, SortSpec, FilterType, VirtTableLocale } from '@virt-table/vanilla';
+export type { VirtTableOptions, VirtTableColumn, MergeCell, CellRenderConfig, CellContentType, VirtTableRowExtras, RowDropTarget, RowMoveDetail, CellRenderContext, CellEditContext, HeaderRenderContext, ExpandRenderContext, FooterRenderContext, SortOrder, SortSpec, FilterType, VirtTableLocale } from '@virt-table/vanilla';
 export type { ExportOptions } from '@virt-table/vanilla/plugins';
 export { zhCN, enUS } from '@virt-table/vanilla';
 export type { VirtTableState, VirtTableColumnState } from '@virt-table/vanilla';
@@ -36,7 +36,13 @@ export {
   vtExport,
   vtClipboard,
   vtSearch,
-  vtColumnPanel,
+  vtFieldConfig,
+  vtFilterConfig,
+  vtGroupConfig,
+  vtSortConfig,
+  vtToolbarPanels,
+  vtRowHeightConfig,
+  vtToolbar,
   vtCellSelection,
   vtKeyboardNav,
   vtCellEditor,
@@ -69,7 +75,13 @@ export type {
   ClipboardPasteContext,
   SearchOptions,
   SearchMatch,
-  ColumnPanelOptions,
+  FieldConfigOptions,
+  FilterConfigOptions,
+  GroupConfigOptions,
+  SortConfigOptions,
+  ToolbarPanelsOptions,
+  RowHeightConfigOptions,
+  RowHeightLevel,
   CellSelectionOptions,
   CellEditorOptions,
   CellEditorService,
@@ -336,6 +348,8 @@ export interface VirtTableRef extends VirtTablePluginApi {
   clearCheckedRows: () => void;
   toggleExpand: (rowKey: string) => void;
   toggleFold: (rowKey: string) => void;
+  /** 该树 / 分组节点是否折叠（叶子行恒为 false） */
+  isFolded: (rowKey: string) => boolean | undefined;
   expandAll: () => void;
   collapseAll: () => void;
   setColumnFilter: (key: string, vals: unknown[]) => void;
@@ -530,6 +544,7 @@ export const VirtTableReact = React.forwardRef<VirtTableRef, VirtTableProps>(
       clearCheckedRows: () => tableRef.current?.clearCheckedRows(),
       toggleExpand: (rowKey: string) => tableRef.current?.toggleExpand(rowKey),
       toggleFold: (rowKey: string) => tableRef.current?.toggleFold(rowKey),
+      isFolded: (rowKey: string) => tableRef.current?.isFolded(rowKey),
       expandAll: () => tableRef.current?.expandAll(),
       collapseAll: () => tableRef.current?.collapseAll(),
       setColumnFilter: (key: string, vals: unknown[]) => tableRef.current?.setColumnFilter(key, vals),
@@ -612,10 +627,19 @@ export const VirtTableReact = React.forwardRef<VirtTableRef, VirtTableProps>(
         table.destroy();
         tableRef.current = null;
         const mounts = reactMountsRef.current;
-        for (const [, { root }] of mounts) {
-          root.unmount();
-        }
+        const roots = [...mounts.values()].map((m) => m.root);
         mounts.clear();
+        /*
+         * 子 root 的卸载必须**延后到微任务**。
+         *
+         * 这个 cleanup 跑在 React 的 commit 阶段，同步 `root.unmount()` 会撞上
+         * 「Attempted to synchronously unmount a root while React was already rendering」——
+         * 只要使用方用 `key` 重挂载 `<VirtTableReact>`（换数据源、换表级 cellType、换主题都
+         * 是这么写的）就必然触发。`mountReact` 里替换旧挂载点时早就这么处理了，这里漏了一处。
+         */
+        queueMicrotask(() => {
+          for (const root of roots) root.unmount();
+        });
       };
     }, []);
 

@@ -2,25 +2,6 @@
 
 通过 `type: tree` 列展示层级数据，支持展开/收起子节点。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-  type: 'tree';  // 特殊列类型：树形列
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  defaultExpandAll: boolean;  // 默认展开所有展开行
-}
-```
-
 ## 示例
 
 <PlaygroundHost framework="vanilla" example-id="table-tree" />
@@ -30,3 +11,15 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/vanilla/src/components/advanced/tree.ts
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `col.type: 'tree'` | 树形列（只画缩进与箭头，内容照常走内容层） | [列配置 · 功能列](/vanilla/api/column#功能列-type) |
+| 行数据 `children` | 子节点数组 | [类型定义](/vanilla/api/types) |
+| `defaultExpandAll` | 默认全部展开 | [表格配置](/vanilla/api/table#virttableoptions) |
+| `onTreeToggle` / `toggleFold` | 折叠回调与编程控制 | [实例方法](/vanilla/api/instance) |
+| `loadChildren` | 懒加载子节点 | [数据与远程](/vanilla/api/data#树形懒加载) |
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。

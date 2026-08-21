@@ -159,6 +159,14 @@
   --vt-cell-image-max-h: var(--vt-line-height);
   /* 标签格的默认主色（未给 color 时用主色） */
   --vt-cell-option-color: var(--vt-color-primary);
+  /**
+   * 标签底色的**浅调比例**：底色 = 主色兑这么多、其余透明。
+   *
+   * 抽成 token 而不是写死在 `.vt-cell-option` 里 —— 这个比例是「同一支色的浅底 + 实色字」
+   * 这套配色的**公式**，用同一支色画东西的地方（付费甘特插件的条底色按设计就等于胶囊底色）
+   * 得能引用同一个值。各写一个 14%，就是同一个公式的两份实现：改了这边那边不会跟着变。
+   */
+  --vt-cell-option-tint: 14%;
 
   /* ---- 控件尺寸 ---- */
   --vt-control-size: 16px;
@@ -398,14 +406,25 @@
  * - `overflow-x: auto` —— 横向**刻意保留原生 scrollport**。
  *   `td.vt-fixed-left/right`、`.vt-group-label`、`.vt-merge-label` 三处
  *   `position: sticky` 都以它为参照，横向一旦改成 JS 位移，这三套定位会同时失效。
- *   自绘横条只是驱动 `scrollLeft`，不接管位移本身。
+ *   自绘横条与 `InputController` 都只是**驱动 `scrollLeft`**，不接管位移本身 ——
+ *   「谁来写 `scrollLeft`」和「位移由谁实现」是两件事，这里只让出了前者。
  *
  * `overflow-anchor: none` 必须显式关掉：`overflow: hidden` 依然是个 scrollport，
  * 浏览器的滚动锚定照样会在内容高度变化时悄悄改 `scrollTop`（且不派发 scroll 事件），
  * 与我们自己维护的偏移量打架。
  *
- * `touch-action: pan-x`：横向触摸平移仍交给浏览器（原生 scrollport），
- * 纵向由 `InputController` 接管（含惯性），所以只让出 x 轴。
+ * `touch-action`：**单指平移一律不放行给浏览器**，两条轴的触摸手势都由
+ * `InputController` 接管（起步阈值 + iOS 式方向锁定 + 双轴惯性），横向由它写 `scrollLeft`。
+ *
+ * 曾经是 `pan-x`（横向触摸平移交给浏览器），实测在移动端是坏的：`preventDefault`
+ * 没有「只拦一条轴」的粒度，纵向一拦，同一个手势里的横向分量也一起没了 ——
+ * 「竖着滚起来之后横向完全滚不动」。而且浏览器的方向判定**先于** JS，它一旦启动
+ * 原生 pan-x，后续 `touchmove` 的 `cancelable` 就变成 `false`：轴锁说了不算、
+ * 手势中途换轴永远做不到，JS 那次 `scrollLeft` 还会叠上去变成横向双倍速。
+ *
+ * `pinch-zoom` 保留双指缩放；前面那条 `none` 是给不认 `pinch-zoom` 的老浏览器
+ * （Safari < 13）打的底 —— 少了它，无效声明会让 `touch-action` 落回 `auto`，
+ * 浏览器就把两条轴全接管回去了。
  *
  * 原生滚动条整体隐藏：两条都换成自绘的浮层轨道（见 §3.1），外观才统一。
  */
@@ -416,8 +435,42 @@
   overflow-x: auto;
   overflow-y: hidden;
   overflow-anchor: none;
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  /**
+   * 纵向 `auto`（滚到底把滚动链交给外层），横向 `none`（连本地橡皮筋一起关掉）。
+   *
+   * 纵向之所以能靠一个 `auto` 了事：`InputController._onWheel` 到边界时本来就**不
+   * `preventDefault`**（见那边的「让给外层可滚动祖先」分支），事件会原样落回浏览器，
+   * 位移、latching、惯性接管全走原生路径 —— 这里只是别再把链掐断。
+   *
+   * ⚠️ `overscroll-behavior` 对**纵向完全不可滚**的本元素依然生效。这一层是
+   * `overflow-y: hidden` 且 `scrollHeight === clientHeight`（内容全靠 transform 虚拟化，
+   * 浏览器视角里纵向没有任何可滚区域），直觉上容易以为浏览器会把这样的 scroll container
+   * 直接跳过、属性形同虚设 —— 实测不是：写 `contain` 时页面一动不动，改 `auto` 才滚起来。
+   * CDP 实测（Chrome 151 headless，复刻 `_onWheel` 的让行逻辑，连续 20 格滚轮把虚拟
+   * 偏移量推到 max 后继续滚 11 格）：`contain` → `window.scrollY` 始终 0；
+   * `auto` → `scrollY` 走到 1320（= 11 × 120，放行的每一格都落到了页面上）。
+   *
+   * 连续滚动序列不受 wheel latching 影响：被 `preventDefault` 的那些事件不参与 latch，
+   * 放行的第一格会重新 latch 到真正能滚的祖先。所以「一路滚到底、手不停继续滚」
+   * 与「到底后停一下再滚」两条路径实测都能穿透，不需要用户抬手重滚。
+   *
+   * 横向反过来是 `none`，为的是压掉橡皮筋回弹。路径很具体：`InputController` 以
+   * **纵向为主轴**，横向是交叉轴，于是纯水平手势里 `raw = deltaY = 0` →
+   * `_wouldOverscroll(0)` 恒真 → 走「主轴到边界」那条分支；此时横向也已经到头，
+   * `_scrollCross()` 写 `scrollLeft` 没写动 —— 事件一旦落回原生 scrollport，macOS 就弹。
+   * `contain` 只挡滚动链、不挡本地回弹，挡不住这个；`none` 两个都挡。
+   *
+   * ⚠️ 别以为 `none` 等于「横向不穿透」：那条链现在由 JS 代劳。`none` 同时也掐断了
+   * 滚动链，所以在这条轴上「放行给浏览器」等于什么都不发生（实测过：放行后祖先的
+   * `scrollLeft` 一动不动）。`InputController` 因此改为自己找出浏览器本该交给谁、
+   * 直接写它的 `scrollLeft`，并**无条件 `preventDefault`** —— 浏览器全程不介入，
+   * 于是「穿透」与「不回弹」同时成立，这条声明也就不必为了穿透放宽成 `auto`。
+   * 两条轴一个靠 CSS 交回浏览器、一个靠 JS 代劳，看着不对称，理由见 AGENTS.md §7.26。
+   */
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: none;
+  touch-action: none;
+  touch-action: pinch-zoom;
   scrollbar-width: none;
 }
 
@@ -649,6 +702,16 @@
   /* 裁掉超出可视区的表格；同时让本元素成为内部固定列 sticky 的参照容器 */
   overflow: hidden;
   background: var(--vt-header-bg);
+  /**
+   * 与 `.vt-client` 同一套：单指平移不放行给浏览器。
+   *
+   * 这两段在 DOM 上是**视口的兄弟**（`absolute` 挂在 `.vt-root`），所以浏览器眼里
+   * 它们压根不在任何可滚容器里 —— 留着 `auto` 的话，在表头上纵滑会去滚**外层页面**
+   * 而不是表格。滚动本身由 `InputController` 接管：`index.ts` 里把这两个 wrap 作为
+   * `sources` 传了进去（它们的事件冒泡不到 `.vt-client`，那是「表头上滚不动」的根因）。
+   */
+  touch-action: none;
+  touch-action: pinch-zoom;
 }
 
 /**
@@ -760,7 +823,16 @@
  *           分组较窄       → 取本格宽，退化为格内居中（本来也不会被裁剪）
  * sticky 天然被限制在本格内，所以分组右边界进入视口时标签会被推着平滑滑出，不会跳。
  */
-.vt-group-label {
+/*
+ * ⚠️ 必须限定在**表头 / 表尾**的分组格上。
+ *
+ * 裸的 `.vt-group-label` 会连**分组行**（`.vt-tbody` 里的 `.vt-group-cell`）一起命中，
+ * 而那里的标签是 `.vt-group-content` 这个 sticky flex 容器的子项 —— 再给它自己一层
+ * `position: sticky; left: <左冻结区宽>` 就会被容器夹到最右端，**压在条数徽标
+ * （`.vt-group-count`）上面**。有冻结列时必现（`--vt-fixed-left-w` 一大就一定夹到底）。
+ */
+.vt-th--group .vt-group-label,
+.vt-tfoot .vt-td--group .vt-group-label {
   display: block;
   position: sticky;
   left: var(--vt-fixed-left-w, 0px);
@@ -872,7 +944,11 @@
 
 @supports (color: color-mix(in srgb, red, blue)) {
   .vt-cell-option {
-    background: color-mix(in srgb, var(--vt-cell-option-color) 14%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--vt-cell-option-color) var(--vt-cell-option-tint),
+      transparent
+    );
   }
 }
 
@@ -1112,11 +1188,43 @@ td.vt-fixed-right {
 /* ==========================================================================
  * 6. 高亮 / 选区
  * ========================================================================== */
-.vt-client--highlight-hover-row .vt-tr:hover > .vt-td {
+/**
+ * 行级状态高亮（hover / 选中行）**都不落在跨行合并格上**。
+ *
+ * 跨 N 行的格子只属于起始行的 `<tr>`，所以「按行」的状态底色一旦染上它，染的是
+ * 整段而不是那一行 —— 与斑马纹被抹平的理由同源（见上方那段注释），而且在交互反馈上
+ * 更严重：
+ *
+ * 1. 对不齐。hover 一行却染满整段：首页 merge demo 实测 hover 第 30001 行时，
+ *    `rowspan=18` 那格整块 720px 变色、`rowspan=8` 那格 320px 变色，鼠标只在其中
+ *    40px 上 —— 读起来像「hover 了 18 行」。
+ * 2. 闪烁（仅长段）。长段的 primary 行会被重锚到渲染窗口首行，它落在哪一行是裁剪的
+ *    产物：鼠标不动、只滚动，被 hover 的 `<tr>` 就会换人，一整块高亮跟着亮灭。
+ *
+ * 于是跨行合并格保持它的常态底色（`transparent`，与斑马纹抹平后一致），高亮只发生在
+ * 真正属于那一行的格子上。
+ *
+ * 这推翻了上方注释里「抹平斑马是静态底色层面的事，不该吃掉交互反馈」那半句的结论 ——
+ * 保留的部分是：**特异度关系仍然守着**（`css-contract.test.ts`）。改完之后两边的作用域
+ * 本来就互斥（抹平只命中 `rowspan>1`，高亮只命中非 `rowspan>1`），那条关系降级成保险，
+ * 万一有人去掉这里的排除，斑马行与非斑马行的 hover 也不会再分裂成两种表现。
+ *
+ * 选择器为什么是 `:where(:not([rowspan]), [rowspan='1'])`：
+ * - 必须列上 `[rowspan='1']` —— DOM 池复用分支无条件写 `td.rowSpan = cell.rowSpan`，
+ *   非合并格上会反射出 `rowspan="1"` 属性（实测一屏 34 个），只判 `:not([rowspan])`
+ *   会把整表的高亮误杀（`merge.dom.test.ts` 守着这个 DOM 契约）；
+ * - 套 `:where()` 让参数不计特异度，两条规则的特异度保持原样 (0,4,0)，
+ *   与斑马纹抹平那条的相对关系不变。
+ *
+ * 跨**列**合并格（`colspan>1`、`rowspan=1`）照常高亮：它完整属于当前行，染色本来就对。
+ * 选中列 `.current-column` 同理不受影响 —— 它按列算，合并格属于那一列。
+ */
+/* 选择器刻意保持单行：`css-contract.test.ts` 的 selectorContaining 按行匹配 */
+.vt-client--highlight-hover-row .vt-tr:hover > .vt-td:where(:not([rowspan]), [rowspan='1']) {
   background-color: var(--vt-row-hover-bg);
 }
 
-.vt-client--highlight-select-row .current-row > .vt-td {
+.vt-client--highlight-select-row .current-row > .vt-td:where(:not([rowspan]), [rowspan='1']) {
   background-color: var(--vt-row-selected-bg);
 }
 
@@ -1219,6 +1327,23 @@ td.vt-fixed-right {
   border-color: var(--vt-border-color);
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/**
+ * 禁用 **且** 勾选：底色必须留住主色。
+ *
+ * 上面那条 `:disabled` 与 `:checked` 特异度相同 (0,2,0)、位置在后，于是它会把底色顶成
+ * 浅灰 —— 而勾号是**固定白色**的 data URI（`:checked` 里那条 `background-image`，
+ * 变量进不去 data URI），白勾画在浅灰底上等于隐形。
+ *
+ * 这不是理论问题：`cellType: 'checkbox'` 渲染的只读勾选框恒带 `disabled`
+ * （见 `cell-type.ts`），所以电子表格里所有「已验收」的格子看起来都是没勾的。
+ * 保留主色底 + 继承 `:disabled` 的 0.6 透明度，既读得出勾选态又看得出不可点。
+ */
+.vt-checkbox:disabled:checked,
+.vt-filter-checkbox:disabled:checked {
+  background-color: var(--vt-color-primary);
+  border-color: var(--vt-color-primary);
 }
 
 /* 校验失败 */
@@ -1552,10 +1677,30 @@ td.vt-fixed-right {
 }
 
 .vt-tr--group > .vt-group-cell {
+  /**
+   * `position: relative` **但不给 z-index**，这两半都是必需的：
+   *
+   * - 加了 `relative` 它才是「已定位元素」，从而排在同为已定位、但在 DOM 里更靠前的
+   *   覆盖层之上。时间轴那类装饰（周末底纹、网格线）若挂在表格**之前**的兄弟节点上，
+   *   就会被分组行整行挡住 —— 分组行是结构分隔行，底纹从它身上透过来看着像渲染残留。
+   * - **不给 z-index** 是为了不让它成为层叠上下文：下面 `.vt-group-content` 要靠
+   *   `z-index: 4` escape 出去、盖住更高层的覆盖层（见那条规则的说明）。
+   *   一旦这里写了 z-index，那个 4 就被困在格子内部，冻结区又会被覆盖层浮上来。
+   */
+  position: relative;
   background: var(--vt-group-bg);
   border-top: var(--vt-border-width) solid var(--vt-group-border);
   border-bottom: var(--vt-border-width) solid var(--vt-group-border);
-  padding-left: 10px;
+  /*
+   * **本格不留上下与左内边距**，全部交给 `.vt-group-content`（见那条规则）。
+   *
+   * 行高不变：内边距只是从格子挪到了内层，垂直方向的总和一样
+   * （border 1 + 9 + 行高 + 9 + border 1）。挪的理由有两条，都在下面那条规则里详述：
+   * 内层是遮住左冻结区的那一块，格子留了内边距它就盖不满整行高、也无法零漂移地钉住。
+   */
+  padding: 0 var(--vt-cell-padding-x) 0 0;
+  /* 标题距格子左缘的距离。由内层的 padding-left 提供 */
+  --vt-group-cell-pad-l: 10px;
   color: var(--vt-group-text);
   font-weight: var(--vt-font-weight-semibold);
 }
@@ -1566,16 +1711,78 @@ td.vt-fixed-right {
 }
 
 /* sticky 内容容器：--vt-group-depth 由 JS 写入，表示层级缩进层数 */
+/**
+ * sticky 内容容器：`--vt-group-depth` 由 JS 写入，表示层级缩进层数。
+ *
+ * 除了「横滚时标签留在视口内」，它还担一件容易被忽略的职责：**遮住左冻结区**。
+ *
+ * 数据行的冻结列是 `td.vt-fixed-left`（sticky + `z-index: 4` + 自带底色），所以任何
+ * `z-index` 更低的覆盖层（比如甘特插件的条形层，3）横滚时会正确地滑到它们**之下**。
+ * 分组行没有冻结列 —— 它是一个 `colSpan` 铺满整行的格子，`position: static`、
+ * 无 `z-index`，于是覆盖层会**浮在任务列上面**。
+ *
+ * 所以这里把宽度撑到左冻结区宽、抬到与冻结列同层（4）、底色继承分组行（含 lv2/lv3
+ * 的分级底色）—— 行为与数据行的冻结列对齐，覆盖层不必知道分组行的存在。
+ */
 .vt-group-content {
   position: sticky;
+  /*
+   * `left: 0` 要成立，本盒的**静态位置也必须是 0** —— sticky 只会把元素往前推、
+   * 不会把它拉到静态位置之前。分组格早先留了 10px 左内边距，于是静态位置在 10px：
+   * 横滚 0→10px 这一段标题会**跟着内容往左漂 10px** 然后才钉住（实测逐点量到）。
+   * 所以内边距挪到本盒身上（见分组格那条规则），静态位置回到 0，漂移量为 0。
+   */
   left: 0;
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  min-width: 0;
-  padding-left: calc(var(--vt-group-depth, 0) * var(--vt-indent-size));
+  /* 至少铺满左冻结区；没有冻结列时退化为内容宽度 */
+  min-width: var(--vt-fixed-left-w, 0px);
+  background: inherit;
+  /*
+   * 上下内边距由本盒提供（分组格已置零），于是本盒的高度 = 整行高减去上下边框 ——
+   * **遮盖必须盖满整行高**：早先内边距在格子上、本盒只有一行文字那么高（21px vs 行高 43px），
+   * 上下各留 10/12px 的缝，覆盖层（z-index 3）就从那两条缝里压在冻结的任务列上面
+   * ——里程碑竖线、甘特条横滚时都会在缝里露出来（实测数到 34/76 行像素在漏）。
+   */
+  padding: var(--vt-cell-padding-y)
+    0
+    var(--vt-cell-padding-y)
+    calc(
+      var(--vt-group-cell-pad-l, 0px) + var(--vt-group-depth, 0) *
+        var(--vt-indent-size)
+    );
   box-sizing: border-box;
+}
+
+/**
+ * 遮盖的**最后 1px**：分组格自己的上下边框。
+ *
+ * 边框在 padding box 之外，`.vt-group-content` 的背景铺不到那两行 —— 于是覆盖层
+ * （z-index 3）仍能在那 2px 上画东西，横滚时里程碑竖线会正好压在分隔线上露出两点
+ * （实测：其余 39 行都遮住了，只剩这 2 行）。
+ *
+ * 做法是本盒的伪元素往上下各**反向长出一个边框宽**，并把那两条分隔线**照原样重画一遍** ——
+ * 单纯遮住会让分隔线在左冻结区断掉 712px，那比露两个点更难看。
+ * 重画之后它属于本盒（`z-index: 4`）的绘制槽位，覆盖层就再也压不上来。
+ *
+ * `z-index: -1` 把它沉到标题/开关之下，但仍在本盒这个层叠上下文内部，
+ * 所以对外依然是 4。`box-sizing: border-box` 保证多出来的边框不改变尺寸。
+ */
+.vt-group-content::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * var(--vt-border-width));
+  right: 0;
+  bottom: calc(-1 * var(--vt-border-width));
+  left: 0;
+  box-sizing: border-box;
+  border-top: var(--vt-border-width) solid var(--vt-group-border);
+  border-bottom: var(--vt-border-width) solid var(--vt-group-border);
+  background: inherit;
 }
 
 /* 左侧主色标记条 */

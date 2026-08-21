@@ -319,3 +319,79 @@
     transform: none;
   }
 }
+
+/* ---- 开关（demo 里切换特性用）------------------------------------------------
+ * 原生 checkbox 收进 label 里、只留可访问性（键盘与读屏照旧走它），
+ * 外观由紧跟其后的 `.demo-switch__track` 画 —— 所以两者的**相邻兄弟关系不能改**。
+ * 多个开关**彼此正交**时用它；互斥的选项仍该用 radio。
+ * -------------------------------------------------------------------------- */
+.demo-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dm-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 不用 display:none —— 那样键盘聚焦不到 */
+.demo-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.demo-switch__track {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--dm-border-strong);
+  transition: background-color var(--dm-transition) linear;
+}
+
+.demo-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dm-text-inverse);
+  box-shadow: var(--dm-shadow-sm);
+  transition: transform var(--dm-transition) var(--dm-ease);
+}
+
+.demo-switch input:checked + .demo-switch__track {
+  background: var(--dm-primary);
+}
+
+.demo-switch input:checked + .demo-switch__track::after {
+  transform: translateX(14px);
+}
+
+.demo-switch input:focus-visible + .demo-switch__track {
+  box-shadow: 0 0 0 3px var(--dm-primary-soft);
+}
+
+.demo-switch input:disabled + .demo-switch__track {
+  opacity: 0.5;
+}
+
+.demo-switch input:disabled ~ .demo-switch__label {
+  color: var(--dm-text-3);
+}
+
+/* 一排开关 */
+.demo-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 10px;
+}

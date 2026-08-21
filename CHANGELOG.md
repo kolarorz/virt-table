@@ -7,7 +7,7 @@
 ## [未发布]
 
 **首个公开版本。** 能力清单见 [README](./README.md#特性) 与
-[文档站](https://keno-lee.github.io/virt-table/)，这里只记与「发布形态」有关的决定，
+[文档站](https://kolarorz.github.io/virt-table/)，这里只记与「发布形态」有关的决定，
 它们直接影响使用方怎么引这个包。
 
 ### 新增

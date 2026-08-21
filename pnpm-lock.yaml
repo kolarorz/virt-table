@@ -157,9 +157,6 @@ importers:
 
   packages/react:
     dependencies:
-      '@virt-table/vanilla':
-        specifier: workspace:^
-        version: link:../vanilla
       react:
         specifier: '>=18'
         version: 19.2.4
@@ -173,6 +170,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.14)
+      '@virt-table/vanilla':
+        specifier: workspace:*
+        version: link:../vanilla
       vite:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@24.10.13)
@@ -194,11 +194,10 @@ importers:
         version: 7.3.1(@types/node@24.10.13)
 
   packages/vue:
-    dependencies:
-      '@virt-table/vanilla':
-        specifier: workspace:^
-        version: link:../vanilla
     devDependencies:
+      '@virt-table/vanilla':
+        specifier: workspace:*
+        version: link:../vanilla
       vite:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@24.10.13)

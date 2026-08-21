@@ -1,0 +1,323 @@
+/* ==========================================================================
+ * 图片查看器样式（铺满视口的模态浮层）
+ *
+ * **单独成文件是因为有两个使用方**：内置组件 `VtImage`（点缩略图弹出）与插件
+ * `vtFloatingImage`（`viewer: true` 时点浮动图弹出）—— 而这两者分属两个入口
+ * （`components/index.css` 与 `plugins/floating-image.css`）。
+ *
+ * 走 CSS `@import` 而不是 JS import，理由与 `plugins/_panel.css` 逐字相同：JS import
+ * 会被 Rollup 提成 hash 命名的公共 chunk，使用方没法引；`@import` 在构建时内联，
+ * 于是两边的 CSS 产物各自自包含（重复的那几 kB 规则完全相同，同时引入无副作用）。
+ * 见 AGENTS.md §3.1 最后一条。
+ *
+ * **文件名没有下划线前缀**（同目录其它内部件都是 `_xxx`）：它随 `components/image-viewer`
+ * 这个公开子路径一起对外，名字必须与 exports 里的 `./components/image-viewer.css` 一致，
+ * 否则吃源码的链路与吃产物的链路引的就不是同一个路径了。
+ *
+ * 依赖核心 `core.css` 提供的 `--vt-*` 变量与 `vt-fade-in` keyframes。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * §13 图片查看器（`VtImage` 点缩略图弹出的模态浮层）
+ *
+ * 挂在 `.vt-root` 内、`position: fixed` 铺满视口 —— 挂 `document.body` 的话 `--vt-*`
+ * 一个都继承不到（AGENTS.md §7.2）。同一套做法在 `plugins/drag-sort.css` 的拖拽 ghost
+ * 上已经用了很久。`z-index` 取 1000：拖拽 ghost 是 999，查看器要压在所有覆盖层之上。
+ *
+ * 幕布底色**派生自 `--vt-tooltip-bg`**（亮色 #2f3542 / 暗色 #3b4048，两套主题下都是深墨），
+ * 而不是 `--vt-mask-bg`（加载遮罩，亮色下是白纱 —— 图片压在白纱上看不清）。
+ * 静态值先写一遍兜底，`@supports` 里再换成半透明版：`color-mix()` 里带 `var()` 时
+ * 不支持的浏览器会在**计算值阶段**判无效（而不是回落到上一条声明），所以必须靠 @supports
+ * 分档，这也是核心 index.css 里那批派生色的写法。
+ * ========================================================================== */
+/*
+ * 浮层本体是一列 flex：**顶栏 / 舞台 / 说明 / 列表条四个流内项**，舞台吃掉剩下的高度。
+ *
+ * 不用「舞台 absolute 铺满 + 顶栏 absolute 压在上面」那种叠法 —— 两个都不带 z-index 的定位
+ * 元素里后写的赢，实测舞台会整片盖住工具栏，点「放大」被判成点幕布、把查看器关掉
+ * （AGENTS.md §7.14.3 有这条）。流内布局从根上没有这个重叠。
+ */
+.vt-comp-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: var(--vt-tooltip-bg);
+  color: var(--vt-text-inverse);
+  font-size: var(--vt-font-size);
+  /* 放大后的图由浮层裁掉，别让它溢出去在宿主页面上撑出滚动条 */
+  overflow: hidden;
+  animation: vt-fade-in var(--vt-transition) var(--vt-ease);
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .vt-comp-image-viewer {
+    background: color-mix(in srgb, var(--vt-tooltip-bg) 92%, transparent);
+  }
+}
+
+.vt-comp-image-viewer:focus,
+.vt-comp-image-viewer:focus-visible {
+  /* 浮层自己要可聚焦（键盘操作挂在它身上），但不该画焦点环 */
+  outline: none;
+}
+
+/*
+ * 舞台吃掉顶栏与底部之外的全部高度。**点它就是点幕布**（关闭判定靠 `e.target === stage`）。
+ *
+ *   - `position: relative` —— 给里面绝对定位的左右箭头当包含块；
+ *   - `min-height: 0` —— flex 项的老规矩，不写的话内容撑不下时它不肯缩，图会顶穿底部的列表条；
+ *   - **`overflow: hidden`** —— 放大后的图必须被裁在舞台里。不裁的话它会盖住顶栏与列表条：
+ *     transform 过的元素自成层叠上下文，画在流内内容之上，于是**放大一次之后工具栏就点不动了**
+ *     （真实鼠标实测：点「放大」到 125% 之后，再点旋转/缩小/还原全部落在图上，没有反应）。
+ *     顺带这也是查看器该有的观感 —— 画布区域之外不该出现图。
+ */
+.vt-comp-image-viewer-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/*
+ * 图的外壳。两件事：
+ *
+ * 1. **transform（平移/缩放/旋转）写在它身上而不是 `<img>` 上** —— 换图时只替换里面的元素，
+ *    外壳与它的 transform 状态由 JS 统一重置，不会出现「新图继承了旧图的角度」。
+ * 2. **尺寸是确定值（`86vw × 76vh`），不是 `max-*` 让内容撑** —— 这条是实测改过来的：
+ *    `viewBox`-only 的 SVG（没有 `width`/`height` 属性）**没有固有宽度**，作为 flex 项时
+ *    外壳的 max-content 解析成 0，于是整个舞台连图一起塌成 **0×0**（CDP 实测：
+ *    `naturalWidth` 200 / `complete` true，但 rect 是 0×0）。给了确定尺寸再让图
+ *    `object-fit: contain` 进去，SVG、竖图、超宽图、坏比例图全都稳。
+ *
+ * 代价是**外壳占了大半屏，所以「点图旁边的空白」不再关闭** —— 关闭走 `Esc`、✕、
+ * 或点外壳之外的幕布（还留着 14vw / 24vh）。这比「有些图打不开」好换。
+ */
+.vt-comp-image-viewer-figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 86vw;
+  /* 撑满舞台（舞台的高度由 flex 算出来，是确定值 —— 所以没有固有尺寸的 SVG 也不会塌） */
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* 过渡只给离散动作（按钮 / 键盘 / 旋转 / 双击）。滚轮与拖拽是连续手势，每个事件都重启一次
+   120ms 过渡的话图会一直追在指针后面 —— JS 只在离散那几条路径上加这个类 */
+.vt-comp-image-viewer-figure--animated {
+  transition: transform var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vt-comp-image-viewer-figure:active {
+  cursor: grabbing;
+}
+
+/*
+ * `contain` 而不是 `scale-down`：查看器的惯例是「适应窗口」，小图放大到铺满比让它缩在
+ * 正中间一小块更符合预期（要看原始像素就用工具栏缩放）。SVG 放大无损，正好也是这一档。
+ */
+.vt-comp-image-viewer-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--vt-radius-sm);
+  box-shadow: var(--vt-shadow-lg);
+  /* 拖拽自己实现（pointer events），交给浏览器的原生拖图会把手势吃掉 */
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.vt-comp-image-viewer-failed {
+  padding: 24px 32px;
+  border-radius: var(--vt-radius-md);
+  background: var(--vt-fill-color-hover);
+  color: var(--vt-text-inverse);
+}
+
+/* 顶栏：左计数、右工具栏 */
+/* `position: relative` + `z-index` 是双保险：舞台已经裁掉了放大的图，但顶栏是流内元素、
+   而定位元素默认画在流内内容之上 —— 写明层级，谁也别想再压到操作区上面 */
+.vt-comp-image-viewer-bar {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  box-sizing: border-box;
+}
+
+.vt-comp-image-viewer-count {
+  font-variant-numeric: var(--vt-font-numeric);
+  font-size: var(--vt-font-size);
+  opacity: 0.85;
+}
+
+/* 工具栏。整组撑到 40px 高：它压在图片上、又是这个浮层唯一的操作入口，
+   按表内图标按钮那个尺寸（20px）在满屏浮层上根本找不到（用户反馈「太小了」） */
+.vt-comp-image-viewer-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vt-comp-image-viewer-scale {
+  min-width: 62px;
+  text-align: center;
+  font-variant-numeric: var(--vt-font-numeric);
+  font-size: var(--vt-font-size);
+  opacity: 0.85;
+}
+
+/*
+ * 工具栏按钮：`<button>` 与下载那个 `<a>` 共用一套外观。
+ *
+ * 尺寸自己写死，**不用 `--vt-icon-btn-size`**（20px）：那个令牌是给**表内**图标按钮（排序箭头、
+ * 树形折叠）标定的，放在铺满视口的浮层上小得找不到 —— 用户为此反馈过两轮（20 → 40 → 46）。
+ * 图标本体走 `font-size`（SVG 是 `1em`），所以 26px 字号 = 26px 图标，四周各留 10px 点击余量。
+ */
+.vt-comp-image-viewer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: none;
+  border-radius: var(--vt-radius-md);
+  background: transparent;
+  color: inherit;
+  font-size: 26px;
+  line-height: 1;
+  vertical-align: top;
+  cursor: pointer;
+  transition: background var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vt-comp-image-viewer-btn:hover {
+  background: var(--vt-fill-color-hover);
+}
+
+.vt-comp-image-viewer-btn:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+/* 左右切换：竖直居中贴边，单图时 JS 根本不挂它们 */
+.vt-comp-image-viewer-nav {
+  position: absolute;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin-top: -28px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-fill-color-hover);
+  font-size: 30px;
+}
+
+.vt-comp-image-viewer-nav--prev {
+  left: 16px;
+}
+
+.vt-comp-image-viewer-nav--next {
+  right: 16px;
+  /* 只有一份 chevron 图标，右向靠旋转得到 */
+  transform: rotate(180deg);
+}
+
+/* 底部说明（图片的 alt）。没有 alt 时是空元素，不占视觉位置 */
+.vt-comp-image-viewer-caption {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 10px 16px 2px;
+  box-sizing: border-box;
+  text-align: center;
+  opacity: 0.9;
+  /* 说明是纯文字，别抢走「点幕布关闭」的那一片区域 */
+  pointer-events: none;
+}
+
+/* ---- 底部列表条（多图才有）----
+   一排小图，横向可滚；当前那张用主色描边。整条 76px 高（小图 56 + 上下留白），
+   和顶栏一起把舞台夹在中间 —— 三者都是流内项，谁也不压谁。 */
+.vt-comp-image-viewer-strip {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.vt-comp-image-viewer-thumb {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  border-radius: var(--vt-radius-md);
+  background: var(--vt-fill-color-hover);
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity var(--vt-transition-fast) var(--vt-ease),
+    box-shadow var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vt-comp-image-viewer-thumb:hover {
+  opacity: 0.85;
+}
+
+/* 当前那张：主色描边 + 不透明。用 box-shadow 而不是 border —— border 会改变内容盒尺寸，
+   一排小图在切换时会跟着抖 1px */
+.vt-comp-image-viewer-thumb--current {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--vt-color-primary);
+}
+
+.vt-comp-image-viewer-thumb:focus-visible {
+  outline: 2px solid var(--vt-focus-ring-color);
+  outline-offset: 1px;
+}
+
+/* 小图取不到：留一个空底色格子，不画断图图标（56px 的格子里再塞图标只会更花） */
+.vt-comp-image-viewer-thumb--error {
+  opacity: 0.35;
+}
+
+.vt-comp-image-viewer-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-comp-image-viewer,
+  .vt-comp-image-img {
+    animation: none !important;
+  }
+
+  .vt-comp-image-viewer-figure--animated {
+    transition: none !important;
+  }
+}

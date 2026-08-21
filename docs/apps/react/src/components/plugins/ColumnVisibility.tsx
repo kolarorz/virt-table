@@ -3,7 +3,7 @@ import {
   VirtTableReact,
   type ReactTableColumn,
   type VirtTableRef,
-  vtColumnPanel,
+  vtFieldConfig,
 } from '@virt-table/react';
 import { faker } from '@faker-js/faker';
 
@@ -36,19 +36,19 @@ const list: Row[] = Array.from({ length: 500 }, (_, i) => ({
 
 export default function ColumnVisibilityTable() {
   const tableRef = React.useRef<VirtTableRef>(null);
-  const plugins = React.useMemo(() => [vtColumnPanel()], []);
+  const plugins = React.useMemo(() => [vtFieldConfig()], []);
 
   return (
     <div className="demo-wrapper">
-      <h3 className="demo-title">React 列显隐 / 列设置</h3>
+      <h3 className="demo-title">React 字段配置</h3>
       <div className="virt-table-controls">
         <button
           type="button"
           className="virt-table-btn virt-table-btn-primary"
           // 面板要贴着触发按钮定位，所以把按钮本身作为 anchor 传进去
-          onClick={(e) => tableRef.current?.toggleColumnPanel(e.currentTarget)}
+          onClick={(e) => tableRef.current?.toggleFieldConfig(e.currentTarget)}
         >
-          列设置
+          字段配置
         </button>
         <button
           type="button"

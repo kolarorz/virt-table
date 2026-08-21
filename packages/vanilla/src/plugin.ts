@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { CellRenderConfig, VirtTableColumn, VirtTableOptions, VirtTableState } from './index';
+import type {
+  CellRenderConfig,
+  GroupSpec,
+  RowDropTarget,
+  VirtTableColumn,
+  VirtTableOptions,
+  VirtTableState,
+} from './index';
 import type { VirtTableLocale } from './locale';
 
 /**
@@ -44,6 +51,20 @@ export interface VirtTableHost<T extends Record<string, any> = any> {
    * 纯程序化定位仍走 `scrollToOffset`。
    */
   scrollByY(dy: number): void;
+  /**
+   * 当前横向偏移量。与 `getOffset()`（纵向）成对。
+   *
+   * 横向仍是原生 `scrollLeft`，插件本可以自己读 `ctx.clientEl.scrollLeft`；给一个
+   * 具名读取口是为了让「横向位移由什么承载」保持可替换 —— 哪天横向也改成 JS 位移，
+   * 换的是这里的实现，而不是每个插件。
+   */
+  getScrollLeft(): number;
+  /**
+   * 横向相对滚动。拖拽（框选、甘特条改期）到左右边缘时的自动滚动用它。
+   *
+   * 与 `scrollByY` 不同，横向没有「续拉下一页」的语义，就是纯位移。
+   */
+  scrollByX(dx: number): void;
   // ---- 数据 ----
   setList(list: T[]): void;
   /**
@@ -64,13 +85,40 @@ export interface VirtTableHost<T extends Record<string, any> = any> {
   getLeafColumns(): VirtTableColumn<T>[];
   /**
    * 列/行重排。留在核心：`moveColumn` 依赖 `_allColumns` 列树与 `setColumns` 重建流程，
-   * `moveRow` 依赖 `_originList` 原始顺序与数据管线。
-   * `vtColumnDrag` / `vtRowDrag` 只负责手势、ghost 与落点指示线。
+   * `moveRowTo` 依赖 `_originList` 的 children 结构、`_foldMap` 与数据管线。
+   * `vtColumnDrag` / `vtRowDrag` 只负责手势、ghost、落点指示线与落点归约。
    */
   moveColumn(fromKey: string, toKey: string, insertAfter: boolean): boolean;
+  /** 把行移到目标行的前/后（`moveRowTo` 的薄包装，扁平表的老签名） */
   moveRow(fromKey: string, toKey: string, insertAfter: boolean): boolean;
-  /** 当前行序是否可拖拽重排（排序/筛选/树形/分组下为 false） */
+  /**
+   * 把行移到「某个父级下、某个兄弟之后」——**行拖拽落数据的正路**。
+   * 父级可以是数据行（成为子节点）、分组行（落进该分组，核心改写分组字段）或空（根层）。
+   */
+  moveRowTo(sourceKey: string, target: RowDropTarget): boolean;
+  /** 这个落点能不能放（只判定不改数据；「拖回原处」也算放不下）。用来决定指示线画不画 */
+  canDropRow(sourceKey: string, target: RowDropTarget): boolean;
+  /** 当前行序是否可拖拽重排（排序/筛选/自动合并下为 false；树形与分组是支持的） */
   canReorderRows(): boolean;
+
+  // ---- 行高 ----
+  /**
+   * 运行时改行高（`vtRowHeightConfig` 的三档落在这条上）。留在核心的理由是它要同时动
+   * **三处**：使用方那份 `estimatedSize`、虚拟化账本里的热快照、以及总高重算 ——
+   * 后两处都在核心私有面里。插件只管「哪三档、界面长什么样」。
+   */
+  setRowHeight(size: number): void;
+  /** 当前行高（`fixedSize` 下即每行实际高度，否则是未测量行的估算值） */
+  getRowHeight(): number;
+
+  // ---- 树 / 分组折叠 ----
+  /**
+   * 切换树 / 分组节点的折叠态。留在核心：它还串着懒加载（首次展开会去取 children）。
+   * `vtRowDrag` 悬停在折叠节点上一会儿就自动展开，走的是这条 —— 直接写折叠表会漏掉取数。
+   */
+  toggleFold(rowKey: string): void;
+  /** 该节点当前是否折叠（叶子行恒为 false） */
+  isFolded(rowKey: string): boolean;
   // ---- 选择 ----
   getCheckedRows(): T[];
 
@@ -101,6 +149,38 @@ export interface VirtTableHost<T extends Record<string, any> = any> {
   expandSelectionForMerges(range: CellSelectionRange): CellSelectionRange;
   /** 选区在 `.vt-client` 内的像素矩形；选区行都不在渲染窗口内时返回 null */
   getSelectionRect(range: CellSelectionRange): SelectionRect | null;
+  /**
+   * 列区间 `[startCol, endCol]` 的横向像素范围（`.vt-client` **内容坐标**，
+   * 与 `getSelectionRect().left` 同基准）。列索引超界时返回 null。
+   *
+   * 与 `getSelectionRect` 的关键差别：**不依赖渲染窗口**，纯列宽前缀和算术，
+   * 因此横向窗口外的列也算得出来。甘特的条形要横跨几十个时间桶（多数不在窗口内），
+   * 图表浮层要对齐到具体列，都只能走这条。
+   *
+   * 返回值已含列宽拉伸系数（列宽之和窄于容器时核心会等比放大列），
+   * 所以调用方不需要知道 `_widthScale` 的存在。
+   */
+  getColumnRange(startCol: number, endCol: number): ColumnRange | null;
+  /**
+   * 当前渲染窗口内所有数据行的纵向位置，按 `rowIndex` 升序。
+   *
+   * 一次 `querySelectorAll` + 每行一次 `getBoundingClientRect`。**要按行摆浮层就用它**，
+   * 不要对每一行分别调 `getSelectionRect` —— 那是每行一次全表查询 + 一次强制布局，
+   * 在每帧都要重摆 N 个浮层的场景（甘特条、多人光标）会直接吃掉帧预算。
+   */
+  getRenderedRowRects(): RowRect[];
+  /**
+   * 单行的纵向位置。**渲染窗口外的行也返回值**（按已渲染行做锚点、用行位置账本外推），
+   * 列表为空或一行都没渲染时才返回 null。
+   *
+   * 这是它与 `getSelectionRect` 的分工：那个用于「选区浮层」，行不在窗口内就该隐藏，
+   * 所以返回 null 是对的；而依赖箭头的另一端经常在窗口外，箭头仍要画出去、被容器裁掉，
+   * 拿不到坐标就画不成。
+   *
+   * ⚠️ 不定高模式下，未被测量过的行只能按 `estimatedSize` 估算，越远越不准。
+   * 需要精确几何的场景（甘特）应当用固定行高。
+   */
+  getRowRect(rowIndex: number): RowRect | null;
 
   // ---- 查询状态 ----
   /**
@@ -118,6 +198,17 @@ export interface VirtTableHost<T extends Record<string, any> = any> {
    */
   setSearchTerm(term: string): void;
   getSearchTerm(): string;
+
+  /**
+   * 分组维度的读写。**这是「换个维度看」唯一的运行期入口** —— `groupConfig` 本身只是构造期
+   * option，插件（`@virt-table-pro/gantt` 工具栏的「分组」按钮）没法在 `new VirtTable` 那一刻
+   * 参与决定它。
+   *
+   * 刻意**不合进 `setState`**：分组不在 `VirtTableState` 里（进去就得把 `version` 加一，
+   * 已存的视图会全部作废），详见 `VirtTable.setGroupConfig` 的注释。
+   */
+  getGroupConfig(): GroupSpec[];
+  setGroupConfig(config: GroupSpec[] | null | undefined): void;
 
   /**
    * 视图状态的读写。它们是**查询状态的统一入口**（列宽/列序/显隐/排序/两套筛选/分页
@@ -149,6 +240,22 @@ export interface SelectionRect {
   top: number;
   left: number;
   width: number;
+  height: number;
+}
+
+/** 列区间的横向像素范围（`.vt-client` 内容坐标，含列宽拉伸系数） */
+export interface ColumnRange {
+  left: number;
+  width: number;
+}
+
+/**
+ * 一行的纵向位置。`top` 相对 `.vt-client` **可视区上缘**（纵向 `scrollTop` 恒为 0，
+ * 所以它同时也是内容坐标），与 `SelectionRect.top` 同基准。
+ */
+export interface RowRect {
+  rowIndex: number;
+  top: number;
   height: number;
 }
 
@@ -210,6 +317,18 @@ export interface PluginHooks<T extends Record<string, any> = any> {
   onScroll?: (scrollLeft: number, offset: number) => void;
   /** 列结构变化（setColumns / 列显隐 / 列顺序） */
   onColumnsChanged?: () => void;
+  /**
+   * 行高变了（`setRowHeight`，`vtRowHeightConfig` 的三档走它）。
+   *
+   * 行的**摆位**不用管：`setRowHeight` 内部 `forceUpdate()` → 一帧 `onRendered`，
+   * 按行几何画浮层的插件（框选、甘特的条）在那里就跟上了。
+   *
+   * 这个钩子是给**表头几何**用的：三档换的不只是行高，还有密度 token（内边距、字号），
+   * 于是表头也会高矮几像素。谁把表头高度反解成一个具体值写进了行内样式（付费甘特为了让
+   * 左表表头与时间轴表头对齐就这么做），谁就必须在这里重新解一次 —— 否则表头与它自己
+   * 画的那一半差几个像素，而 `onRendered` 说的是「行画完了」，读不出这件事。
+   */
+  onRowHeightChanged?: (size: number) => void;
   /** 文案变化（setLocale） */
   onLocaleChanged?: (locale: VirtTableLocale) => void;
 }
@@ -359,6 +478,7 @@ export class PluginRuntime<T extends Record<string, any>> {
     onDataChanged: [],
     onScroll: [],
     onColumnsChanged: [],
+    onRowHeightChanged: [],
     onLocaleChanged: [],
   };
 
@@ -504,6 +624,10 @@ export class PluginRuntime<T extends Record<string, any>> {
 
   emitScroll(scrollLeft: number, offset: number): void {
     for (const fn of this._hooks.onScroll) fn(scrollLeft, offset);
+  }
+
+  emitRowHeightChanged(size: number): void {
+    for (const fn of this._hooks.onRowHeightChanged) fn(size);
   }
 
   emitColumnsChanged(): void {

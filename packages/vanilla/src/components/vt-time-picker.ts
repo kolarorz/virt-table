@@ -2,6 +2,7 @@ import type { VirtTableColumn } from '../index';
 import {
   type BaseColumnOptions,
   INPUT_CSS,
+  clearableOn,
   commitValue,
   wrapWithClear,
   pickColumnProps,
@@ -26,6 +27,8 @@ export interface VtTimePickerOptions<T = any> extends BaseColumnOptions<T> {
  *
  * 值就是原生控件的字符串格式（`'09:30'` / `step` 带秒时 `'09:30:15'`），不做二次解析
  * —— 表格拿到什么就存什么，格式化留给使用方的 `render` 或数据层。
+ *
+ * `clearable` **默认开**（控件右侧一个 `×`，清空写回 `''`），传 `clearable: false` 关掉。
  */
 export function VtTimePicker<T = any>(opts: VtTimePickerOptions<T>): VirtTableColumn<T> {
   const col: VirtTableColumn<T> = {
@@ -50,7 +53,9 @@ export function VtTimePicker<T = any>(opts: VtTimePickerOptions<T>): VirtTableCo
       });
       requestAnimationFrame(() => input.focus());
 
-      return wrapWithClear(input, !!opts.clearable, () => {
+      // `×` 默认给：原生 time 控件「怎么删回空」各家不一（有的要逐段选中删），
+      // 与 `VtDatePicker` 同档处理，见 `clearableOn`
+      return wrapWithClear(input, clearableOn(opts), () => {
         input.value = '';
         commitValue(opts, ctx, '');
       });

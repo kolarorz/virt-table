@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vitepress';
 import {
   useFramework,
@@ -10,9 +10,15 @@ import {
 } from '../composables/useFramework';
 
 const router = useRouter();
-const { currentFramework, relativePath } = useFramework();
+const { currentFramework, currentNav, relativePath } = useFramework();
 
 const open = ref(false);
+
+/**
+ * Demos 不分框架（案例只有一份原生实现），那里切换器无意义 —— 留着它会暗示
+ * 「换到 Vue 能看到 Vue 版案例」，点下去只会把人踢出案例页。
+ */
+const visible = computed(() => currentNav.value !== 'demos');
 
 const frameworks: Framework[] = ['vanilla', 'vue', 'react'];
 
@@ -25,6 +31,7 @@ function select(fw: Framework) {
 
 <template>
   <div
+    v-if="visible"
     class="VPFlyout fw-flyout"
     @click.prevent.stop
     @mouseenter="open = true"

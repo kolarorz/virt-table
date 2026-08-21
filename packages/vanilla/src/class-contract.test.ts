@@ -46,15 +46,22 @@ function walk(dir: string, out: string[] = []): string[] {
 const files = walk(SRC);
 /** 产品代码（测试本身不算：测试里会为了造场景手写 class） */
 const tsFiles = files.filter((f) => /\.ts$/.test(f) && !/\.test(-d)?\.ts$/.test(f));
-/** 全部样式：核心 + plugins/* + components/*（class 可能定义在任一处） */
-const cssText = files
-  .filter((f) => f.endsWith('.css'))
-  .map((f) => readFileSync(f, 'utf8'))
-  .join('\n');
-
 /** 剥掉块注释与行注释，避免把注释里提到的历史 class 当成在用 */
 const stripComments = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+/**
+ * 全部样式：核心 + plugins/* + components/*（class 可能定义在任一处）。
+ *
+ * **CSS 也要剥注释**，与下面扫 JS 时同一个理由：CSS 注释里同样会写
+ * `.vt-xxx` 来解释「这条规则为什么不能命中某个结构」。不剥的话，一句注释就能让
+ * ALLOWLIST 那条哨兵误报「这个 class 现在有规则了」—— 实测踩过（写了一句
+ * 「裸选择器会连 tbody 里的分组格一起命中」，`vt-tbody` 就被判成有规则）。
+ */
+const cssText = files
+  .filter((f) => f.endsWith('.css'))
+  .map((f) => stripComments(readFileSync(f, 'utf8')))
+  .join('\n');
 
 /**
  * 没有对应 CSS 选择器、但**刻意如此**的 class。
@@ -70,6 +77,14 @@ const ALLOWLIST: Record<string, string> = {
   'vt-pagination-next': '同上，下一页按钮',
   'vt-comp-link-panel':
     '作为 createPopup 的额外 className 传入，面板皮肤来自 .vt-comp-popup；这个类只是给使用方单独覆盖链接面板的抓手',
+  /*
+   * 下面两个是 CSS 也开始剥注释之后才浮出来的 —— 它们的名字原先只出现在 CSS **注释**里，
+   * 于是被当成「有规则」蒙混过关。两处注释本身就写明了它们是抓手，照抄过来。
+   */
+  'vt-td-text--tooltip':
+    '只是给 tooltip 事件委托用的标记（index.ts 里 selector: ".vt-td-text--tooltip"），视觉全靠 --ellipsis',
+  'vt-comp-calendar-popup':
+    '日历浮层外壳的标识类，皮肤全在 .vt-filter-panel / .vt-comp-popup 上；只作为单独覆盖日历面板的抓手',
 };
 
 /** 收集产品代码里出现的静态 `vt-*` class 字面量 → 首次出现的文件 */

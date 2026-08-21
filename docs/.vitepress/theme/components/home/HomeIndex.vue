@@ -54,10 +54,10 @@ const metrics = [
     note: '插件与内置组件各自成文件，全量 45 kB',
   },
   {
-    v: '1040',
+    v: '1054',
     unit: '个',
     k: '单元测试',
-    note: '36 个测试文件，含 4 份契约测试与 17 份 DOM 测试',
+    note: '37 个测试文件，含 5 份契约测试与 17 份 DOM 测试',
   },
 ];
 
@@ -181,7 +181,7 @@ const capabilities = [
       '<code>vtAIColumn</code> AI 列，只为可见行付费',
       '<code>vtAIStream</code> 流式表格，列从首批数据推断',
       '14 个插件按需装载，tree-shaking 友好',
-      '17 个内置单元格组件',
+      '18 个内置单元格组件',
       '第三方组件库列渲染（Element Plus / Ant Design）',
       'i18n：内置 zhCN / enUS，可运行时切换',
       '无障碍 ARIA 网格语义',
@@ -195,14 +195,14 @@ const capabilities = [
  * -------------------------------------------------------------------------- */
 const engineering = [
   {
-    v: '1040',
-    h: '单元测试，36 个文件',
+    v: '1054',
+    h: '单元测试，37 个文件',
     p: '纯逻辑跑 node 环境，DOM 行为跑 happy-dom 并按文件开启 —— 避免 11 个纯逻辑文件白付每文件约 90ms 的环境成本。',
   },
   {
-    v: '4',
+    v: '5',
     h: '份契约测试',
-    p: 'CSS 令牌算术（行高等式）、JS 写出的 class ↔ CSS 选择器、内置组件契约、文档站样式与 demo 的隔离。守的是编译器管不到、运行时也测不出来的耦合。',
+    p: 'CSS 令牌算术（行高等式）、JS 写出的 class ↔ CSS 选择器、内置组件契约、「点外面关掉」的事件名、文档站样式与 demo 的隔离。守的是编译器管不到、运行时也测不出来的耦合。',
   },
   {
     v: 'CDP',
@@ -547,6 +547,8 @@ const guideLink = computed(() => withBase(`/${activeFw.value}/guide/started`));
         </p>
         <div class="vth-actions">
           <a class="vth-btn vth-btn--brand" :href="link('/vanilla/guide/started')">快速开始</a>
+          <!-- 经典案例（Demos）没有框架段：案例是框架无关的原生实现，只有一份 -->
+          <a class="vth-btn vth-btn--alt" :href="link('/demos/')">经典案例</a>
           <a class="vth-btn vth-btn--alt" :href="link('/vanilla/ai/index')">AI 场景</a>
           <a class="vth-btn vth-btn--alt" :href="link('/vanilla/examples/basic/basic')">
             浏览全部示例

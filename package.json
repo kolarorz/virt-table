@@ -20,15 +20,18 @@
     "build:vanilla": "pnpm -C packages/vanilla build",
     "build:react": "pnpm -C packages/react build",
     "build:vue": "pnpm -C packages/vue build",
-    "build:docs": "pnpm -C docs build",
+    "build:docs": "pnpm verify:enterprise && node scripts/pro-tgz.mjs && pnpm -C docs build && pnpm verify:pro-leak",
+    "build:docs:strict": "VT_PRO_STRICT=1 pnpm build:docs",
+    "verify:enterprise": "node scripts/check-enterprise-docs.mjs",
+    "verify:pro-leak": "node scripts/check-pro-leak.mjs",
+    "pro:tgz": "node scripts/pro-tgz.mjs",
     "preview": "pnpm -C docs preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:pack": "node scripts/verify-pack.mjs",
     "release": "node scripts/release.mjs",
     "release:dry": "node scripts/release.mjs --dry-run",
-    "emit-types": "pnpm -C packages/vanilla exec tsc -p tsconfig.build.json && pnpm -C packages/react exec tsc -p tsconfig.build.json && pnpm -C packages/vue exec tsc -p tsconfig.build.json",
-    "typecheck": "pnpm -C packages/vanilla typecheck && pnpm -C packages/react typecheck && pnpm -C packages/vue typecheck && pnpm emit-types && pnpm -C docs typecheck && pnpm -C docs/apps/vanilla typecheck && pnpm -C docs/apps/react typecheck && pnpm -C docs/apps/vue typecheck"
+    "typecheck": "pnpm -C packages/vanilla typecheck && pnpm -C packages/react typecheck && pnpm -C packages/vue typecheck && pnpm -C docs typecheck && pnpm -C docs/apps/vanilla typecheck && pnpm -C docs/apps/react typecheck && pnpm -C docs/apps/vue typecheck"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.3.0",

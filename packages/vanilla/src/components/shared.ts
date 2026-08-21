@@ -4,6 +4,14 @@ import './components.css';
 export type BaseColumnOptions<T> = Omit<VirtTableColumn<T>, 'render' | 'renderEditor'> & {
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * 控件右侧给一个「×」清除按钮（只在有值时出现）。
+   *
+   * **默认值按「这一格能不能用键盘删空」分两档**（见 `clearableOn` 的注释）：
+   *   - 锚点类（`VtSelect` / `VtCascader` / `VtPerson` / 日期时间那三个）**默认开**，
+   *     传 `false` 关掉；
+   *   - 输入类（`VtInput` / `VtNumberInput` / `VtAutocomplete`）**默认关**，要传 `true`。
+   */
   clearable?: boolean;
   /**
    * 值写回行数据之后触发。所有单元格组件的写回都走 `commitValue`，所以这个回调对
@@ -67,6 +75,25 @@ const CHECK_SVG =
   '<path d="M5 13l4 4L19 7"/></svg>';
 
 export { CHECK_SVG };
+
+/**
+ * 锚点类组件的 `clearable` 取值：**默认开**，只有显式 `false` 才关。
+ *
+ * 为什么这一档默认开、输入类不是 —— 分界线是**这一格能不能用键盘删空**：
+ * `VtInput` / `VtNumberInput` / `VtAutocomplete` 的编辑态是真正的文本框，全选 + Backspace
+ * 本来就清得掉，`×` 只是顺手；而下拉 / 级联 / 人员 / 日期的编辑态是一个**锚点**
+ * （`makeAnchor`，不是文本框），一旦有了值，界面上就再没有任何「变回空」的手段 ——
+ * 面板里只能换选另一项。所以默认不给 `×` 等于「这一列一旦填过就填不回空」，
+ * 用户反馈的正是这件事（「下拉选择没有清空按钮」「级联/日期也加上」）。
+ *
+ * 同一条分界线也决定了 `Delete` / `Backspace` 只在锚点上清空（见 `makeAnchor`）：
+ * 文本框里那两个键有自己的语义，抢过来会把「删一个字符」变成「清空整格」。
+ *
+ * 需要「这一列不许清空」时显式传 `clearable: false`（连带 `Delete` 一起没有）。
+ */
+export function clearableOn(opts: Pick<BaseColumnOptions<any>, 'clearable'>): boolean {
+  return opts.clearable !== false;
+}
 
 export function makeClearBtn(onClear: () => void): HTMLElement {
   const btn = document.createElement('span');
@@ -304,7 +331,8 @@ export interface AnchorHandle {
  * `tabIndex = 0` 是必需的：面板的键盘操作（↑↓ 选、Enter 确认）挂在锚点上，
  * 不可聚焦就收不到 keydown。
  *
- * @param onClear 传了就在文案与箭头之间放一个「×」清除按钮（`clearable` 的组件用）。
+ * @param onClear 传了就在文案与箭头之间放一个「×」清除按钮（`clearable` 的组件用），
+ *   同时**锚点上的 `Delete` / `Backspace` 也走同一个回调**。
  *   按钮只在**有值**时出现 —— 空值没什么可清的，常驻一个灰叉只会让人以为能点。
  *   清除动作放在控件上、而不是面板底部的「清除」按钮：那要先展开面板才点得到，
  *   而「清空这一格」是个一步动作，输入类组件（`VtInput` / `VtDatePicker` …）也一直是
@@ -327,6 +355,29 @@ export function makeAnchor(placeholder?: string, onClear?: () => void): AnchorHa
   if (clearBtn) {
     clearBtn.setAttribute('aria-label', '清除');
     el.appendChild(clearBtn);
+  }
+
+  /**
+   * 键盘上的同一个动作：**激活这一格后按 `Delete` / `Backspace` 就清空**。
+   *
+   * 锚点不是文本框，这两个键在它身上本来没有任何语义 —— 而「选中一格按 Delete 清掉」
+   * 是表格用户的肌肉记忆（Excel / Sheets 都是）。只在有 `onClear`（即 `clearable`）时挂：
+   * 「能不能按 Delete 清」和「有没有那个 ×」必须是同一件事，否则同一列出现「叉没有但键
+   * 能清」这种解释不通的差别。
+   *
+   * `preventDefault()`：`Backspace` 在部分环境是「浏览器后退」。
+   * `stopPropagation()`：不让键冒到 `vtKeyboardNav` / 宿主页面上再被解释一次。
+   *
+   * 面板带搜索框时焦点在输入框里、事件到不了这里 —— 那一支由 `_enum.ts` 自己接
+   * （搜索词为空才清，否则 `Backspace` 要正常删字）。
+   */
+  if (onClear) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClear();
+    });
   }
 
   const caret = document.createElement('span');

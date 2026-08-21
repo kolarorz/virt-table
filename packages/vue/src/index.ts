@@ -33,7 +33,7 @@ import {
   type VirtTableState,
 } from '@virt-table/vanilla';
 
-export type { VirtTableOptions, VirtTableColumn, MergeCell, CellRenderConfig, CellContentType, VirtTableRowExtras, CellRenderContext, CellEditContext, HeaderRenderContext, ExpandRenderContext, FooterRenderContext, SortOrder, SortSpec, FilterType, VirtTableLocale } from '@virt-table/vanilla';
+export type { VirtTableOptions, VirtTableColumn, MergeCell, CellRenderConfig, CellContentType, VirtTableRowExtras, RowDropTarget, RowMoveDetail, CellRenderContext, CellEditContext, HeaderRenderContext, ExpandRenderContext, FooterRenderContext, SortOrder, SortSpec, FilterType, VirtTableLocale } from '@virt-table/vanilla';
 export type { ExportOptions } from '@virt-table/vanilla/plugins';
 export { zhCN, enUS } from '@virt-table/vanilla';
 export type { VirtTableState, VirtTableColumnState } from '@virt-table/vanilla';
@@ -43,7 +43,13 @@ export {
   vtExport,
   vtClipboard,
   vtSearch,
-  vtColumnPanel,
+  vtFieldConfig,
+  vtFilterConfig,
+  vtGroupConfig,
+  vtSortConfig,
+  vtToolbarPanels,
+  vtRowHeightConfig,
+  vtToolbar,
   vtCellSelection,
   vtKeyboardNav,
   vtCellEditor,
@@ -76,7 +82,13 @@ export type {
   ClipboardPasteContext,
   SearchOptions,
   SearchMatch,
-  ColumnPanelOptions,
+  FieldConfigOptions,
+  FilterConfigOptions,
+  GroupConfigOptions,
+  SortConfigOptions,
+  ToolbarPanelsOptions,
+  RowHeightConfigOptions,
+  RowHeightLevel,
   CellSelectionOptions,
   CellEditorOptions,
   CellEditorService,
@@ -495,6 +507,7 @@ export const VirtTableVue = defineComponent({
       clearCheckedRows: () => table?.clearCheckedRows(),
       toggleExpand: (rowKey: string) => table?.toggleExpand(rowKey),
       toggleFold: (rowKey: string) => table?.toggleFold(rowKey),
+      isFolded: (rowKey: string) => table?.isFolded(rowKey),
       expandAll: () => table?.expandAll(),
       collapseAll: () => table?.collapseAll(),
       setColumnFilter: (key: string, vals: unknown[]) => table?.setColumnFilter(key, vals),

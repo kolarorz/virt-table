@@ -2,6 +2,16 @@
 
 由 `vtClipboard` 插件提供：把当前框选区域复制成 TSV（可直接粘到 Excel），也支持从外部粘贴写回。插件与框架无关，`@virt-table/react` 直接透传 vanilla 的实现与类型。
 
+## 示例
+
+<PlaygroundHost framework="react" example-id="react-clipboard" />
+
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/react/src/components/plugins/Clipboard.tsx
+:::
+
 ## 装载
 
 ```tsx
@@ -29,12 +39,14 @@ vtClipboard<Row>({
 
 完整语义（默认 TSV 规则、自动补空行、焦点让位、与编辑浮层的关系）见 [Vanilla · 剪贴板](/vanilla/examples/plugins/clipboard)。
 
-## 示例
+## 相关 API
 
-<PlaygroundHost framework="react" example-id="react-clipboard" />
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `vtClipboard(options?)` | 选区复制 / 粘贴（`requires: vtCellSelection`） | [插件机制](/vanilla/api/plugins) |
+| `vtCellSelection()` | 前置依赖：复制的就是当前框选区域 | [插件机制](/vanilla/api/plugins) |
+| `col.exportValue` | 覆盖取值（复制与导出共用） | [插件机制 · 导出](/vanilla/api/plugins#导出-打印) |
 
-## 源码
+不读合并信息（逐行取值），要还原合并结构自己用 `getEffectiveMerges()`，见[按值自动合并](/react/examples/merge/auto-merge#与选区-导出的联动)。
 
-::: details 点击查看源码
-<<< @/apps/react/src/components/plugins/Clipboard.tsx
-:::
+> 上面的字段在 React 端原样透传（实例方法通过组件 `ref` 调用）。封装层特有的部分 —— 组件 Props、渲染函数返回 JSX、`ref` 转发了哪些方法 —— 见 [React API](/react/api/table)。

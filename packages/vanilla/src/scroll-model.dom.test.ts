@@ -213,3 +213,73 @@ describe('纵向滚动 API', () => {
     expect(table.getOffset()).toBeCloseTo(before + 400, 5);
   });
 });
+
+/**
+ * 触摸手势的**接线**契约：横向作为交叉轴交给了 `InputController`（`crossEl`）。
+ *
+ * 2026-08-14 移动端实测的 bug 就出在这根线没接：纵向由 `InputController` 接管、
+ * 横向留给浏览器原生 pan，而 `preventDefault` 没有「只拦一条轴」的粒度 ——
+ * 纵向一拦横向也废，表现为「竖向滚起来之后横向完全滚不动，只有竖向分量恰好为 0
+ * 或已顶到边界时才横滚得动」。
+ *
+ * 这里只验接线与轴锁的方向，手势引擎本身（起步阈值 / 解锁阈值 / 惯性曲线）
+ * 在 virt-list 的 `packages/vanilla/__tests__/InputController.test.ts` 里测。
+ * happy-dom 没有布局，`scrollWidth`/`clientWidth` 都是 0，所以 `scrollLeft`
+ * 换成可写实现来观察「有没有人在写它」。
+ */
+describe('触摸手势：横向作为交叉轴一并接管', () => {
+  /** 让 scrollLeft 可读写（happy-dom 无布局，原生实现会把它按到 0） */
+  function makeScrollLeftWritable(el: HTMLElement, max = 1000): void {
+    let left = 0;
+    Object.defineProperty(el, 'scrollLeft', {
+      configurable: true,
+      get: () => left,
+      set: (v: number) => {
+        left = Math.min(Math.max(v, 0), max);
+      },
+    });
+  }
+
+  function touch(
+    el: HTMLElement,
+    type: 'touchstart' | 'touchmove' | 'touchend',
+    x: number,
+    y: number,
+    time: number,
+  ): Event {
+    const e = new Event(type, { cancelable: true, bubbles: true }) as any;
+    e.touches = type === 'touchend' ? [] : [{ clientX: x, clientY: y }];
+    Object.defineProperty(e, 'timeStamp', { value: time });
+    el.dispatchEvent(e);
+    return e as Event;
+  }
+
+  it('横向主导的手势会写 scrollLeft（这根线断了就是那个 bug）', async () => {
+    const { client } = mount();
+    makeScrollLeftWritable(client);
+
+    touch(client, 'touchstart', 300, 100, 0);
+    // 越过起步阈值，横向主导 → 锁交叉轴
+    touch(client, 'touchmove', 270, 102, 16);
+    touch(client, 'touchmove', 240, 104, 32);
+
+    expect(client.scrollLeft).toBeGreaterThan(0);
+  });
+
+  it('竖向主导的手势不碰 scrollLeft（竖滚时列不会横漂）', async () => {
+    const { client, table } = mount();
+    makeScrollLeftWritable(client);
+    table.scrollToOffset(2000); // 离开顶部，纵向两个方向都有余量
+
+    touch(client, 'touchstart', 300, 300, 0);
+    // 竖向主导，但每一帧都带着横向分量 —— 全部该被轴锁吃掉
+    touch(client, 'touchmove', 292, 270, 16);
+    touch(client, 'touchmove', 306, 240, 32);
+    touch(client, 'touchmove', 288, 210, 48);
+    // 纵向位移经 rAF 落地
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+    expect(client.scrollLeft).toBe(0);
+    expect(table.getOffset()).toBeGreaterThan(2000);
+  });
+});

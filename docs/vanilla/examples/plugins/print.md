@@ -13,3 +13,10 @@
 ::: details 点击查看源码
 <<< @/apps/vanilla/src/components/plugins/print.ts
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `vtExport()` | 打印由导出插件提供 | [插件机制 · 导出](/vanilla/api/plugins#导出-打印) |
+| `print(opts?: { title? })` | 新窗口输出全表（内联样式） | [插件机制 · 导出](/vanilla/api/plugins#导出-打印) |

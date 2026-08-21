@@ -1,13 +1,13 @@
 <template>
   <div class="demo-wrapper">
-    <h3 class="demo-title">Vue 列显隐 / 列设置</h3>
+    <h3 class="demo-title">Vue 字段配置</h3>
     <div class="virt-table-controls">
       <button
         type="button"
         class="virt-table-btn virt-table-btn-primary"
         @click="togglePanel"
       >
-        列设置
+        字段配置
       </button>
       <button type="button" class="virt-table-btn" @click="tableRef?.setColumnVisible('job', false)">
         隐藏「职位」
@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { VirtTableVue, type VueTableColumn, vtColumnPanel } from '@virt-table/vue';
+import { VirtTableVue, type VueTableColumn, vtFieldConfig } from '@virt-table/vue';
 import { faker } from '@faker-js/faker';
 import type { VirtTableVueInstance } from '../../virt-table-ref';
 
@@ -62,13 +62,13 @@ const options = {
   estimatedSize: 40,
   buffer: 6,
   border: true,
-  plugins: [vtColumnPanel()],
+  plugins: [vtFieldConfig()],
 };
 
 const tableRef = ref<VirtTableVueInstance | null>(null);
 
 // 面板要贴着触发按钮定位，所以把按钮本身作为 anchor 传进去
 const togglePanel = (e: MouseEvent) => {
-  tableRef.value?.toggleColumnPanel(e.currentTarget as HTMLElement);
+  tableRef.value?.toggleFieldConfig(e.currentTarget as HTMLElement);
 };
 </script>

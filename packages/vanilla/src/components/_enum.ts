@@ -114,6 +114,14 @@ export interface EnumEditorConfig<O extends VtOption = VtOption> {
   /** 锚点回显。返回节点数组则走 `setNodes`（常态是胶囊的组件用），字符串走 `setText` */
   renderAnchor?: (picked: O[]) => HTMLElement[] | string;
   codec: EnumCodec;
+  /**
+   * 锚点右侧给「×」（并让 `Delete` / `Backspace` 也清空）。
+   *
+   * **由预设算好再传进来**，内核不自己读 `opts.clearable` —— 两个预设的默认值来自同一条
+   * 规则（`clearableOn`：锚点类默认开）但入口不同（`VtPerson` 不配 `options` 时压根没有
+   * 编辑态），把判断留在预设里比在这里再分一次支清楚。
+   */
+  clearable: boolean;
 }
 
 /**
@@ -123,7 +131,8 @@ export interface EnumEditorConfig<O extends VtOption = VtOption> {
  * 是多次点击的过程，让底部的「清空 / 全选」与逐项勾选走同一条路，省掉一份
  * 「暂存态 vs 已提交态」的状态机。
  *
- * 键盘：`↑` / `↓` 移动高亮（跳过禁用项）、`Enter` 选中 / 勾选、`Esc` 关闭（浮层基元管）。
+ * 键盘：`↑` / `↓` 移动高亮（跳过禁用项）、`Enter` 选中 / 勾选、`Esc` 关闭（浮层基元管）、
+ * `Delete` / `Backspace` 清空（`clearable` 时；焦点在搜索框里则要求搜索词为空）。
  */
 export function createEnumEditor<T, O extends VtOption = VtOption>(
   opts: BaseColumnOptions<T>,
@@ -142,16 +151,14 @@ export function createEnumEditor<T, O extends VtOption = VtOption>(
   const asOption = (v: string | number): O =>
     optionMap.get(v) ?? ({ value: v, label: String(v) } as O);
 
-  const anchor = makeAnchor(
-    opts.placeholder,
-    opts.clearable
-      ? () => {
-          picked = [];
-          commit();
-          if (popup) paintList();
-        }
-      : undefined,
-  );
+  /** 清空这一格。锚点上的 `×` 与 `Delete`、搜索框里的空 `Backspace` 都走它 */
+  const clear = (): void => {
+    picked = [];
+    commit();
+    if (popup) paintList();
+  };
+
+  const anchor = makeAnchor(opts.placeholder, cfg.clearable ? clear : undefined);
 
   function syncAnchor(): void {
     const items = picked.map(asOption);
@@ -311,6 +318,22 @@ export function createEnumEditor<T, O extends VtOption = VtOption>(
         paintList();
       });
       input.addEventListener('keydown', onKeyNav);
+      /**
+       * 搜索框里的 `Delete` / `Backspace`：**搜索词为空时才清空这一格**。
+       *
+       * 有词就必须留给输入框删字。这条是为了补上锚点那边的缺口 —— 面板一打开焦点就在搜索
+       * 框里（`VtPerson` 默认、`VtSelect({ searchable })`），事件到不了锚点，否则「按 Delete
+       * 清空」就成了「只有没搜索框的下拉才有」。
+       */
+      if (cfg.clearable) {
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+          if (input.value !== '') return;
+          e.preventDefault();
+          e.stopPropagation();
+          clear();
+        });
+      }
       box.appendChild(input);
       popup.el.appendChild(box);
       searchEl = input;

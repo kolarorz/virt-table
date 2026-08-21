@@ -1,0 +1,100 @@
+/* ==========================================================================
+ * vtFieldConfig 插件样式
+ *
+ * 两个来源 `@import` 内联进来（本仓约定：一个插件一个自包含的 CSS）：
+ *   - `_panel.css`：面板外壳与条目（`.vt-filter-panel` / `.vt-filter-list` / `.vt-filter-item`），
+ *     同时被 `vtColumnFilter`、`VtFilterBuilder` 使用；
+ *   - `_panel-ui.css`：面板基元（标题 / 提示 / 空态）—— 不装 `vtToolbar` 单独用时也要它。
+ *
+ * `.vt-filter-checkbox` 与核心勾选框共用规则，留在核心 `index.css`。
+ * 下面只放**字段配置专属**的部分：手柄、锁定态、拖拽落点线。
+ * ========================================================================== */
+@import './_panel.css';
+@import './_panel-ui.css';
+
+/* ==========================================================================
+ * 3. 字段配置那一列
+ * ========================================================================== */
+
+/* `position: relative` 是给落点提示线当定位参照 —— 线要跟着列表自己的滚动走 */
+.vt-toolbar-fields {
+  position: relative;
+}
+
+.vt-toolbar-fields-item {
+  gap: 6px;
+  /* 分组表头按列树层级缩进（层级由 --vt-panel-level 行内传入） */
+  margin-left: calc(var(--vt-panel-level, 0) * var(--vt-panel-indent-size));
+}
+
+/* 手柄：平时淡、hover 才明显 —— 它是一行里最不该抢注意力的东西 */
+.vt-toolbar-fields-grip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--vt-text-secondary);
+  opacity: 0.55;
+  cursor: grab;
+  /*
+   * **触屏上没有它就拖不动**：浏览器一旦决定开始滚动就不会再把 move 事件给我们，
+   * 而 `preventDefault()` 对 `pointermove` 拦不住滚动。只有 `touch-action` 能在手势
+   * 开始前把这一小块让出来（与 `.vt-resize-trigger` 同一条要求）。
+   */
+  touch-action: none;
+}
+
+.vt-toolbar-fields-item:hover .vt-toolbar-fields-grip {
+  opacity: 1;
+}
+
+.vt-toolbar-fields-grip.is-disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.vt-toolbar-fields-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 勾不掉的那些行：置灰但**留在原位**，鼠标停上去说明原因。
+ *
+ * 勾选框也要一起淡下去 —— `.vt-filter-checkbox` 走 `accent-color` 那一路，原生
+ * `:disabled` 的灰化在它身上几乎看不出来，那一行会与旁边可点的行长得一模一样，
+ * 于是「为什么点不动」看着像 bug 而不是一条规则。
+ */
+.vt-toolbar-fields-item--locked {
+  cursor: default;
+}
+
+.vt-toolbar-fields-item--locked .vt-toolbar-fields-name {
+  color: var(--vt-text-secondary);
+}
+
+.vt-toolbar-fields-item--locked .vt-filter-checkbox {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 拖拽中：整列不许选中文字，源行淡下去 */
+.vt-toolbar-fields--dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.vt-toolbar-fields-item.is-dragging {
+  opacity: 0.4;
+}
+
+.vt-toolbar-fields-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-color-primary);
+  pointer-events: none;
+}

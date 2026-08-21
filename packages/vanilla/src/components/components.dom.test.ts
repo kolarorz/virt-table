@@ -32,6 +32,9 @@ import { VtDateRangePicker } from './vt-date-range-picker';
 import { VtAutocomplete } from './vt-autocomplete';
 import { VtCascader } from './vt-cascader';
 import { VtPerson } from './vt-person';
+import { VtImage } from './vt-image';
+import { imageIO, flushImageQueue, resetImageLoader } from './_image-loader';
+import { closeImageViewer } from './_image-viewer';
 
 type Row = Record<string, any>;
 
@@ -342,8 +345,9 @@ describe('VtSelect', () => {
     expect(row.s).toBe('pending');
   });
 
-  it('clearable 时清除按钮是控件右侧那个「×」，不在面板底部', () => {
-    const withClear = VtSelect<Row>({ key: 's', title: 'S', options: STATUS, clearable: true });
+  it('清除按钮是控件右侧那个「×」，不在面板底部', () => {
+    // clearable 不传就有（锚点类默认开，见 shared.ts 的 clearableOn）
+    const withClear = VtSelect<Row>({ key: 's', title: 'S', options: STATUS });
     const row: Row = { s: 'active' };
     const anchor = openEdit(withClear, row);
 
@@ -365,15 +369,66 @@ describe('VtSelect', () => {
     // 清空之后没什么可清的，叉自己藏起来
     expect(btn.style.display).toBe('none');
 
-    // 不配 clearable 就没有叉
-    const noClear = VtSelect<Row>({ key: 's', title: 'S', options: STATUS });
+    // 只有显式 clearable: false 才没有叉
+    const noClear = VtSelect<Row>({ key: 's', title: 'S', options: STATUS, clearable: false });
     expect(openEdit(noClear, { s: 'active' }).querySelector('.vt-comp-clear')).toBeNull();
   });
 
   it('空值时不显示「×」（没什么可清的）', () => {
-    const col = VtSelect<Row>({ key: 's', title: 'S', options: STATUS, clearable: true });
+    const col = VtSelect<Row>({ key: 's', title: 'S', options: STATUS });
     const anchor = openEdit(col, { s: '' });
     expect((anchor.querySelector('.vt-comp-clear') as HTMLElement).style.display).toBe('none');
+  });
+
+  /**
+   * 「能不能按 Delete 清」与「有没有那个 ×」必须是同一件事（`makeAnchor`）——
+   * 锚点不是文本框，那两个键在它身上没有别的语义，而「选中一格按 Delete 清掉」是表格
+   * 用户的肌肉记忆。
+   */
+  it('激活后按 Delete / Backspace 清空（与 × 同一个动作）', () => {
+    for (const key of ['Delete', 'Backspace']) {
+      const col = VtSelect<Row>({ key: 's', title: 'S', options: STATUS });
+      const row: Row = { s: 'active' };
+      const anchor = openEdit(col, row);
+
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      anchor.dispatchEvent(e);
+
+      expect(row.s, `${key} 应清空`).toBe('');
+      // 不让键继续冒泡/触发默认行为（Backspace 在部分环境是浏览器后退）
+      expect(e.defaultPrevented).toBe(true);
+      // 回显退回 placeholder、叉自己藏起来
+      expect((anchor.querySelector('.vt-comp-clear') as HTMLElement).style.display).toBe('none');
+      client.innerHTML = '';
+    }
+  });
+
+  it('clearable: false 的列按 Delete 也不动值', () => {
+    const col = VtSelect<Row>({ key: 's', title: 'S', options: STATUS, clearable: false });
+    const row: Row = { s: 'active' };
+    openEdit(col, row).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row.s).toBe('active');
+  });
+
+  /**
+   * 面板带搜索框时焦点在输入框里，Delete 到不了锚点。那一支在 `_enum.ts` 自己接，
+   * 规则是**搜索词为空才清**（有词得留给输入框删字）。
+   */
+  it('搜索框里：有搜索词时 Delete 归输入框，空搜索词才清空这一格', () => {
+    const col = VtSelect<Row>({ key: 's', title: 'S', options: STATUS, searchable: true });
+    const row: Row = { s: 'active' };
+    openEdit(col, row);
+    const search = popupEl()!.querySelector('input.vt-filter-text') as HTMLInputElement;
+
+    search.value = '待';
+    search.dispatchEvent(new Event('input'));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    expect(row.s, '有搜索词时不该清空单元格').toBe('active');
+
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    expect(row.s).toBe('');
   });
 
   it('disabled 列不给编辑态', () => {
@@ -526,6 +581,100 @@ describe('VtActions', () => {
 });
 
 describe('VtProgress', () => {
+  it('默认只读：不给 renderEditor', () => {
+    const col = VtProgress<Row>({ key: 'p', title: '进度' });
+    expect(col.renderEditor).toBeUndefined();
+  });
+
+  it('editable: true 时编辑态是滑块 + 数字框，边拖边写回且数字跟着走', () => {
+    const row: Row = { p: 20 };
+    const seen: number[] = [];
+    const col = VtProgress<Row>({
+      key: 'p',
+      title: '进度',
+      editable: true,
+      onChange: (v) => seen.push(v as number),
+    });
+    const el = openEdit(col, row);
+    const range = el.querySelector('input[type=range]') as HTMLInputElement;
+    const num = el.querySelector('input[type=number]') as HTMLInputElement;
+    expect(range).toBeTruthy();
+    expect(range.min).toBe('0');
+    expect(range.max).toBe('100');
+    expect(range.value).toBe('20');
+    // 数字框与滑块共享同一个值，量程也一样
+    expect(num).toBeTruthy();
+    expect([num.value, num.min, num.max]).toEqual(['20', '0', '100']);
+    // max: 100（默认）时原值就是百分比，才写这个后缀
+    expect((el.querySelector('.vt-comp-progress-unit') as HTMLElement).textContent).toBe('%');
+
+    range.value = '65';
+    range.dispatchEvent(new Event('input'));
+    // 写回行数据 + 通知 onChange（拖动过程中就跟着动，使用方才能联动别的视图）
+    expect(row.p).toBe(65);
+    expect(seen).toEqual([65]);
+    expect(num.value, '拖滑块要刷新数字框').toBe('65');
+  });
+
+  /** 用户反馈：滑块在 200px 的单元格里点不准整数，「就要 65」得能直接键入 */
+  it('数字框：键入即写回，并反推滑块位置', () => {
+    const row: Row = { p: 20 };
+    const col = VtProgress<Row>({ key: 'p', title: '进度', editable: true });
+    const el = openEdit(col, row);
+    const range = el.querySelector('input[type=range]') as HTMLInputElement;
+    const num = el.querySelector('input[type=number]') as HTMLInputElement;
+
+    num.value = '65';
+    num.dispatchEvent(new Event('input'));
+    expect(row.p).toBe(65);
+    expect(range.value).toBe('65');
+  });
+
+  it('数字框：空值不写回（删干净准备重打时不该把进度归零），失焦后规范回真实值', () => {
+    const row: Row = { p: 20 };
+    const col = VtProgress<Row>({ key: 'p', title: '进度', editable: true });
+    const el = openEdit(col, row);
+    const num = el.querySelector('input[type=number]') as HTMLInputElement;
+
+    num.value = '';
+    num.dispatchEvent(new Event('input'));
+    expect(row.p, '空框不提交').toBe(20);
+
+    num.dispatchEvent(new Event('change'));
+    expect(num.value, '失焦后回填当前值').toBe('20');
+    expect(row.p).toBe(20);
+  });
+
+  it('数字框：越界输入在失焦时夹回 0 ~ max', () => {
+    const row: Row = { p: 20 };
+    const col = VtProgress<Row>({ key: 'p', title: '进度', max: 5, editable: true });
+    const el = openEdit(col, row);
+    const num = el.querySelector('input[type=number]') as HTMLInputElement;
+    // max: 5 的列后面不跟 `%`（那时原值不是百分比）
+    expect(el.querySelector('.vt-comp-progress-unit')).toBeNull();
+
+    num.value = '99';
+    num.dispatchEvent(new Event('change'));
+    expect(num.value).toBe('5');
+    expect(row.p).toBe(5);
+  });
+
+  it('showText: false 的列编辑态只剩滑块', () => {
+    const col = VtProgress<Row>({ key: 'p', title: '进度', editable: true, showText: false });
+    const el = openEdit(col, { p: 20 });
+    expect(el.querySelector('input[type=range]')).not.toBeNull();
+    expect(el.querySelector('input[type=number]')).toBeNull();
+  });
+
+  it('滑块按 max 与 step 配置；越界值先夹进范围再作为初值', () => {
+    const col = VtProgress<Row>({ key: 'p', title: '进度', max: 5, step: 0.5, editable: true });
+    const el = openEdit(col, { p: 99 });
+    const range = el.querySelector('input[type=range]') as HTMLInputElement;
+    expect(range.max).toBe('5');
+    expect(range.step).toBe('0.5');
+    expect(range.value).toBe('5');
+  });
+
   it('按 max 折算百分比，文字默认显示整数百分比', () => {
     const col = VtProgress<Row>({ key: 'p', title: '进度', max: 200 });
     const el = renderCell(col, { p: 50 }) as HTMLElement;
@@ -922,10 +1071,10 @@ describe('VtDatePicker / VtTimePicker：native 原生控件支路', () => {
    * 这里只守结构：外壳带 `.vt-comp-wrap`、输入框在里面、`×` 是它的直接子节点。
    * 留白本身由 `components-contract.test.ts` 在 CSS 文本上守（happy-dom 无布局引擎）。
    */
-  it('clearable 时套 .vt-comp-wrap 外壳，× 挂在外壳上而不是输入框里', () => {
+  it('套 .vt-comp-wrap 外壳，× 挂在外壳上而不是输入框里（clearable 默认开）', () => {
     for (const col of [
-      VtDatePicker<Row>({ key: 'd', title: '日期', native: true, clearable: true }),
-      VtTimePicker<Row>({ key: 'd', title: '时间', clearable: true }),
+      VtDatePicker<Row>({ key: 'd', title: '日期', native: true }),
+      VtTimePicker<Row>({ key: 'd', title: '时间' }),
     ]) {
       const wrap = openEdit(col, { d: '' });
       expect(wrap.classList.contains('vt-comp-wrap')).toBe(true);
@@ -934,8 +1083,8 @@ describe('VtDatePicker / VtTimePicker：native 原生控件支路', () => {
     }
   });
 
-  it('不 clearable 时不套外壳，直接就是 input', () => {
-    const col = VtDatePicker<Row>({ key: 'd', title: '日期', native: true });
+  it('clearable: false 时不套外壳，直接就是 input', () => {
+    const col = VtDatePicker<Row>({ key: 'd', title: '日期', native: true, clearable: false });
     const el = openEdit(col, { d: '' });
     expect(el.tagName).toBe('INPUT');
     expect(el.querySelector('.vt-comp-clear')).toBeNull();
@@ -949,9 +1098,12 @@ describe('VtDatePicker / VtTimePicker：native 原生控件支路', () => {
       separator: ' 至 ',
     });
     const row: Row = { p: ['2026-08-01', '2026-08-31'] };
-    const wrap = openEdit(col, row);
+    // clearable 默认开 → 外面多套一层 `.vt-comp-wrap`（× 与单日的 native 支路同款）
+    const outer = openEdit(col, row);
+    expect(outer.classList.contains('vt-comp-wrap')).toBe(true);
+    const wrap = outer.querySelector('.vt-comp-date-range') as HTMLElement;
+    expect(wrap).not.toBeNull();
 
-    expect(wrap.classList.contains('vt-comp-date-range')).toBe(true);
     const inputs = wrap.querySelectorAll('input[type=date]');
     expect(inputs).toHaveLength(2);
     expect((inputs[0] as HTMLInputElement).value).toBe('2026-08-01');
@@ -962,6 +1114,25 @@ describe('VtDatePicker / VtTimePicker：native 原生控件支路', () => {
     (inputs[1] as HTMLInputElement).value = '2026-09-15';
     inputs[1]!.dispatchEvent(new Event('change'));
     expect(row.p).toEqual(['2026-08-01', '2026-09-15']);
+  });
+
+  /**
+   * 改造前这一支的 `clearable` 是个死选项（压根没实现），于是「区间列填过一次就填不回空」
+   * —— 两个原生 date input 各自只能改选日期。
+   */
+  it('VtDateRangePicker 的 native 支路：× 清空写回 [\'\', \'\']', () => {
+    const col = VtDateRangePicker<Row>({ key: 'p', title: '周期', native: true });
+    const row: Row = { p: ['2026-08-01', '2026-08-31'] };
+    const outer = openEdit(col, row);
+
+    const clear = outer.querySelector(':scope > .vt-comp-clear') as HTMLElement;
+    expect(clear).not.toBeNull();
+    clear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+
+    expect(row.p).toEqual(['', '']);
+    expect(
+      [...outer.querySelectorAll('input[type=date]')].map((i) => (i as HTMLInputElement).value),
+    ).toEqual(['', '']);
   });
 });
 
@@ -1397,13 +1568,26 @@ describe('VtDatePicker：自绘单月面板', () => {
     expect(row.d).toBe('2026-08-11');
   });
 
-  it('clearable 清空写回空串（不是 null）', () => {
-    const col = VtDatePicker<Row>({ key: 'd', title: '日期', clearable: true, placeholder: '—' });
+  it('清空写回空串（不是 null）；× 默认就有', () => {
+    const col = VtDatePicker<Row>({ key: 'd', title: '日期', placeholder: '—' });
     const row: Row = { d: '2026-08-11' };
     const anchor = openEdit(col, row);
     down(anchor.querySelector(':scope > .vt-comp-clear')!);
     expect(row.d).toBe('');
     expect(anchor.querySelector('.vt-comp-anchor-text')!.textContent).toBe('—');
+  });
+
+  it('按 Delete 清空，面板留着（清空后往往紧接着重选）', () => {
+    const col = VtDatePicker<Row>({ key: 'd', title: '日期', placeholder: '—' });
+    const row: Row = { d: '2026-08-11' };
+    const anchor = openEdit(col, row);
+
+    anchor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row.d).toBe('');
+    expect(anchor.querySelector('.vt-comp-anchor-text')!.textContent).toBe('—');
+    expect(popupEl()).toBeTruthy();
+    // 选择态也复位了：清空之后日历里不该还高亮着刚被清掉的那天
+    expect(cellOf('2026-08-11').classList.contains('vt-comp-calendar-cell--start')).toBe(false);
   });
 
   it('常态：合法值原样、空值回落 placeholder、非法串显示空', () => {
@@ -1544,6 +1728,29 @@ describe('VtAutocomplete', () => {
     { value: 'nb', label: '宁波' },
     { value: 'wz', label: '温州' },
   ];
+
+  /**
+   * `clearable` 一度是这一支的**死选项**（`BaseColumnOptions` 里有、文档也写了，但从没渲染
+   * 那个 `×`）。输入类那一档默认仍是关 —— 这是个真文本框，全选 + Backspace 就清得掉。
+   */
+  it('clearable: true 才有「×」，点它清空并收起建议', () => {
+    const cfg = { key: 'city', title: '城市', debounce: 0, fetchSuggestions: () => CITIES };
+    expect(
+      (openEdit(VtAutocomplete<Row>(cfg), { city: 'hz' }) as HTMLElement).tagName,
+      '默认关：不套外壳',
+    ).toBe('INPUT');
+
+    client.innerHTML = '';
+    const row: Row = { city: 'hz' };
+    const wrap = openEdit(VtAutocomplete<Row>({ ...cfg, clearable: true }), row);
+    expect(wrap.classList.contains('vt-comp-wrap')).toBe(true);
+    (wrap.querySelector(':scope > .vt-comp-clear') as HTMLElement).dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+    );
+    expect(row.city).toBe('');
+    expect((wrap.querySelector('input') as HTMLInputElement).value).toBe('');
+    expect(popupEl()).toBeNull();
+  });
 
   it('聚焦即请求建议，列表渲染在浮层里', async () => {
     const col = VtAutocomplete<Row>({
@@ -1734,6 +1941,67 @@ describe('VtCascader', () => {
     item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(row.area).toEqual([]);
   });
+
+  /**
+   * 面板里只能换选别的节点、没有「选回空」这一项，所以 × 默认给（`clearableOn`）。
+   * 空值的形状跟着 `valueType` 走：path 是 `[]`、leaf 是 `''`。
+   */
+  it('× 默认就有，清空的形状跟着 valueType 走', () => {
+    const byPath = VtCascader<Row>({ key: 'area', title: '区域', options: TREE });
+    const rowPath: Row = { area: ['zj', 'nb'] };
+    const a1 = openEdit(byPath, rowPath);
+    const clear = a1.querySelector(':scope > .vt-comp-clear') as HTMLElement;
+    expect(clear).not.toBeNull();
+    clear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    expect(rowPath.area).toEqual([]);
+    expect(a1.querySelector('.vt-comp-anchor-text')!.textContent).toBe('');
+
+    client.innerHTML = '';
+    const byLeaf = VtCascader<Row>({
+      key: 'area',
+      title: '区域',
+      options: TREE,
+      valueType: 'leaf',
+    });
+    const rowLeaf: Row = { area: 'xh' };
+    const a2 = openEdit(byLeaf, rowLeaf);
+    (a2.querySelector(':scope > .vt-comp-clear') as HTMLElement).dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+    );
+    expect(rowLeaf.area).toBe('');
+  });
+
+  /**
+   * 这一支曾经**忘了聚焦锚点**（另两个锚点类组件都有 `requestAnimationFrame(() => focus())`）。
+   * 后果不是「样式差一点」：键盘事件全落在 `document.body` 上 —— CDP 实测点开级联后按
+   * `Delete` 毫无反应，而同样的键在下拉/日期上正常清空。
+   */
+  it('打开就聚焦锚点（否则键盘事件根本到不了它）', async () => {
+    const col = VtCascader<Row>({ key: 'area', title: '区域', options: TREE });
+    const anchor = openEdit(col, { area: ['zj', 'nb'] });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it('按 Delete 清空；clearable: false 的列没有 × 也不响应 Delete', () => {
+    const col = VtCascader<Row>({ key: 'area', title: '区域', options: TREE });
+    const row: Row = { area: ['zj', 'nb'] };
+    openEdit(col, row).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row.area).toEqual([]);
+
+    client.innerHTML = '';
+    const locked = VtCascader<Row>({
+      key: 'area',
+      title: '区域',
+      options: TREE,
+      clearable: false,
+    });
+    const row2: Row = { area: ['zj', 'nb'] };
+    const anchor = openEdit(locked, row2);
+    expect(anchor.querySelector('.vt-comp-clear')).toBeNull();
+    anchor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row2.area).toEqual(['zj', 'nb']);
+  });
 });
 
 describe('VtPerson', () => {
@@ -1864,12 +2132,11 @@ describe('VtPerson', () => {
     expect(popupEl()).toBeNull();
   });
 
-  it('单人：clearable 的清除是锚点右侧那个「×」，清空写回空串', () => {
+  it('单人：清除是锚点右侧那个「×」（默认就有），清空写回空串', () => {
     const col = VtPerson<Row>({
       key: 'owner',
       title: '负责人',
       options: MEMBERS,
-      clearable: true,
     });
     const row: Row = { owner: 'u1' };
     const anchor = openEdit(col, row);
@@ -1905,6 +2172,27 @@ describe('VtPerson', () => {
       ),
     ).toEqual([false, false, false, false]);
     expect(popupEl()!.querySelector('.vt-filter-btn')).toBeTruthy();
+  });
+
+  /**
+   * 人员面板默认带搜索框，打开即聚焦在它上面 —— Delete 到不了锚点。所以那一支由
+   * `_enum.ts` 自己接：**搜索词为空才清空这一格**，有词的话得留给输入框删字。
+   */
+  it('搜索框里空搜索词按 Delete 清空这一格（有搜索词时不清）', () => {
+    const col = VtPerson<Row>({ key: 'owner', title: '负责人', options: MEMBERS });
+    const row: Row = { owner: 'u1' };
+    openEdit(col, row);
+    const search = popupEl()!.querySelector('input.vt-filter-text') as HTMLInputElement;
+
+    search.value = '李';
+    search.dispatchEvent(new Event('input'));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row.owner).toBe('u1');
+
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(row.owner).toBe('');
   });
 
   it('多人：勾选即时写回数组，取消也是，面板不关', () => {
@@ -2234,8 +2522,14 @@ describe('VtPerson', () => {
 
       hover(chip);
       cardEl()!.dispatchEvent(new MouseEvent('mouseenter'));
-      // 点到表格别处 → _popup 的 outside-click 把名片收掉，此刻 overCard 还是 true
-      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      /*
+       * 点到表格别处 → _popup 的 outside-click 把名片收掉，此刻 overCard 还是 true。
+       *
+       * 事件名是 `pointerdown` 而不是 `mousedown`：`vtCellSelection` 的拖选起手会在
+       * pointerdown 里 `preventDefault()`，那会连带取消兼容 mouse 事件 —— 装了框选的表格里
+       * 表体内**不存在** mousedown。所有「点外面关掉」都改听 pointerdown，测试跟着对齐。
+       */
+      document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
       expect(cardEl()).toBeNull();
 
       // 再悬停一次，离开后必须还能正常收起（overCard 没被永久钉在 true）
@@ -2328,6 +2622,318 @@ describe('VtPerson', () => {
 
     items[1]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(row.owner).toBe('u2');
+  });
+});
+
+/**
+ * `VtImage`：缩略图 + 点开查看器。
+ *
+ * 两处与其它组件不同的测法：
+ *   - **常态要先挂进文档再 flush**。取图任务的存活探针是 `box.isConnected`（虚拟滚动回收
+ *     单元格时不发任何通知，这是唯一能问的），所以不挂 = 已被回收 = 任务被丢弃。
+ *     真实路径里核心会把 `render` 的产出 append 进 `.vt-td-text`，`renderImage()` 照做。
+ *   - **`imageIO.load` 必须换掉**：happy-dom 没有网络、也没有 `HTMLImageElement.decode`，
+ *     真实现永远不会 settle（见 `_image-loader.dom.test.ts` 的同一条）。
+ */
+describe('VtImage', () => {
+  const A = 'https://x/a.png';
+  const B = 'https://x/b.png';
+  const realLoad = imageIO.load;
+  /** 队列实际请求过的 URL（stub 出来的 `<img>` 没有 src，只能这样查） */
+  let loadedUrls: string[] = [];
+
+  /** 立即成功（或按 `fails` 失败）的假取图 */
+  const stubIO = (fails: readonly string[] = []): void => {
+    imageIO.load = (url) => {
+      loadedUrls.push(url);
+      return fails.includes(url)
+        ? Promise.reject(new Error('boom'))
+        : Promise.resolve(document.createElement('img'));
+    };
+  };
+
+  /** 渲染一格并挂进表体（真实路径里核心也是 append 进 `.vt-td-text`） */
+  const renderImage = (col: VirtTableColumn<Row>, row: Row): HTMLElement => {
+    const td = document.createElement('div');
+    td.className = 'vt-td-text';
+    client.appendChild(td);
+    const out = renderCell(col, row);
+    if (typeof out === 'string') {
+      td.textContent = out;
+      return td;
+    }
+    td.appendChild(out);
+    return out;
+  };
+
+  const viewerEl = (): HTMLElement | null =>
+    document.querySelector('.vt-comp-image-viewer') as HTMLElement | null;
+  const key = (k: string): void => {
+    viewerEl()!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  };
+
+  beforeEach(() => {
+    loadedUrls = [];
+    stubIO();
+  });
+  afterEach(() => {
+    closeImageViewer();
+    imageIO.load = realLoad;
+    resetImageLoader();
+  });
+
+  it('字符串 / 对象 / 数组三种值形状都认', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    expect(renderImage(col, { pics: A }).querySelectorAll('.vt-comp-image-item')).toHaveLength(1);
+    expect(
+      renderImage(col, { pics: { url: A, alt: '封面' } }).querySelector('.vt-comp-image-item')!
+        .getAttribute('title'),
+    ).toBe('封面');
+    expect(renderImage(col, { pics: [A, { url: B }] }).querySelectorAll('.vt-comp-image-item'))
+      .toHaveLength(2);
+  });
+
+  it('空值回落 placeholder；认不出的形状也当空（而不是画一个永远失败的断图）', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, placeholder: '无图' });
+    expect(renderImage(col, { pics: null }).textContent).toBe('无图');
+    expect(renderImage(col, { pics: [] }).textContent).toBe('无图');
+    // `{ src }` 不是认的形状（认的是 `{ url }`）
+    expect(renderImage(col, { pics: { src: A } }).textContent).toBe('无图');
+  });
+
+  it('默认不拆字符串（data URI 里就有逗号），传 separator 才拆', () => {
+    const plain = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    expect(renderImage(plain, { pics: `${A},${B}` }).querySelectorAll('.vt-comp-image-item'))
+      .toHaveLength(1);
+
+    const split = VtImage<Row>({ key: 'pics', title: '图片', width: 160, separator: ',' });
+    expect(renderImage(split, { pics: `${A},${B}` }).querySelectorAll('.vt-comp-image-item'))
+      .toHaveLength(2);
+  });
+
+  it('超出 maxCount 折叠成 +N（复用 .vt-comp-tag-more）', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, maxCount: 2 });
+    const wrap = renderImage(col, { pics: [A, B, A, B, A] });
+    expect(wrap.querySelectorAll('.vt-comp-image-item')).toHaveLength(2);
+    expect(wrap.querySelector('.vt-comp-tag-more')!.textContent).toBe('+3');
+  });
+
+  it('render 是同步的，且**不建 <img>** —— 渲染帧里零请求零解码', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B] });
+    expect(wrap.querySelectorAll('img')).toHaveLength(0);
+    expect(wrap.querySelectorAll('.vt-comp-image-item--loading')).toHaveLength(2);
+  });
+
+  it('取图完成后才把 <img> 插进占位盒', async () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: A });
+
+    await flushImageQueue();
+
+    const box = wrap.querySelector('.vt-comp-image-item')!;
+    expect(box.querySelector('img.vt-comp-image-img')).not.toBeNull();
+    expect(box.classList.contains('vt-comp-image-item--loading')).toBe(false);
+  });
+
+  it('取图失败 → 断图态，不是浏览器的默认碎图', async () => {
+    stubIO([A]);
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: A });
+
+    await flushImageQueue();
+
+    const box = wrap.querySelector('.vt-comp-image-item')!;
+    expect(box.classList.contains('vt-comp-image-item--error')).toBe(true);
+    expect(box.querySelector('img')).toBeNull();
+    expect(box.querySelector('svg')).not.toBeNull();
+  });
+
+  it('单元格已被回收（产出没进文档）→ flush 之后也不画图', async () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    // 刻意**不**挂进 client，模拟渲染完就被回收
+    const wrap = renderCell(col, { pics: A }) as HTMLElement;
+
+    await flushImageQueue();
+
+    expect(wrap.querySelector('img')).toBeNull();
+  });
+
+  it('点缩略图弹查看器：挂在 .vt-root 内、带 data-vt-popup（cell-editor 的白名单认它）', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const viewer = viewerEl()!;
+    expect(viewer).not.toBeNull();
+    expect(viewer.closest('.vt-root')).not.toBeNull();
+    expect(viewer.parentElement).not.toBe(document.body);
+    expect(viewer.hasAttribute('data-vt-popup')).toBe(true);
+    expect(viewer.getAttribute('role')).toBe('dialog');
+  });
+
+  it('方向键切换 + 计数；到头循环', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B, A] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const count = (): string => viewerEl()!.querySelector('.vt-comp-image-viewer-count')!.textContent!;
+    expect(count()).toBe('1 / 3');
+    key('ArrowRight');
+    expect(count()).toBe('2 / 3');
+    key('ArrowLeft');
+    key('ArrowLeft');
+    // 从第一张往左 → 绕到最后一张（「点不动」比绕回去更像卡住了）
+    expect(count()).toBe('3 / 3');
+  });
+
+  it('查看器的键盘事件不冒泡出去（否则方向键会同时挪动底下的单元格选区）', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const onRootKey = vi.fn();
+    (document.querySelector('.vt-root') as HTMLElement).addEventListener('keydown', onRootKey);
+    key('ArrowRight');
+    expect(onRootKey).not.toHaveBeenCalled();
+  });
+
+  it('Esc 关闭', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+    expect(viewerEl()).not.toBeNull();
+
+    key('Escape');
+    expect(viewerEl()).toBeNull();
+  });
+
+  it('+N 从被折叠的第一张开始看', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, maxCount: 2 });
+    const wrap = renderImage(col, { pics: [A, B, A, B] });
+    (wrap.querySelector('.vt-comp-tag-more') as HTMLElement).click();
+
+    expect(viewerEl()!.querySelector('.vt-comp-image-viewer-count')!.textContent).toBe('3 / 4');
+  });
+
+  it('viewer: false / disabled 是纯展示：缩略图不是按钮，点了也不开', () => {
+    for (const opts of [{ viewer: false }, { disabled: true }]) {
+      const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, ...opts });
+      const box = renderImage(col, { pics: A }).querySelector('.vt-comp-image-item') as HTMLElement;
+      expect(box.getAttribute('role')).toBeNull();
+      box.click();
+      expect(viewerEl()).toBeNull();
+    }
+  });
+
+  it('onPreview 返回 false 拦下内置查看器（自己接管预览）', () => {
+    const onPreview = vi.fn(() => false);
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, onPreview });
+    const row: Row = { pics: [A, B] };
+    const wrap = renderImage(col, row);
+    (wrap.querySelectorAll('.vt-comp-image-item')[1] as HTMLElement).click();
+
+    expect(viewerEl()).toBeNull();
+    expect(onPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ index: 1, row, rowIndex: 0 }),
+    );
+  });
+
+  it('多图给底部列表条：一格一张、当前那张有 --current', async () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B, A] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const strip = viewerEl()!.querySelector('.vt-comp-image-viewer-strip')!;
+    const cells = [...strip.querySelectorAll('.vt-comp-image-viewer-thumb')] as HTMLElement[];
+    expect(cells).toHaveLength(3);
+    expect(cells[0]!.classList.contains('vt-comp-image-viewer-thumb--current')).toBe(true);
+    expect(cells[0]!.getAttribute('aria-current')).toBe('true');
+
+    // 小图也走取图队列（不在打开的那一帧里解码）
+    await flushImageQueue();
+    expect(cells[1]!.querySelector('img.vt-comp-image-viewer-thumb-img')).not.toBeNull();
+  });
+
+  it('点列表条里的某一格直接跳到那张', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: [A, B, A, B] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const cells = [
+      ...viewerEl()!.querySelectorAll('.vt-comp-image-viewer-thumb'),
+    ] as HTMLElement[];
+    cells[2]!.click();
+
+    expect(viewerEl()!.querySelector('.vt-comp-image-viewer-count')!.textContent).toBe('3 / 4');
+    expect(cells[2]!.classList.contains('vt-comp-image-viewer-thumb--current')).toBe(true);
+    expect(cells[0]!.classList.contains('vt-comp-image-viewer-thumb--current')).toBe(false);
+  });
+
+  it('列表条用 thumb 小图，大图与下载仍用 url', async () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, {
+      pics: [
+        { url: A, thumb: `${A}?small` },
+        { url: B },
+      ],
+    });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+    await flushImageQueue();
+
+    const first = viewerEl()!.querySelector('.vt-comp-image-viewer-thumb img') as HTMLImageElement;
+    // stub 出来的 img 没有 src，改查队列实际请求过的 URL
+    expect(first).not.toBeNull();
+    expect(loadedUrls).toContain(`${A}?small`);
+    expect(loadedUrls).toContain(A);
+  });
+
+  it('单图不给列表条（一格的列表条是纯噪音）', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: A });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    expect(viewerEl()!.querySelector('.vt-comp-image-viewer-strip')).toBeNull();
+  });
+
+  it('单图不出现前后切换按钮', () => {
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    const wrap = renderImage(col, { pics: A });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    expect(viewerEl()!.querySelectorAll('.vt-comp-image-viewer-nav')).toHaveLength(0);
+  });
+
+  it('downloadable 才给下载按钮，href 指向当前那张的原图', () => {
+    const plain = VtImage<Row>({ key: 'pics', title: '图片', width: 160 });
+    (renderImage(plain, { pics: A }).querySelector('.vt-comp-image-item') as HTMLElement).click();
+    expect(viewerEl()!.querySelector('a.vt-comp-image-viewer-btn')).toBeNull();
+    closeImageViewer();
+
+    const col = VtImage<Row>({ key: 'pics', title: '图片', width: 160, downloadable: true });
+    (renderImage(col, { pics: { url: A, thumb: B } }).querySelector(
+      '.vt-comp-image-item',
+    ) as HTMLElement).click();
+    const dl = viewerEl()!.querySelector('a.vt-comp-image-viewer-btn') as HTMLAnchorElement;
+    // 缩略图用 thumb，大图与下载一律用 url
+    expect(dl.getAttribute('href')).toBe(A);
+  });
+
+  it('texts 覆盖查看器文案', () => {
+    const col = VtImage<Row>({
+      key: 'pics',
+      title: '图片',
+      width: 160,
+      texts: { close: 'CLOSE', counter: (i, n) => `${i} of ${n}` },
+    });
+    const wrap = renderImage(col, { pics: [A, B] });
+    (wrap.querySelector('.vt-comp-image-item') as HTMLElement).click();
+
+    const viewer = viewerEl()!;
+    expect(viewer.querySelector('.vt-comp-image-viewer-count')!.textContent).toBe('1 of 2');
+    expect(viewer.querySelector('[aria-label="CLOSE"]')).not.toBeNull();
+    // 没覆盖的那些仍是默认中文（mergeLocale 那条浅合并）
+    expect(viewer.querySelector('[aria-label="放大"]')).not.toBeNull();
   });
 });
 

@@ -295,3 +295,57 @@ describe('表头 / 表尾住在独立 table 里', () => {
     expect(g).toBeTruthy();
   });
 });
+
+/**
+ * 分组表头标题的**对齐**。
+ *
+ * 分组格的标题住在一个 sticky 内层（`.vt-group-label`）里，所以横滚时它总留在可视区内。
+ * 默认居中，但**左/右也必须支持**：一个跨两屏的「2026年8月」居中会飘在屏幕正中、与哪一列
+ * 都对不上；吸左则一直贴在可视区左沿，像个「当前所在月份」的标签 —— 付费甘特的年月表头
+ * 就是靠 `headerAlign: 'left'` 做的（`buildTimelineColumns`）。
+ *
+ * 这条一直是能用的，但**没有测试**：所以这里钉住，别哪天把 `textAlign` 写死成 center。
+ */
+describe('分组表头标题的对齐（左 / 中 / 右）', () => {
+  const grouped = (headerAlign?: 'left' | 'center' | 'right') =>
+    mount({
+      ...base(),
+      columns: [
+        {
+          key: 'g',
+          title: '组',
+          width: 200,
+          ...(headerAlign ? { headerAlign } : {}),
+          children: [
+            { key: 'a', title: 'A', width: 100 },
+            { key: 'b', title: 'B', width: 100 },
+          ],
+        },
+      ],
+    });
+
+  const label = (box: HTMLElement): HTMLElement =>
+    box.querySelector<HTMLElement>('.vt-thead th[data-group-key="g"] .vt-group-label')!;
+
+  it('默认居中（跨多列时居中更易读）', () => {
+    const { box } = grouped();
+    expect(label(box).style.textAlign).toBe('center');
+  });
+
+  it("headerAlign: 'left' → 标题吸左（甘特的年月表头就靠这个）", () => {
+    const { box } = grouped('left');
+    expect(label(box).style.textAlign).toBe('left');
+  });
+
+  it("headerAlign: 'right' 同样生效", () => {
+    const { box } = grouped('right');
+    expect(label(box).style.textAlign).toBe('right');
+  });
+
+  it('对齐写在 sticky 内层上，不是写在 th 上（写 th 上横滚时不跟随）', () => {
+    const { box } = grouped('left');
+    const th = box.querySelector<HTMLElement>('.vt-thead th[data-group-key="g"]')!;
+    expect(th.style.textAlign).toBe('');
+    expect(label(box).parentElement).toBe(th);
+  });
+});

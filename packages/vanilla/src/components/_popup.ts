@@ -89,6 +89,19 @@ export interface PopupOptions {
 /** 浮层与锚点 / 容器边缘之间的留白 */
 const GAP = 4;
 
+/**
+ * **打开中的浮层栈**，按打开顺序排列。为「浮层里再开一个浮层」而存在。
+ *
+ * 每个浮层的 outside-click 只认「点在我自己或我的锚点里」，而嵌套的子浮层是挂在
+ * **宿主**上的（`.vt-client` / `.vt-fb`），DOM 上是父浮层的**兄弟**而不是后代 ——
+ * 于是点子浮层里的一项，父浮层判定为「点到外面」把自己关掉，连带把子浮层的锚点
+ * 一起清掉（付费插件的甘特配置面板就是这个形状：面板里每一行都是个下拉）。
+ *
+ * 规则：点击落在**比我更晚打开**的浮层里时，我不关。反过来点回下层浮层，上层照常关掉
+ * （级联收起，与各家下拉的共同行为一致）。
+ */
+const OPEN_STACK: Array<{ el: HTMLElement }> = [];
+
 const clamp = (v: number, min: number, max: number): number =>
   Math.min(Math.max(v, min), max);
 
@@ -109,6 +122,12 @@ export function createPopup(opts: PopupOptions): PopupHandle {
   const host =
     (owner.closest('.vt-client') as HTMLElement | null) ??
     (owner.closest('.vt-root') as HTMLElement | null) ??
+    /*
+     * `.vt-fb` 是**表格之外**那批 DOM 的 token 载体（筛选管理器面板、以及付费插件自己搭的
+     * 容器 —— 甘特的双 pane 外壳就带这个类）。少了这一支，从那些地方开的浮层会掉到
+     * `document.body`，于是整批 `var(--vt-*)` 静默失效（§7.2 有实测：透明底 + 16px 黑字）。
+     */
+    (owner.closest('.vt-fb') as HTMLElement | null) ??
     document.body;
 
   const el = document.createElement('div');
@@ -229,14 +248,24 @@ export function createPopup(opts: PopupOptions): PopupHandle {
     el.style.visibility = '';
   };
 
-  const onOutside = (e: MouseEvent): void => {
+  const onOutside = (e: PointerEvent): void => {
     const target = e.target as HTMLElement;
     if (el.contains(target) || anchor.contains(target)) return;
+    // 点在「我之上」的嵌套浮层里 → 不是点到外面（见 OPEN_STACK 的注释）
+    const mine = OPEN_STACK.findIndex((p) => p.el === el);
+    if (mine >= 0) {
+      for (let i = mine + 1; i < OPEN_STACK.length; i++) {
+        if (OPEN_STACK[i].el.contains(target)) return;
+      }
+    }
     opts.onClose?.();
   };
 
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') opts.onClose?.();
+    if (e.key !== 'Escape') return;
+    // 嵌套时 Esc 只收起**最上面**那一层（一次按键关掉整叠是各家下拉都没有的行为）
+    if (OPEN_STACK.length > 0 && OPEN_STACK[OPEN_STACK.length - 1].el !== el) return;
+    opts.onClose?.();
   };
 
   /**
@@ -270,13 +299,21 @@ export function createPopup(opts: PopupOptions): PopupHandle {
   function destroy(): void {
     if (!alive) return;
     alive = false;
+    const at = OPEN_STACK.findIndex((p) => p.el === el);
+    if (at >= 0) OPEN_STACK.splice(at, 1);
     cancelAnimationFrame(rafId);
-    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('pointerdown', onOutside);
     document.removeEventListener('keydown', onKeyDown);
     el.remove();
   }
 
-  document.addEventListener('mousedown', onOutside);
+  /*
+   * 听 `pointerdown` 而不是 `mousedown`：`vtCellSelection` 的拖选起手在 pointerdown 里
+   * `preventDefault()`，会连带取消兼容 mouse 事件 —— 表体内的 mousedown 根本不存在，
+   * 于是浮层点表格里的格子关不掉（CDP 实测：pointerdown 1 / mousedown 0 / click 1）。
+   */
+  OPEN_STACK.push({ el });
+  document.addEventListener('pointerdown', onOutside);
   document.addEventListener('keydown', onKeyDown);
   rafId = requestAnimationFrame(tick);
   position();

@@ -1,7 +1,7 @@
 /* ==========================================================================
  * 通用面板 / 面板项样式（多方共享，非单个插件私有）
  *
- * 使用方：vtColumnFilter（列头筛选下拉）、vtColumnPanel（列设置面板）、
+ * 使用方：vtColumnFilter（列头筛选下拉）、vtFieldConfig（字段配置面板）、
  *         VtFilterBuilder（表格外部的 AND/OR 条件构建器）。
  *
  * 这些使用方各自 `@import './_panel.css'` 把本文件**内联**进自己的 CSS，
@@ -73,6 +73,33 @@
 
 .vt-filter-item:hover {
   background: var(--vt-fill-color);
+}
+
+/**
+ * 项**也可以是 `<button>`**（自绘下拉的选项就是：要 `disabled` 与键盘激活的原生语义）。
+ *
+ * 核心自己的用法都是 `div` / `label`，所以基类没管按钮的 UA 外观 —— 直接套上去会得到
+ * 「灰底 + 凸起边框 + 居中文字」的系统按钮（实测：甘特配置面板里那几个下拉一眼就看出不对）。
+ * 抹掉它，让外观完全由基类决定。选择器带 `button` 前缀，现有 div / label 用法一个字节不受影响。
+ */
+button.vt-filter-item {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+}
+
+button.vt-filter-item:disabled {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+button.vt-filter-item:disabled:hover {
+  background: transparent;
 }
 
 .vt-filter-item-group {

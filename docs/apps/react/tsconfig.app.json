@@ -23,7 +23,23 @@
       "@virt-table/vanilla/plugins": ["../../../packages/vanilla/dist/plugins/index.d.ts"],
       "@virt-table/vanilla/plugins/*": ["../../../packages/vanilla/dist/plugins/*"],
       "@virt-table/vanilla/components": ["../../../packages/vanilla/dist/components/index.d.ts"],
-      "@virt-table/vanilla/components/*": ["../../../packages/vanilla/dist/components/*"]
+      "@virt-table/vanilla/components/*": ["../../../packages/vanilla/dist/components/*"],
+      /*
+       * 付费包的类型**始终**指向桩（`docs/apps/pro-kit/stubs`），不跟着运行时档位切。
+       *
+       * 试过让它按「同级目录有没有 pro 仓库」回退到 pro 的**真源码**（tsconfig 的 paths
+       * 支持回退数组，机制上是通的）。放弃的理由：pro 的 src 是在**它自己的 tsconfig**
+       * 下编译的 —— 有 node 类型（`key.ts` 用 `Buffer`）、`@virt-table/vanilla/*` 映到
+       * 核心 **dist** 的 d.ts（含 `/scrollbar` 这类子路径）。在三个 demo app 里复现那套
+       * 环境很脆：pro 那边每加一个 node 全局或核心子路径，这三个 app 的 typecheck 就红，
+       * 而报错位置指向另一个仓库、修法一点都不显然。
+       *
+       * 代价是桩要跟着维护：demo 用到付费包的新 API 时，对应的桩要补一条声明
+       * （桩只声明 demo 真正用到的那些，不是 API 文档）。这个代价是有界的，
+       * 而且**桩本来就必须存在** —— `off` 档要靠它，公开仓库的 typecheck 也不该
+       * 要求另一个私有仓库在场。
+       */
+      "@virt-table-pro/*": ["../pro-kit/stubs/*.ts"]
     },
 
     /* Linting */

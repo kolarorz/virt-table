@@ -2,7 +2,7 @@
 
 本项目使用 **pnpm workspace** 管理 3 个 npm 包。本文档说明日常开发、版本管理和发布的完整流程。
 
-结构与流程沿用 [virt-list](https://github.com/keno-lee/virt-list) 的那一套，**但多了一步
+结构与流程沿用 [virt-list](https://github.com/kolarorz/virt-list) 的那一套，**但多了一步
 `pnpm verify:pack`**，原因见「为什么必须校验产物」一节 —— 这是本仓库特有的、已经吃过两次亏的坑。
 
 ## 仓库结构

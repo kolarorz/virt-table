@@ -95,18 +95,27 @@
   margin-bottom: 12px;
 }
 
-/* ---- full-width layout: sidebars pinned, content adaptive ---- */
+/* ---- full-width layout: sidebars pinned, content adaptive ----
+ *
+ * 「放宽正文」与「给侧边栏让位」是两件事，必须分开：
+ *   · 宽度放开（`max-width: 100%`）所有断点都要 —— demo 表格越宽越有说服力；
+ *   · 给侧边栏留出 `padding-left` **只在 ≥960px** —— 那才是 VitePress 里侧边栏真正
+ *     占位的断点（默认主题 VPContent.vue 的 `.has-sidebar { padding-left }` 就写在
+ *     `@media (min-width: 960px)` 里；窄屏侧边栏是抽屉，不占文档流）。
+ *
+ * 早先这条 padding 没有断点限定，手机上正文被推出屏幕 272px，整页只剩横向滚动条。
+ */
 :root {
   --vp-layout-max-width: 100%;
 }
 
-.VPContent.has-sidebar {
-  padding-left: var(--vp-sidebar-width, 272px) !important;
-  padding-right: 0 !important;
-}
-
+/*
+ * 窄屏：默认主题的 32/96px 上下留白在手机上太费竖向空间，压一压；
+ * **左右仍必须是 24px** —— 代码块靠 `margin: 16px -24px` 负边距贴到页面两侧
+ * （见下方 `[data-vp-example] div[class*='language-']`），改小就会溢出成横向滚动条。
+ */
 .VPDoc {
-  padding: 0 32px !important;
+  padding: 16px 24px 48px !important;
 }
 
 .VPDoc .container {
@@ -121,6 +130,17 @@
 .VPDoc .aside {
   max-width: 224px;
   padding-left: 16px;
+}
+
+@media (min-width: 960px) {
+  .VPContent.has-sidebar {
+    padding-left: var(--vp-sidebar-width, 272px) !important;
+    padding-right: 0 !important;
+  }
+
+  .VPDoc {
+    padding: 0 32px !important;
+  }
 }
 
 @media (min-width: 1280px) {

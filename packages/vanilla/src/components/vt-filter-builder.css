@@ -8,7 +8,18 @@
  * ========================================================================== */
 @import '../plugins/_panel.css';
 
-.vt-fb {
+/**
+ * 构建器**自己那张面板**的外观。
+ *
+ * ⚠️ **不能画在 `.vt-fb` 上。** 那个类在核心 `index.css` 里的职责是「表格之外的 DOM 的
+ * token 载体」（`.vt-root, .vt-fb { --vt-* }`），付费插件的外壳、工具栏自己包的那层壳都靠
+ * 它拿变量 —— 画在它身上等于：**任何一个 token 载体都白得一层边框 + 阴影 + 12/14px 内边距**。
+ * 实测撞到过：甘特的外壳（`vtp-gantt-shell vt-fb`）左右各被推进 15px、外面套了一圈卡片，
+ * 而那份 CSS 只是因为别处引了筛选管理器才在场。
+ *
+ * 所以外观归 `.vt-fb-panel`（构建器自己一起加上这个类），`.vt-fb` 保持「只带变量」。
+ */
+.vt-fb-panel {
   --vt-fb-gutter: 30px; /* 括号线 + 胶囊占用的左侧留白 */
   --vt-fb-line-x: 12px; /* 括号线的水平位置（胶囊在此居中） */
   --vt-fb-control-h: 28px;
@@ -26,9 +37,10 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.vt-fb *,
-.vt-fb *::before,
-.vt-fb *::after {
+/* 同上：只作用在自己这张面板里，别把 border-box 强加给整个 token 载体的子树 */
+.vt-fb-panel *,
+.vt-fb-panel *::before,
+.vt-fb-panel *::after {
   box-sizing: border-box;
 }
 

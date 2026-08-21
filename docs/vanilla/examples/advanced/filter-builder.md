@@ -1,6 +1,18 @@
 # 高级筛选（筛选管理器）
 
-列筛选有两种入口，可同时使用：
+列筛选有两种入口 —— 表头快捷筛选与筛选管理器（`VtFilterBuilder`），可同时使用，状态独立、最终 AND 组合。
+
+## 示例
+
+<PlaygroundHost framework="vanilla" example-id="table-filter-builder" />
+
+## 源码
+
+::: details 点击查看源码
+<<< @/apps/vanilla/src/components/advanced/filter-builder.ts
+:::
+
+## 说明
 
 1. **表头快捷筛选** —— 点击表头筛选图标，按列快速勾选/输入（见 [列筛选](../plugins/filter)）。
 2. **筛选管理器** —— `VtFilterBuilder`，挂在**表格之外**由你指定的容器里，用 AND/OR 条件组表达
@@ -10,56 +22,6 @@
 点一下就在「且」「或」之间切换，线的颜色随之变化（且=主色 / 或=警示色），嵌套层级一眼可辨。
 
 两者是**独立状态**，最终以 **AND** 组合：表头筛掉的行，管理器再筛一遍。
-
-## 使用的 API
-
-```ts
-import { VirtTable } from '@virt-table/vanilla';
-import { VtFilterBuilder } from '@virt-table/vanilla/components';
-
-// 条件树（可嵌套）
-type FilterModel = {
-  kind: 'group';
-  logic: 'and' | 'or';
-  children: Array<FilterModel | {
-    kind: 'condition';
-    colKey: string;         // 列 key
-    operator: FilterOperator; // 算子，见下表
-    value?: unknown;        // 单值 / in 用数组 / between 用 value + value2
-    value2?: unknown;
-  }>;
-} | null;
-
-type Column = {
-  key: string;
-  title: string;
-  width: number;
-  filterType?: 'enum' | 'text' | 'number-range' | 'date-range'; // 也决定高级筛选的值域
-  filterValueKind?: 'text' | 'number' | 'date' | 'enum' | 'boolean'; // 显式指定值域
-  filterOperators?: FilterOperator[];  // 收窄该列可用算子
-  filters?: Array<{ label: string; value: unknown }>; // 枚举候选（in/notIn 的选项来源）
-};
-
-type Options = {
-  filterModel?: FilterModel;                          // 初始条件树
-  onFilterModelChange?: (model: FilterModel) => void; // 变化回调
-};
-
-// 表格实例方法
-table.setFilterModel(model);   // 应用条件树
-table.getFilterModel();        // 读取（深拷贝）
-table.clearFilterModel();      // 仅清空高级筛选
-table.hasActiveFilters();      // 表头筛选或高级筛选任一生效
-
-// 构建器
-const fb = new VtFilterBuilder({
-  el: '#filter-bar',   // 挂载容器
-  table,               // 传入则自动取可见列 + 自动应用
-  autoApply: false,    // true 则每次改动即时生效
-  onApply: (model) => {},
-});
-fb.setModel(model); fb.getModel(); fb.refresh(); fb.apply(); fb.clear(); fb.destroy();
-```
 
 ### 算子
 
@@ -77,12 +39,15 @@ fb.setModel(model); fb.getModel(); fb.refresh(); fb.apply(); fb.clear(); fb.dest
 - 构建器挂在表格外部，样式在 `@virt-table/vanilla/components/vt-filter-builder.css`，暗色主题自动适配。
 :::
 
-## 示例
+## 相关 API
 
-<PlaygroundHost framework="vanilla" example-id="table-filter-builder" />
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `filterModel` / `onFilterModelChange` | 条件树与变化回调 | [数据与远程](/vanilla/api/data#高级筛选-筛选管理器) |
+| `setFilterModel` / `getFilterModel` / `clearFilterModel` / `hasActiveFilters` | 编程式读写 | [数据与远程](/vanilla/api/data#高级筛选-筛选管理器) |
+| `col.filterValueKind` / `filterOperators` | 值域类别与可用算子白名单 | [数据与远程](/vanilla/api/data#高级筛选-筛选管理器) |
+| `VtFilterBuilder` | 可视化条件构建器（构造选项与方法） | [数据与远程](/vanilla/api/data#vtfilterbuilder-条件构建器) |
 
-## 源码
+`FilterModel` / `FilterOperator` 的完整定义与各值域可用算子表在 [数据与远程](/vanilla/api/data#高级筛选-筛选管理器)。
 
-::: details 点击查看源码
-<<< @/apps/vanilla/src/components/advanced/filter-builder.ts
-:::
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。

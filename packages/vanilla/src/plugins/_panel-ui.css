@@ -1,0 +1,213 @@
+/* ==========================================================================
+ * 面板基元的样式 —— 「一个下拉浮层里的一张脸」
+ *
+ * 与 `internal/panel-ui.ts` 成对：那边是 `createPanelUi()` 造出的 DOM，这边是它的外观。
+ * **由工具栏与四个面板插件各自 `@import` 内联**（`toolbar.css` / `field-config.css` /
+ * `filter-config.css` / `group-config.css` / `sort-config.css`）—— 每个插件的 CSS 自包含是
+ * 本仓对外的约定，而这些面板插件不装工具栏也能单独用，样式不能只长在工具栏那份里。
+ *
+ * 类名仍是 `.vt-toolbar-panel-*`：名字里的 `toolbar` 是历史来源（这套基元最早只有工具栏在用），
+ * 改名要动 CSS + 契约测试 + 全站文档，收益抵不上。
+ *
+ * 面板外壳、条目、勾选框、输入框来自共享的 `_panel.css`，需要它的插件自己 `@import`
+ * （字段配置需要，纯规则行的分组 / 排序不需要）。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 2. 面板基元
+ *
+ * 面板外壳、底色、阴影由 `.vt-filter-panel` 提供（`createPopup` 自动套上），但那个类
+ * **没有内边距**（它是给「一整列可点条目」的列表面板用的，条目自己带 padding）。
+ * 这里是表单，所以内边距归本层：少了它标题贴着边框、右侧的控件半个身子压在圆角上。
+ * ========================================================================== */
+
+.vt-toolbar-panel {
+  --vt-toolbar-panel-pad: 14px;
+  display: flex;
+  flex-direction: column;
+  /* 行距比行内的 gap 大一档：一眼能看出「一行是一个配置项」 */
+  gap: 10px;
+  padding: var(--vt-toolbar-panel-pad);
+  box-sizing: border-box;
+  font-size: var(--vt-font-size-sm);
+}
+
+.vt-toolbar-panel-title {
+  font-size: var(--vt-font-size);
+  font-weight: var(--vt-font-weight-semibold);
+  line-height: 1.3;
+}
+
+.vt-toolbar-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vt-toolbar-panel-label {
+  flex: 0 0 auto;
+  min-width: 72px;
+  color: var(--vt-text-color);
+  font-size: var(--vt-font-size);
+  white-space: nowrap;
+}
+
+.vt-toolbar-panel-control {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vt-toolbar-panel-control > .vt-field-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 分割线铺满面板宽度（抵掉面板内边距），否则两端各留 14px 看着像半条线 */
+.vt-toolbar-panel-divider {
+  margin: 2px calc(var(--vt-toolbar-panel-pad) * -1);
+  border-top: var(--vt-border-width) solid var(--vt-border-color);
+}
+
+/* 说明文字。**不是装饰**：单列排序为什么加不了第二条，靠它说 */
+.vt-toolbar-panel-hint {
+  color: var(--vt-text-secondary);
+  line-height: 1.5;
+}
+
+.vt-toolbar-panel-empty {
+  padding: 4px 0;
+  color: var(--vt-text-secondary);
+}
+
+/* 规则行：[层级标签] 下拉 分段 删除。下拉吃掉剩余宽度，另两件是固定尺寸 */
+.vt-toolbar-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vt-toolbar-rule > .vt-field-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * 「+ 添加一条」。**通栏、虚线框**：它是列表的延续（下一条会出现在这里），
+ * 而不是一个与列表并列的普通按钮。
+ */
+.vt-toolbar-panel-add {
+  display: block;
+  width: 100%;
+  height: var(--vt-control-height, 26px);
+  box-sizing: border-box;
+  border: var(--vt-border-width) dashed var(--vt-border-color);
+  border-radius: var(--vt-radius-sm);
+  background: transparent;
+  color: var(--vt-color-primary);
+  font: inherit;
+  font-size: var(--vt-font-size-sm);
+  cursor: pointer;
+}
+
+.vt-toolbar-panel-add:hover:not(:disabled) {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-fill-color);
+}
+
+.vt-toolbar-panel-add:disabled {
+  color: var(--vt-text-disabled);
+  cursor: not-allowed;
+}
+
+/* 页脚：一条与面板同宽的分隔线之上，按钮靠右 */
+.vt-toolbar-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 2px calc(var(--vt-toolbar-panel-pad) * -1) calc(var(--vt-toolbar-panel-pad) * -1);
+  padding: 8px var(--vt-toolbar-panel-pad);
+  border-top: var(--vt-border-width) solid var(--vt-border-color-light);
+  background: var(--vt-fill-color-light);
+}
+
+.vt-toolbar-panel-btn {
+  height: var(--vt-control-height, 26px);
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font: inherit;
+  font-size: var(--vt-font-size-sm);
+  cursor: pointer;
+}
+
+.vt-toolbar-panel-btn--primary {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+}
+
+.vt-toolbar-panel-btn:hover {
+  border-color: var(--vt-color-primary);
+}
+
+.vt-toolbar-panel-icon-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vt-control-height, 26px);
+  height: var(--vt-control-height, 26px);
+  padding: 0;
+  border: var(--vt-border-width) solid transparent;
+  border-radius: var(--vt-radius-sm);
+  background: transparent;
+  color: var(--vt-text-secondary);
+  cursor: pointer;
+}
+
+.vt-toolbar-panel-icon-btn:hover {
+  border-color: var(--vt-border-color);
+  color: var(--vt-color-danger);
+}
+
+/*
+ * 分段切换（升序 / 降序 / 原序）。两三个取值的选择用分段而不是下拉：
+ * 收起状态下下拉只剩一行文字，而这里要的是「当前是哪一档」一眼可见、一下点到。
+ */
+.vt-toolbar-seg {
+  flex: 0 0 auto;
+  display: inline-flex;
+  height: var(--vt-control-height, 26px);
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-sm);
+  overflow: hidden;
+}
+
+.vt-toolbar-seg-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  background: var(--vt-bg);
+  color: var(--vt-text-secondary);
+  font: inherit;
+  font-size: var(--vt-font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vt-toolbar-seg-item + .vt-toolbar-seg-item {
+  border-left: var(--vt-border-width) solid var(--vt-border-color);
+}
+
+.vt-toolbar-seg-item.is-active {
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+}

@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { VirtTable, type VirtTableColumn } from '@virt-table/vanilla';
-import { vtColumnPanel } from '@virt-table/vanilla/plugins';
+import { vtFieldConfig } from '@virt-table/vanilla/plugins';
 
 interface Row { id: number; name: string; age: number; city: string; job: string; email: string }
 
@@ -25,7 +25,7 @@ export function bootstrapTableColumnVisibility(root: HTMLElement): () => void {
 
   root.innerHTML = `
     <div class="virt-table-controls">
-      <button class="virt-table-btn virt-table-btn-primary" id="panel">列设置</button>
+      <button class="virt-table-btn virt-table-btn-primary" id="panel">字段配置</button>
       <button class="virt-table-btn" id="hideJob">隐藏「职位」</button>
       <button class="virt-table-btn" id="showEmail">显示「邮箱」</button>
       <span class="demo-note">ID 列不可隐藏；邮箱列默认隐藏</span>
@@ -40,11 +40,11 @@ export function bootstrapTableColumnVisibility(root: HTMLElement): () => void {
     estimatedSize: 40,
     buffer: 6,
     border: true,
-    plugins: [vtColumnPanel()],
+    plugins: [vtFieldConfig()],
   });
 
   (root.querySelector('#panel') as HTMLButtonElement).onclick = (e) =>
-    table.toggleColumnPanel(e.currentTarget as HTMLElement);
+    table.toggleFieldConfig(e.currentTarget as HTMLElement);
   (root.querySelector('#hideJob') as HTMLButtonElement).onclick = () =>
     table.setColumnVisible('job', false);
   (root.querySelector('#showEmail') as HTMLButtonElement).onclick = () =>

@@ -2,24 +2,6 @@
 
 在原地修改行数据后，调用实例方法 `forceUpdate()` 强制刷新可见区域。
 
-## 使用的 API
-
-```ts
-type Column = {
-  key: string;  // 列标识(必填)
-  title: string;  // 列标题(必填)
-  width: number;  // 列宽(必填)
-}
-
-type Options = {
-  list: T[];  // 数据列表
-  itemKey: string;  // 行唯一标识字段名
-  estimatedSize: number;  // 行预估高度(px)
-  buffer: number;  // 缓冲区行数
-  border: boolean;  // 是否显示边框
-}
-```
-
 ## 示例
 
 <PlaygroundHost framework="vanilla" example-id="table-force-update" />
@@ -29,3 +11,13 @@ type Options = {
 ::: details 点击查看源码
 <<< @/apps/vanilla/src/components/basic/force-update.ts
 :::
+
+## 相关 API
+
+| 字段 / 方法 | 作用 | 详见 |
+| --- | --- | --- |
+| `setList(list)` | 换整份数据（重走数据管线） | [实例方法](/vanilla/api/instance) |
+| `forceUpdate()` | 数据对象没换、只改了字段值时强制重绘 | [实例方法](/vanilla/api/instance) |
+| `onRowRemoved` | 行 DOM 被回收时清理自定义挂载 | [表格配置](/vanilla/api/table#virttableoptions) |
+
+> 全量字段见 [表格配置](/vanilla/api/table) / [列配置](/vanilla/api/column) / [实例方法](/vanilla/api/instance)。

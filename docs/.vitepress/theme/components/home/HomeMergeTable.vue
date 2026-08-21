@@ -54,7 +54,15 @@
  */
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
-/** 与 estimatedSize 一致（fixedSize，全表恒定 40px） */
+/**
+ * 与 estimatedSize 一致（fixedSize，全表恒定 40px）。
+ *
+ * 40 不是随手取的：它等于组件默认的 `line-height 21 + padding-y 9×2 + 下边框 1`
+ * （index.css 里 `--vt-line-height` 那段注释有推导）。**改这个数治不了行高不符**——
+ * 曾经把它调成 42 去迁就那条被 pill 撑高的汇总带，结果是账本比真实内容高 2px/行 ×
+ * 其余 95,000 行 ≈ 19 万 px，滚到底时下方留出大片空白。行高不符只能回去修撑高的那个
+ * 元素（见文件末尾 `.vth-mg-band`），不能改账本。
+ */
 const ROW_H = 40;
 const ROW_COUNT = 100_000;
 
@@ -138,18 +146,19 @@ const DOMAINS = ['交易履约', '风控合规', '增长实验', '供应链', '�
 const REGIONS = ['华东-1', '华北-2', '华南-3', 'ap-southeast', 'us-east', 'eu-west'];
 const SQUADS = ['甲组', '乙组', '丙组', '丁组', '戊组', '己组', '庚组'];
 const STAGES = ['抽取', '清洗', '关联', '聚合', '物化', '校验', '发布'];
-const STATUSES = [
-  { label: '运行中', color: '#10b981' },
-  { label: '排队', color: '#f59e0b' },
-  { label: '已完成', color: '#2563eb' },
-  { label: '失败', color: '#ef4444' },
-  { label: '已暂停', color: '#8b5cf6' },
+/** 状态 / 优先级的字典（值 → 文案 + 配色），理由见 HomeLiveTable.vue 的同名注释 */
+const STATUS = [
+  { value: 'run', label: '运行中', color: '#10b981' },
+  { value: 'queued', label: '排队', color: '#f59e0b' },
+  { value: 'done', label: '已完成', color: '#2563eb' },
+  { value: 'failed', label: '失败', color: '#ef4444' },
+  { value: 'paused', label: '已暂停', color: '#8b5cf6' },
 ];
-const PRIORITIES = [
-  { label: 'P0', color: '#ef4444' },
-  { label: 'P1', color: '#f59e0b' },
-  { label: 'P2', color: '#2563eb' },
-  { label: 'P3', color: '#98a2b3' },
+const PRIORITY = [
+  { value: 'P0', label: 'P0', color: '#ef4444' },
+  { value: 'P1', label: 'P1', color: '#f59e0b' },
+  { value: 'P2', label: 'P2', color: '#2563eb' },
+  { value: 'P3', label: 'P3', color: '#98a2b3' },
 ];
 const OWNERS = ['陈昱', '林洛', '赵斯', '孙茗', '周砚', '吴桉', '郑玥', '钱屿'];
 const WINDOWS = ['00:00–01:00', '02:30–03:15', '06:00–06:45', '11:20–12:00', '18:40–19:30'];
@@ -185,8 +194,8 @@ function buildRows() {
       region: REGIONS[Math.floor(i / REGION_RUN) % REGIONS.length],
       squad: SQUADS[Math.floor(i / SQUAD_RUN) % SQUADS.length],
       stage: STAGES[i % STAGES.length],
-      status: STATUSES[(i * 3) % STATUSES.length],
-      priority: PRIORITIES[i % PRIORITIES.length],
+      status: STATUS[(i * 3) % STATUS.length].value,
+      priority: PRIORITY[i % PRIORITY.length].value,
       progress: (i * 7) % 101,
       qps: 1200 + ((i * 37) % 8800),
       p95: 8 + ((i * 13) % 240),
@@ -233,7 +242,10 @@ function buildMerges() {
  * 分组节点 `width: 0`（宽度由叶子决定）；`fixed` 写在分组上会自动下发给所有子列。
  * 三列 `mergeKey` 全部落在中间段 —— 固定列不参与合并坐标系，配在那儿会告警并忽略。
  * -------------------------------------------------------------------------- */
-function buildColumns() {
+/** 进度条列用内置组件；动态 import 来的，只能当参数传进来（见 hero 表的同名注释） */
+type Comps = typeof import('@virt-table/vanilla/components');
+
+function buildColumns({ VtProgress, VtPerson, VtTag }: Comps) {
   const num = { align: 'right' as const, cellType: 'number' as const };
   /** 被合并的列都要 vAlign middle：段首没被重锚时保留格内居中，重锚后由 sticky 内层接管 */
   const mergeCol = { vAlign: 'middle' as const, align: 'center' as const };
@@ -280,15 +292,15 @@ function buildColumns() {
               ? `<span class="vth-mg-band">小节汇总 · 第 ${Math.floor(rowIndex / BAND_EVERY) + 1} 段（这一格跨 ${BAND_SPAN} 列）</span>`
               : value,
         },
-        { key: 'status', title: '状态', width: 104, cellType: 'option' },
-        { key: 'priority', title: '优先级', width: 88, cellType: 'option', align: 'center' },
-        {
+        VtTag({ key: 'status', title: '状态', width: 104, options: STATUS }),
+        VtTag({ key: 'priority', title: '优先级', width: 88, options: PRIORITY, align: 'center' }),
+        // 进度条走内置组件（理由与 hero 表同源，见那边 buildColumns 的头注）
+        VtProgress({
           key: 'progress',
           title: '进度',
           width: 124,
-          render: ({ value }: { value: number }) =>
-            `<span class="vth-mg-pb"><i style="width:${value}%"></i></span><b>${value}%</b>`,
-        },
+          color: 'linear-gradient(90deg, var(--vtd-primary, #2563eb), #22d3ee)',
+        }),
       ],
     },
     {
@@ -365,7 +377,7 @@ function buildColumns() {
       width: 0,
       footerValue: '—',
       children: [
-        { key: 'owner', title: '负责人', width: 92 },
+        VtPerson({ key: 'owner', title: '负责人', width: 92 }),
         { key: 'updatedAt', title: '更新时间', width: 132 },
         { key: 'version', title: '版本', width: 84 },
         { key: 'note', title: '备注', width: 260, textOverflow: 'tooltip' },
@@ -568,8 +580,10 @@ async function build() {
   if (built || !hostRef.value) return;
   built = true;
 
-  const [{ VirtTable }] = await Promise.all([
+  const [{ VirtTable }, comps] = await Promise.all([
     import('@virt-table/vanilla'),
+    // 内置单元格组件的子路径入口；样式随模块自带（components/shared.ts 顶部就 import 了）
+    import('@virt-table/vanilla/components'),
     // 样式与实现分开引，与文档里给用户的用法逐字一致
     import('@virt-table/vanilla/core.css'),
   ]);
@@ -581,7 +595,7 @@ async function build() {
 
   table.value = new VirtTable(mount, {
     list: buildRows(),
-    columns: buildColumns() as any,
+    columns: buildColumns(comps) as any,
     merges: buildMerges(),
     itemKey: 'id',
     estimatedSize: ROW_H,
@@ -759,33 +773,35 @@ onBeforeUnmount(() => {
  * Vue 的 `data-v-*`。所以走 `.vth-mg-*` 专属类名，且刻意不出现任何裸元素选择器
  * （首页里嵌的是真表格，与 styles-contract.test.ts 那条隔离契约同源）。
  */
+/**
+ * 汇总带的 pill。
+ *
+ * ⚠️ 高度**必须锁成 `var(--vt-line-height)`**（21px = 行内容区），不能靠
+ * `padding` + 继承的 line-height 自然撑。第一版写的是 `display: inline-block`
+ * + `padding: 1px 9px`，12px 字号在 21px 的继承行高下算出 23px，比内容区高 2px ——
+ * 于是每 20 行那条带行的实际高度是 **42px**，而本区配的是
+ * `fixedSize: true` + `estimatedSize: 40`。账本按 40 算、DOM 实际 42，
+ * 正是 AGENTS.md §7.11 那条不变量（line-height 21 + padding-y 9×2 + 下边框 1 = 40）
+ * 的破法：滚到底时最后一行与表尾之间会差出几像素的缝。
+ *
+ * 组件内置的 `.vt-cell-option` 踩过同一个坑（index.css 里那段注释记着同一个 42），
+ * 这里照它的解法办：锁高 + `line-height: 1` + 只留横向 padding + `vertical-align: top`
+ * （不能用 `middle` —— 它仍以基线为参照，inline-flex 的 descender 空间会把行盒顶高）。
+ * 锁成变量之后 pill 还会跟着密度档走，紧凑档自动变 19px。
+ */
 .vth-mg-band {
-  display: inline-block;
-  padding: 1px 9px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  vertical-align: top;
+  height: var(--vt-line-height);
+  padding: 0 9px;
   border-radius: 999px;
   background: var(--vtd-primary-soft, rgb(37 99 235 / 10%));
   color: var(--vtd-primary, #2563eb);
   font-size: 12px;
+  line-height: 1;
   font-weight: 600;
   white-space: nowrap;
-}
-
-/** 进度条：`.vth-mg-pb` 而不是 `-bar` —— 后者是上方那条工具栏，别撞名 */
-.vth-mg-pb {
-  display: inline-block;
-  width: 52px;
-  height: 5px;
-  margin-right: 7px;
-  border-radius: 999px;
-  background: var(--vtd-bg-mute, #eef1f5);
-  overflow: hidden;
-  vertical-align: middle;
-}
-
-.vth-mg-pb > i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--vtd-primary, #2563eb), #22d3ee);
 }
 </style>

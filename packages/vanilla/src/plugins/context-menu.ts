@@ -66,7 +66,7 @@ export function vtContextMenu<T extends Record<string, any> = any>(
           menuEl.innerHTML = '';
         }
         if (dismissHandler) {
-          document.removeEventListener('mousedown', dismissHandler);
+          document.removeEventListener('pointerdown', dismissHandler);
           document.removeEventListener('scroll', dismissHandler, true);
           document.removeEventListener('keydown', dismissHandler);
           dismissHandler = null;
@@ -120,13 +120,19 @@ export function vtContextMenu<T extends Record<string, any> = any>(
 
         dismissHandler = (ev: Event) => {
           if (ev.type === 'keydown' && (ev as KeyboardEvent).key !== 'Escape') return;
-          if (ev.type === 'mousedown' && menuEl?.contains(ev.target as Node)) return;
+          if (ev.type === 'pointerdown' && menuEl?.contains(ev.target as Node)) return;
           hide();
         };
-        // 延后一拍绑定，避免触发本次右键的 mousedown 立刻把菜单关掉
+        /*
+         * 听 `pointerdown` 而不是 `mousedown`：`vtCellSelection` 的拖选起手在 pointerdown 里
+         * `preventDefault()`，而那会连带取消「派发兼容 mouse 事件」—— 表体内的 mousedown
+         * 根本不存在（CDP 实测点单元格：pointerdown 1 / mousedown 0 / click 1）。
+         * 听 mousedown 的后果就是：点表格里的格子关不掉这个浮层。
+         */
+        // 延后一拍绑定，避免触发本次右键的 pointerdown 立刻把菜单关掉
         setTimeout(() => {
           if (!dismissHandler) return;
-          document.addEventListener('mousedown', dismissHandler);
+          document.addEventListener('pointerdown', dismissHandler);
           document.addEventListener('scroll', dismissHandler, true);
           document.addEventListener('keydown', dismissHandler);
         }, 0);

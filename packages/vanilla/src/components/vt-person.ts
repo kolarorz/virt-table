@@ -4,6 +4,7 @@ import { buildChips, createEnumEditor, enumCodec, renderChipCell } from './_enum
 import {
   type BaseColumnOptions,
   type VtSemanticType,
+  clearableOn,
   pickColumnProps,
   semanticColor,
 } from './shared';
@@ -356,6 +357,9 @@ function attachHoverCard(
  *
  * 单人：选中即写回并关闭面板。多人：勾选**即时写回**（没有「确定」按钮），与
  * `VtMultiSelect` 一致 —— 面板底部的「清空 / 全选」和逐项勾选走同一条路。
+ *
+ * `clearable` 与 `VtSelect` 同档、**默认开**：锚点上一个 `×`，`Delete` / `Backspace` 同效
+ * （焦点在搜索框里时要求搜索词为空）。
  */
 export function VtPerson<T = any>(opts: VtPersonOptions<T>): VirtTableColumn<T> {
   const options = opts.options ?? [];
@@ -486,6 +490,8 @@ export function VtPerson<T = any>(opts: VtPersonOptions<T>): VirtTableColumn<T> 
       searchPlaceholder: opts.searchPlaceholder ?? '搜索姓名',
       emptyText: opts.emptyText ?? '无匹配人员',
       showActions: opts.showActions,
+      // 与 `VtSelect` 同一条规则：锚点类默认给 ×（见 `clearableOn`）
+      clearable: clearableOn(opts),
       itemClass: 'vt-comp-person-item',
       codec: {
         // 行值可能是对象，得先过 `toPerson` 才拿得到标识

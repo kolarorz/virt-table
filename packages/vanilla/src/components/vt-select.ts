@@ -6,6 +6,7 @@ import {
   type Dynamic,
   type VtSemanticType,
   buildOptionMap,
+  clearableOn,
   pickColumnProps,
 } from './shared';
 
@@ -88,6 +89,10 @@ export type VtSelectOptions<T = any> = VtSelectBase<T> &
  * 面板、搜索、`↑↓`/`Enter`、清除 `×`、`+N` 折叠全部来自 `_enum.ts` 的 `createEnumEditor`
  * （`VtPerson` 也用它），所以这些能力在几个预设上行为一致。
  *
+ * `clearable` **默认开**：锚点上一个 `×`，并且激活这一格后按 `Delete` / `Backspace` 也清空
+ * （单值写回 `''`，多值写回 `[]` / `''`）。不许清空的列传 `clearable: false`，理由见
+ * `shared.ts` 的 `clearableOn`。
+ *
  * **不是原生 `<select>`** —— 原生下拉列表由操作系统渲染，`--vt-*` 一个都吃不到，不跟暗色
  * 主题也不跟圆角/字号，摆在自绘面板旁边明显是两套东西。
  */
@@ -132,6 +137,8 @@ export function VtSelect<T = any>(opts: VtSelectOptions<T>): VirtTableColumn<T> 
         searchPlaceholder: opts.searchPlaceholder,
         emptyText: opts.emptyText,
         showActions: opts.showActions,
+        // 锚点没有「删空」的手段，所以 × 默认给（`clearable: false` 关掉），见 `clearableOn`
+        clearable: clearableOn(opts),
         codec,
         // 胶囊模式下：候选项与锚点回显都用同一枚胶囊 —— 点开单元格不该换一种长相
         renderItem: chip ? (option) => chip(option.value, ctx.row, ctx.rowIndex) : undefined,

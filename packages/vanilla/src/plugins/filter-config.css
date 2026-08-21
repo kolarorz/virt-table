@@ -1,0 +1,34 @@
+/* ==========================================================================
+ * vtFilterConfig 插件样式
+ *
+ * 面板基元来自 `_panel-ui.css`（不装 `vtToolbar` 单独用时也要它）。
+ *
+ * `VtFilterBuilder` 那 400 行 `.vt-fb-*` **必须在这里显式 `@import`**：JS 侧那句
+ * `import { VtFilterBuilder }` 不会把 CSS 带进本插件的 chunk —— 那个模块是 `components`
+ * 与本插件共享的，Vite 把它的 CSS 归给了 components 那个 chunk（实测：不 import 的话
+ * 产物里只有下面那条去壳规则，一条 `.vt-fb-*` 都没有，面板会是没有样式的一坨）。
+ * ========================================================================== */
+@import './_panel-ui.css';
+@import '../components/vt-filter-builder.css';
+
+/* ==========================================================================
+ * 4. 筛选面板：去掉 VtFilterBuilder 自带的那层外壳
+ *
+ * `.vt-fb-panel` 是它**独立使用**时的外壳（边框 + 阴影 + 圆角 + 内边距），而此刻它已经在
+ * `createPopup` 的 `.vt-filter-panel` 里 —— 不去壳就是双边框 + 双阴影。
+ *
+ * 反过来（让浮层不套 `.vt-filter-panel`）不行：那个类是 `createPopup` 按定位模式自己加的，
+ * 暗色底与弹出动画都在它身上。
+ * ========================================================================== */
+
+.vt-toolbar-popup--filter .vt-toolbar-panel {
+  gap: 8px;
+}
+
+.vt-toolbar-filter > .vt-fb-panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}

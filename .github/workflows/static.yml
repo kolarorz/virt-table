@@ -1,5 +1,18 @@
 name: Deploy static content to Pages
 
+# ⚠️ 这个 workflow 发出来的站**不含付费能力**（桩档）。
+#
+# runner 上没有私有仓库 `virt-table-pro`，`scripts/pro-tgz.mjs` 会 warn 后跳过，
+# 三个微应用于是落到 `off` 档 —— 页面上每个付费插件的 demo 位都是一张说明卡，
+# 右下角还有一条「付费能力未装载」的提示（见 docs/apps/pro-kit/README.md）。
+#
+# 于是 `on.push` 有一个后果要知道：**手动部署一个带付费能力的站之后，下一次 push 会把它
+# 覆盖成桩档站**。三条路，按推荐度：
+#   1. 去掉下面的 `on.push`，只留 `workflow_dispatch` —— 部署变成显式动作；
+#   2. 接受它，每次 push 之后重新手动发一次（很容易忘）；
+#   3. 让 CI 也能拿到付费包：给 pro 仓库配私有远端 + `VT_PRO_TOKEN`，
+#      在 install 之后加一步把 tgz 铺进来（`node scripts/install-pro-tgz.mjs <dir>`）。
+# 目前是第 2 条。
 on:
   push:
     branches: ['master']
@@ -36,16 +49,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build micro apps
-        run: |
-          pnpm -C docs/apps/react exec vite build
-          pnpm -C docs/apps/vue exec vite build
-          pnpm -C docs/apps/vanilla exec vite build
-        env:
-          DEPLOY_BASE: /virt-table/
-
+      # 走根脚本而不是逐条敲 vite/vitepress：`build:docs` 串了三道东西，
+      # 分开写就会像先前那样把它们全绕过去（见文件头）。
+      #   verify:enterprise → 付费文档的 include / 链接 / 锚点
+      #   pro-tgz           → 打包并铺付费包（runner 上没有 pro 仓库，会 warn 后跳过）
+      #   docs build        → 三个微应用 + VitePress
+      #   verify:pro-leak   → 公开产物里有没有付费源码痕迹
       - name: Build docs site
-        run: pnpm -C docs exec vitepress build .
+        run: pnpm build:docs
         env:
           DEPLOY_BASE: /virt-table/
 

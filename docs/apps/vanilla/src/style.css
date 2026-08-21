@@ -86,6 +86,26 @@
 .demo-container:has(> .vt-root--border) {
 }
 
+/*
+ * Demos（经典案例）的表格舞台。
+ *
+ * 高度由案例通过 `--demo-stage-h` 传进来（inline style 里写不了 media query，所以传
+ * 变量而不是直接写 `height`）：手机上 700 多 px 的固定高度顶出一屏还多，页面滚一屏
+ * 都还没到表格底部；窄屏一律按视口比例收，**≥768px 才用案例自己的值** —— 卡片截图
+ * （`scripts/shoot-demos.mjs`）按那个高度裁图，桌面端一改缩略图就跟着变。
+ */
+.demo-stage {
+  width: 100%;
+  height: 72vh;
+  min-height: 360px;
+}
+
+@media (min-width: 768px) {
+  .demo-stage {
+    height: var(--demo-stage-h, 640px);
+  }
+}
+
 .virt-table-container {
   width: 640px;
   height: 600px;
@@ -312,4 +332,107 @@
   :where(.virt-table-controls) button:active {
     transform: none;
   }
+}
+
+/* ==========================================================================
+ * Demos（经典案例）专属
+ * ========================================================================== */
+
+/**
+ * HR 案例：树形里的「部门」行是汇总行，给它分组行同款底色。
+ *
+ * 走 `rowClass` 打标记而不是 `rowStyle` 内联，才能用 `--vt-group-bg` 这种表格自己的
+ * 令牌（暗色主题自动跟随）。选择器特异性 (0,2,0) 高于核心的 `td.vt-fixed-left`
+ * (0,1,1)，所以固定列那两格也一起变色 —— 少了这条，部门行会在左侧断成两截。
+ */
+.hr-dept-row > .vt-td {
+  background: var(--vt-group-bg);
+  font-weight: var(--vt-font-weight-semibold, 600);
+}
+
+/**
+ * 电子表格案例：「阶段小结」带那一行（`rowClass` 打的标记）。
+ *
+ * 语义列那段被 colspan 合并成一格、底色来自逐格数据，但右边 52 个周列不在合并里 ——
+ * 少了这条规则，小结行会在中间断成「有色 + 白」两截。特异性 (0,2,0) 高于核心的
+ * `td.vt-fixed-left` (0,1,1)，所以左侧固定列也一起变色。
+ */
+.sheet-band > .vt-td {
+  background: var(--vt-group-bg);
+}
+
+/* ---- 开关（demo 里切换特性用）------------------------------------------------
+ * 原生 checkbox 收进 label 里、只留可访问性（键盘与读屏照旧走它），
+ * 外观由紧跟其后的 `.demo-switch__track` 画 —— 所以两者的**相邻兄弟关系不能改**。
+ * 多个开关**彼此正交**时用它；互斥的选项仍该用 radio。
+ * -------------------------------------------------------------------------- */
+.demo-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dm-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 不用 display:none —— 那样键盘聚焦不到 */
+.demo-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.demo-switch__track {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--dm-border-strong);
+  transition: background-color var(--dm-transition) linear;
+}
+
+.demo-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dm-text-inverse);
+  box-shadow: var(--dm-shadow-sm);
+  transition: transform var(--dm-transition) var(--dm-ease);
+}
+
+.demo-switch input:checked + .demo-switch__track {
+  background: var(--dm-primary);
+}
+
+.demo-switch input:checked + .demo-switch__track::after {
+  transform: translateX(14px);
+}
+
+.demo-switch input:focus-visible + .demo-switch__track {
+  box-shadow: 0 0 0 3px var(--dm-primary-soft);
+}
+
+.demo-switch input:disabled + .demo-switch__track {
+  opacity: 0.5;
+}
+
+.demo-switch input:disabled ~ .demo-switch__label {
+  color: var(--dm-text-3);
+}
+
+/* 一排开关 */
+.demo-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 10px;
 }
