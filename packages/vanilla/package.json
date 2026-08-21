@@ -1,6 +1,6 @@
 {
   "name": "@virt-table/vanilla",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "行列双向虚拟化的高性能表格，零框架依赖：合并单元格、分组表头/表尾、固定行列、树形、编辑器、插件化",
   "type": "module",
   "license": "MIT",
