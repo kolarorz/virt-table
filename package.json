@@ -20,7 +20,7 @@
     "build:vanilla": "pnpm -C packages/vanilla build",
     "build:react": "pnpm -C packages/react build",
     "build:vue": "pnpm -C packages/vue build",
-    "build:docs": "pnpm verify:enterprise && node scripts/pro-tgz.mjs && pnpm -C docs build && pnpm verify:pro-leak",
+    "build:docs": "pnpm build && pnpm verify:enterprise && node scripts/pro-tgz.mjs && pnpm -C docs build && pnpm verify:pro-leak",
     "build:docs:strict": "VT_PRO_STRICT=1 pnpm build:docs",
     "verify:enterprise": "node scripts/check-enterprise-docs.mjs",
     "verify:pro-leak": "node scripts/check-pro-leak.mjs",
