@@ -1,0 +1,115 @@
+/**
+ * 单元格公式的视觉标记（`vtFormula`）。
+ *
+ * 只有两件事：**这个数是算出来的**、**这个公式错了**。表格里没有 Excel 那样的状态栏，
+ * 单元格自己不表达的话，用户分不清一个数字是手输的还是公式产出的 —— 也就不知道
+ * 改上游会不会连带改到它。
+ *
+ * 用核心的 `--vt-*` token 而不是硬编码颜色：换主题、明暗模式自动跟随。
+ */
+
+.vtp-formula-cell {
+  /* 左上角一个小三角，Google Sheets 的做法（比整格底色轻，不干扰读数） */
+  position: relative;
+}
+
+.vtp-formula-cell::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-top: 5px solid rgb(59 130 246 / 55%);
+  border-right: 5px solid transparent;
+  content: '';
+  pointer-events: none;
+}
+
+.vtp-formula-cell--error,
+.vtp-formula-error {
+  background: rgb(239 68 68 / 10%);
+  color: #ef4444;
+}
+
+.vtp-formula-error::after {
+  border-top-color: #ef4444;
+}
+
+/* ==========================================================================
+ * 引用高亮（Excel 的 range finder）：点/编辑公式格时框出它引用的格与区域
+ * ========================================================================== */
+
+.vtp-formula-refs {
+  /*
+   * 覆盖层本身不占位、不吃事件。z-index 3 与核心的框选浮层同层，
+   * 因此横滚时会滑到固定列（z-index 4）**之下**，而不是浮在上面。
+   */
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.vtp-formula-ref {
+  position: absolute;
+  box-sizing: border-box;
+  /* 虚线，与「选中/框选」的实线区分开：这不是选区，是「这条公式吃了这几格」 */
+  border: 2px dashed var(--vtp-ref-color, #3b82f6);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--vtp-ref-color, #3b82f6) 10%, transparent);
+  pointer-events: none;
+}
+
+/* 引用原文贴在框的左上角外侧，与 Excel 的行为一致（多个引用叠着也认得出谁是谁） */
+.vtp-formula-ref-tag {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 0 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--vtp-ref-color, #3b82f6);
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/*
+ * 颜色按引用出现顺序循环。五种够了：一条公式里超过五个不同引用的情况极少，
+ * 而且真到那时候颜色再多也认不过来。
+ */
+.vtp-formula-ref--0 {
+  --vtp-ref-color: #3b82f6;
+}
+
+.vtp-formula-ref--1 {
+  --vtp-ref-color: #f97316;
+}
+
+.vtp-formula-ref--2 {
+  --vtp-ref-color: #10b981;
+}
+
+.vtp-formula-ref--3 {
+  --vtp-ref-color: #a855f7;
+}
+
+.vtp-formula-ref--4 {
+  --vtp-ref-color: #ec4899;
+}
+
+/* 编辑浮层里的公式输入框：等宽字体，公式对齐才读得懂括号层级 */
+.vtp-formula-input {
+  width: 100%;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--vt-font-size, 13px);
+}
+
+.vtp-formula-input:focus {
+  outline: none;
+}

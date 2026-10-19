@@ -1,0 +1,31 @@
+/* ==========================================================================
+ * 未授权角标
+ *
+ * 角标挂在 `.vt-root` **内部**，所以明暗主题不需要自己判断：核心的暗色规则
+ * （`.vt-root--dark` / `.dark` / `[data-theme='dark']` 三种入口，见核心 index.css §2）
+ * 已经把 `--vt-*` 变量在 `.vt-root` 上换好了，这里只消费变量就自动跟随。
+ * 每条都带 fallback —— 核心 core.css 没引时角标仍须可见，它是合规提示，
+ * 不能因为样式没引就悄悄消失。
+ *
+ * class 前缀用 `vtp-` 而非核心的 `vt-`：付费插件与核心分仓发版，撞名了排查成本高。
+ * ========================================================================== */
+.vtp-license-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 40;
+  padding: 2px 8px;
+  border: var(--vt-border-width, 1px) solid var(--vt-color-warning, #d97706);
+  border-radius: var(--vt-radius-full, 999px);
+  font-size: var(--vt-font-size-sm, 13px);
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--vt-color-warning, #b45309);
+  background: var(--vt-bg-elevated, #fff);
+  box-shadow: var(--vt-shadow-sm, 0 1px 2px rgb(0 0 0 / 12%));
+  /* 不吃指针事件：角标压在表格右下角，挡住滚动或单元格点击就成了 bug。
+     代价是 title 的原生 tooltip 需要 hover 而拿不到 —— 刻意的取舍，
+     不挡交互 > tooltip 可读，具体原因同样会 console.warn 一份。 */
+  pointer-events: none;
+  user-select: none;
+}

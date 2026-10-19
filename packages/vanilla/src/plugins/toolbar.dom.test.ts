@@ -387,9 +387,16 @@ describe('vtToolbar 外壳与注册表', () => {
     click(btnOf(box, 'search'));
     expect(box.querySelector('.vt-search-box')).not.toBeNull();
 
-    // 导出是面板型：三行 CSV / Excel / 打印
+    /*
+     * 导出是面板型：三行 CSV / Excel / 打印。
+     *
+     * 查的是 `.vt-toolbar-panel-btn`（面板基元的按钮），2026-08-31 从 `.vt-filter-item`
+     * 换过来的 —— 后者的规则住在 `_panel.css` 里，而把四个面板拆成独立插件之后
+     * `toolbar.css` **不再内联它**。于是「只装 vtToolbar + vtExport」时这三行是没有样式的
+     * 裸按钮。基元那个类跟着 `toolbar.css` 走，装谁都有样式。
+     */
     const panel = openPanel(box, 'export');
-    expect([...panel.querySelectorAll('.vt-filter-item')].map((b) => b.textContent)).toEqual([
+    expect([...panel.querySelectorAll('.vt-toolbar-panel-btn')].map((b) => b.textContent)).toEqual([
       '导出 CSV',
       '导出 Excel',
       '打印',

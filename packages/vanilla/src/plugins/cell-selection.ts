@@ -118,10 +118,26 @@ export function vtCellSelection<T extends Record<string, any> = any>(
         overlayEl.style.height = `${rect.height}px`;
       };
 
+      /**
+       * 插件订阅者（`CellSelectionService.subscribe`）。
+       *
+       * 与 `options.onChange` 分开存：那是**一个**槽位、给使用方；这是**一组**、给插件。
+       * 状态栏与跟随选区的图表都要跟着选区刷，共用一个槽位会互相顶掉。
+       */
+      const listeners = new Set<(range: CellSelectionRange | null) => void>();
+
       const emitChange = (): void => {
         const range = getSelection();
         // 插件配置优先，其次回落到表格 option（回调留在 options 上，与 onColumnOrderChange 一致）
         (options.onChange ?? ctx.getOptions().onCellSelectionChange)?.(range);
+        for (const fn of listeners) {
+          try {
+            fn(range);
+          } catch (err) {
+            // 一个订阅者崩了不该让框选整体失灵 —— 后面的订阅者照常收到
+            console.warn('[VirtTable] vtCellSelection: 选区订阅者抛出异常', err);
+          }
+        }
       };
 
       const setSelection = (range: CellSelectionRange | null): void => {
@@ -264,6 +280,10 @@ export function vtCellSelection<T extends Record<string, any> = any>(
         clearSelection,
         buildSelectionRows,
         refresh,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
       };
       ctx.provide('cellSelection', service);
 

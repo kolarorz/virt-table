@@ -187,13 +187,15 @@ const pluginLinks = [
 /**
  * 只在 Vanilla 侧出现的插件页。
  *
- * 这四个面板插件（高级筛选 / 分组 / 排序 / 行高）**与框架完全无关** —— Vue / React 端只是
- * `re-export`，装载与 API 一个字都不差，所以不给它们各造一份除 import 路径外毫无差别的页面。
- * 三端 toolbar 那页里指了路。
+ * 这几个插件（列头菜单 / 导入 / 高级筛选 / 分组 / 排序 / 行高）**与框架完全无关** ——
+ * Vue / React 端只是 `re-export`，装载与 API 一个字都不差，所以不给它们各造一份
+ * 除 import 路径外毫无差别的页面。三端 toolbar 那页里指了路。
  *
  * 与 `frameworkOnlyCellLinks` 同一个机制：真正的框架差异才值得各配一页。
  */
 const vanillaOnlyPluginLinks = [
+  { text: 'vtColumnMenu 列头菜单', link: 'plugins/column-menu' },
+  { text: 'vtImport 导入', link: 'plugins/import' },
   { text: 'vtFilterConfig 高级筛选', link: 'plugins/filter-config' },
   { text: 'vtGroupConfig 分组配置', link: 'plugins/group-config' },
   { text: 'vtSortConfig 排序配置', link: 'plugins/sort-config' },
@@ -496,17 +498,21 @@ function buildEnterpriseSidebar(fw: Framework) {
           ],
         },
         e('floating-image', '浮动图片'),
-        e('views', '命名视图'),
+        // 命名视图：暂不作为付费能力出售，整条从付费清单里摘掉（2026-08-31）。
+        // 页面文件 `docs/*/enterprise/views.md` 与 `.enterprise/views/*.md` 都留着，
+        // 只是不再有入口 —— 想恢复出售把这一行取消注释即可（其余摘除点见那两个文件的同日注释）。
+        // e('views', '命名视图'),
         e('undo', '撤销 / 重做'),
+        e('xlsx', '真 xlsx 与 PDF 导出'),
+        e('pivot', '透视表'),
+        e('status-bar', '状态栏（选区聚合）'),
+        // charts 一期只出了单元格迷你图，选区出图仍在规划中 —— 标题按**已实现的那部分**取，
+        // 免得点进去看到「集成图表」却只有迷你图。规划中的部分在同一页的末尾交代。
+        e('charts', '单元格迷你图'),
         {
           text: '规划中',
           collapsed: true,
-          items: [
-            e('pivot', '透视表'),
-            e('xlsx', 'xlsx / PDF 导出'),
-            e('charts', '集成图表'),
-            e('collab', '协同'),
-          ],
+          items: [e('collab', '协同')],
         },
       ],
     },

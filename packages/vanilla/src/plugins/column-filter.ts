@@ -14,6 +14,25 @@ const FILTER_ICON_SVG =
   '<svg viewBox="0 0 1024 1024" width="1em" height="1em" fill="currentColor">' +
   '<path d="M349 838c-8 0-15-2-22-7a38 38 0 0 1-16-31V558L56 246a38 38 0 0 1-4-36 38 38 0 0 1 34-22h852a38 38 0 0 1 34 22 38 38 0 0 1-4 36L717 558v168a38 38 0 0 1-16 31L365 845a38 38 0 0 1-16 -7z"/></svg>';
 
+/**
+ * `vtColumnFilter` 通过 `provide('columnFilter')` 暴露的服务。
+ *
+ * 消费方：`vtColumnMenu`（菜单里的「筛选」那一项）。用
+ * `ctx.inject<ColumnFilterService>('columnFilter')` 取用，未装载时为 undefined ——
+ * 于是菜单**少一项**，而不是多一项点了没反应的。
+ *
+ * 为什么要这条握手：插件之间不能互相调实例 API（`ctx.table` 是**核心**方法的白名单，
+ * 不含别的插件注入的方法）。provide / inject 是插件间协作唯一的正路，
+ * 与框选把选区交给剪贴板是同一条（见 `plugin.ts` 的 `CellSelectionService`）。
+ */
+export interface ColumnFilterService {
+  /** 打开某列的筛选面板。`anchor` 不给就贴那一列表头上的漏斗图标 */
+  open(colKey: string, anchor?: HTMLElement): void;
+  close(): void;
+  /** 这一列配了筛选吗（没配的列，菜单里不该出现「筛选」） */
+  canFilter(colKey: string): boolean;
+}
+
 export interface ColumnFilterOptions {
   /** 面板最小宽度（px，默认 160，用于锚点右对齐时的位置计算） */
   panelWidth?: number;
@@ -213,6 +232,30 @@ export function vtColumnFilter<T extends Record<string, any> = any>(
 
       // 列结构变化后表头会重建，面板的锚点已失效
       ctx.on('onColumnsChanged', dismiss);
+
+      /*
+       * 把「开 / 关某列的筛选面板」provide 出去，给 `vtColumnMenu` 的「筛选」那一项用。
+       * 判据与上面 `onHeaderCellRendered` 里那个 `filterable` 保持同一份 —— 两处不一致的话
+       * 会出现「菜单里有筛选、但那一列压根没有漏斗图标」这种自相矛盾的状态。
+       */
+      const canFilter = (col: VirtTableColumn<T> | undefined): boolean =>
+        !!col &&
+        (((col.filters?.length ?? 0) > 0) || (!!col.filterType && col.filterType !== 'enum'));
+
+      ctx.provide<ColumnFilterService>('columnFilter', {
+        open: (colKey, anchorEl) => {
+          const col = ctx.getColumns().find((c) => c.key === colKey);
+          if (!canFilter(col)) return;
+          const el =
+            anchorEl ??
+            (ctx.theadEl.querySelector(
+              `th[data-col-key="${colKey}"] .vt-filter-icon`,
+            ) as HTMLElement | null);
+          if (el) open(col as VirtTableColumn<T>, el);
+        },
+        close: () => dismiss(),
+        canFilter: (colKey) => canFilter(ctx.getColumns().find((c) => c.key === colKey)),
+      });
 
       return {
         api: {

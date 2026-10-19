@@ -135,5 +135,11 @@ kolarorz@gmail.com
 ## 相关
 
 - [企业版](/enterprise/) —— 授权模式、定价与常见问题
+- 已实现的付费包：<ProLink to="undo">撤销 / 重做</ProLink> ·
+  <ProLink to="formula/column">公式</ProLink> · <ProLink to="gantt/">甘特图</ProLink> ·
+  <ProLink to="floating-image">浮动图片</ProLink> · <ProLink to="xlsx">真 xlsx 与 PDF</ProLink> ·
+  <ProLink to="pivot">透视表</ProLink>
+<!-- 命名视图暂不出售，已从清单摘掉（2026-08-31，恢复清单见 docs/enterprise/index.md 的同日注释）：
 - 已实现的付费包：<ProLink to="views">命名视图</ProLink> · <ProLink to="undo">撤销 / 重做</ProLink> ·
   <ProLink to="formula/column">公式</ProLink> · <ProLink to="gantt/">甘特图</ProLink>
+-->

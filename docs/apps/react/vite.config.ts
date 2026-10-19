@@ -6,6 +6,7 @@ import {
   logProMode,
   proAliasFor,
   proFsAllow,
+  proVendorLicense,
   resolveProMode,
 } from '../../../build/pro-mode'
 
@@ -34,7 +35,20 @@ export default defineConfig(({ command }) => {
   return {
     base: deployBase ? `${deployBase}micro-apps/react/` : '/',
     plugins: [react(), qiankun('reactDemo', { useDevMode: true })],
-    define: { __VT_PRO_MODE__: JSON.stringify(proMode) },
+    define: {
+      __VT_PRO_MODE__: JSON.stringify(proMode),
+      /*
+       * `vendor` 档随入库产物带的那把**7 天测试密钥**（见 `build/pro-mode.ts`）。
+       * 其它档给空串，`pro-kit/demo-license.ts` 于是回落到 2099 那把长期演示密钥。
+       *
+       * 三端都要写这一行：密钥是在各 app 自己的 `src` 里设的（付费包逐 app 安装，
+       * 共享的 pro-kit 目录不能 import 它们），漏一端那一端就静默用了长期密钥 ——
+       * 症状是"密钥到期验证只在两个框架上生效"。
+       */
+      __VT_PRO_LICENSE_KEY__: JSON.stringify(
+        proMode === 'vendor' ? (proVendorLicense()?.key ?? '') : '',
+      ),
+    },
     resolve: {
       // 用数组 + 正则而非对象：对象形式是**前缀**匹配，
       // `@virt-table/vanilla/plugins` 会被当成 `.../src/index.ts/plugins`

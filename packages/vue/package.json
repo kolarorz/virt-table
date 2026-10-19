@@ -1,6 +1,6 @@
 {
   "name": "@virt-table/vue",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "virt-table 的 Vue 3 封装：行列双向虚拟化的高性能表格组件",
   "type": "module",
   "license": "MIT",
@@ -52,7 +52,7 @@
     "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "peerDependencies": {
-    "@virt-table/vanilla": ">=0.0.2",
+    "@virt-table/vanilla": ">=0.0.1",
     "vue": ">=3.0.0"
   },
   "devDependencies": {

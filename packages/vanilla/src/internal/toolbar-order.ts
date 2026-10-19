@@ -24,5 +24,7 @@ export const TOOLBAR_ORDER = {
   sortConfig: 40,
   rowHeight: 50,
   search: 60,
+  /** 导入排在导出前面：先进后出，读起来与工作顺序一致 */
+  import: 65,
   export: 70,
 } as const;

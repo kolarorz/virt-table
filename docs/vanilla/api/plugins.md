@@ -30,6 +30,8 @@ new VirtTable(el, {
 | `vtKeyboardNav()` | 键盘导航（`requires: vtCellSelection`），见 [示例](/vanilla/examples/plugins/keyboard) | — |
 | `vtCellEditor(options?)` | 单元格编辑浮层，见 [示例](/vanilla/examples/plugins/cells-render)。编辑态按 `rowKey` + `colKey` 归属：被编辑的行滚出渲染窗口只是**隐藏**浮层，滚回来带着未提交的输入原样显形；关闭只发生在点到别处或按 Esc。选项 `trigger: 'click' \| 'dblclick'`、`chrome?: boolean`（浮层是否画外观，用第三方组件时设 `false`，见[编辑浮层的外观归属](./cell#编辑浮层的外观归属)）、`activeCell?: boolean`（点开一格时同时打上激活态描边，默认开，装了 `vtCellSelection` 时默认关，见[激活态](./cell#激活态)） | `openCellEditor(row, col)` / `closeCellEditor()` / `isCellEditing()` |
 | `vtColumnFilter(options?)` | 列头筛选下拉，见 [示例](/vanilla/examples/plugins/filter) | `openColumnFilter(colKey)` / `closeColumnFilter()` |
+| `vtColumnMenu(options?)` | **列头菜单**：每列表头一颗 ☰，点开是这一列的动作清单（排序 / 筛选 / 冻结 / 隐藏 / 自适应列宽 / 按此列分组），见 [示例](/vanilla/examples/plugins/column-menu)。菜单里的「筛选」**不自己画面板**，而是让 `vtColumnFilter` 把它那份开在菜单按钮上 —— 没装它、或这一列没配筛选时那一项**不显示**（而不是点了没反应）。选项 `items`（只留哪几组，顺序按给的来）/ `texts` / `disabled`（哪些列不挂 ☰）/ `extraItems`（追加自定义条目）/ `autoWidthRange` | `openColumnMenu(colKey, anchor?)` / `closeColumnMenu()` / `isColumnMenuOpen(colKey?)` |
+| `vtImport(options?)` | **基础导入**：CSV / TSV / xlsx 文件 → 表格的行，兼工具栏上的「导入」按钮，见 [示例](/vanilla/examples/plugins/import)。认格式**先看字节头再看扩展名**（xlsx 就是 zip）；默认只换行不换列，`autoColumns: true` 才按表头推断并 `setColumns()`；`transform` 是落表前唯一那道校验口（返回 `false` 取消）。解析层单独可用，见下方 `sheet-import` | `importFile(src?, opts?)` / `readSheets(src?, opts?)` |
 | `vtColumnDrag(options?)` | 列拖拽排序，见 [示例](/vanilla/examples/plugins/column-drag) | — |
 | `vtRowDrag(options?)` | 行拖拽排序，**支持树形与分组**（跨层级落点 / 成为子节点 / 落进分组），见 [示例](/vanilla/examples/plugins/row-drag) | — |
 | `vtSearch(options?)` | Ctrl/Cmd+F 搜索 + 工具栏上的「搜索」按钮（**同一份实现，两个入口**），见 [示例](/vanilla/examples/plugins/search)。`toolbar: false` 只留快捷键、`hotkey: false` 只留按钮 | `openSearch()` / `closeSearch()` / `search(term)` / `nextMatch()` / `prevMatch()` / `getSearchMatches()` |
@@ -79,6 +81,7 @@ import { vtSearch } from '@virt-table/vanilla/plugins/search';     // 精确到�
 | `vtCellSelection` / `vtKeyboardNav` | `@virt-table/vanilla/plugins/cell-selection.css` |
 | `vtCellEditor` | `@virt-table/vanilla/plugins/cell-editor.css` |
 | `vtColumnFilter` | `@virt-table/vanilla/plugins/column-filter.css` |
+| `vtColumnMenu` | `@virt-table/vanilla/plugins/column-menu.css` |
 | `vtFieldConfig` | `@virt-table/vanilla/plugins/field-config.css` |
 | `vtFilterConfig` | `@virt-table/vanilla/plugins/filter-config.css`（已内联筛选管理器的样式，不必再引 `vt-filter-builder.css`） |
 | `vtGroupConfig` | `@virt-table/vanilla/plugins/group-config.css` |
@@ -89,7 +92,7 @@ import { vtSearch } from '@virt-table/vanilla/plugins/search';     // 精确到�
 | `vtAIQuery` | `@virt-table/vanilla/plugins/ai-query.css` |
 | `vtAIStream` | `@virt-table/vanilla/plugins/ai-stream.css` |
 | `vtAIColumn` | `@virt-table/vanilla/plugins/ai-column.css` |
-| `vtExport` / `vtClipboard` | 无（纯命令式，不渲染 UI） |
+| `vtExport` / `vtClipboard` / `vtImport` | 无（纯命令式，不渲染 UI；工具栏那颗按钮的样式在 `toolbar.css` 里） |
 
 嫌麻烦就引全量 `@virt-table/vanilla/style.css`（核心 + 全部插件 + 内置组件）。
 
@@ -216,10 +219,53 @@ function myPlugin(): VirtTablePlugin {
 | `onRowCreated(tr, row, rowIndex)` | 行 DOM 新建（虚拟滚动复用行时不触发） |
 | `onCellRendered(td, col, row, rowIndex)` | 数据单元格填充完成 |
 | `onHeaderCellRendered(th, col, headerRow)` | 表头单元格填充完成 |
+| `onRendered()` | 一帧渲染完成。行 DOM 与位置都已就位，适合重绘依赖行几何的浮层 |
 | `onDataChanged(list)` | 数据管线重建（换数据/排序/筛选/折叠展开） |
+| `onCheckedRowsChanged(keys)` | 单行勾选、全选、`setCheckedRows` 或 `clearCheckedRows` 后；保留用户原有勾选回调 |
 | `onScroll(scrollLeft, offset)` | 横向或纵向滚动 |
 | `onColumnsChanged()` | 列结构变化（`setColumns` / 列显隐） |
+| `onRowHeightChanged(size)` | `setRowHeight` 后 |
 | `onLocaleChanged(locale)` | `setLocale` 后 |
+| `transformSourceRows(rows) → rows` | **唯一有返回值的一条**，见下 |
+
+`ctx.table.getSourceRowKeys()` 返回源行主键的字符串副本，包含树子节点和筛选/分页隐藏行，适合追加导入前检查冲突。
+
+### `transformSourceRows`：在管线最前面换掉整份数据
+
+其余钩子都是「通知」，这一条是「变换」。它插在数据管线的**最前面**：
+
+```
+_originList → transformSourceRows → 筛选 → 排序 → 分页 → 聚合 → 结构展开 → 提交
+```
+
+所以变换出来的行会**照常**享受筛选、排序、树形折叠、合计行 —— 这也是透视表能直接复用
+「树 + 分组表头」的原因（见[企业版 · 透视表](/vanilla/enterprise/pivot)）。
+
+```ts
+ctx.on('transformSourceRows', (rows) => rows.filter((r) => !r.deleted));
+```
+
+约定：
+
+- 返回的是**新数组**，别就地改 `rows`（那是使用方的数组）
+- 抛异常 → 这一次变换被跳过（用原始数据继续）并告警，表格不会白屏
+- 返回非数组 → 同样跳过并告警；返回**空数组是合法的**（真的一行都不剩）
+- 注册了它的插件在装载完成后会触发一次强制重建 —— 否则首帧是插件装载**之前**算的
+
+### 插件提供的服务（`ctx.inject`）
+
+| 服务名 | 谁提供 | 拿到什么 |
+| --- | --- | --- |
+| `cellSelection` | `vtCellSelection` | `getSelection()` / `setSelection()` / `clearSelection()` / `buildSelectionRows()` / `refresh()` / `subscribe(fn)` |
+| `toolbar` | `vtToolbar` | `register(item)`（返回退订函数）/ 面板开关 |
+| `columnFilter` | `vtColumnFilter` | `open(colKey, anchor?)` / `close()` / `canFilter(colKey)` |
+
+::: tip 跟着选区刷要用 `subscribe`，不要用 `onChange`
+`vtCellSelection({ onChange })` 与表格 `options.onCellSelectionChange` 都只有**一个**槽位，
+而且前者顶掉后者 —— 那是留给使用方的。插件要跟着选区更新（状态栏的选区聚合、跟着选区走的
+图表）一律走 `service.subscribe(fn)`：它是多消费者的，返回退订函数，某个订阅者抛异常也
+只是告警一次、不会连带让框选失灵。
+:::
 
 约定与边界：
 

@@ -91,6 +91,12 @@ export default defineConfig({
          */
         'infer-columns': r('src/infer-columns.ts'),
         /*
+         * 导入的纯逻辑层（CSV 解析 / zip 解包 / xlsx 读取）。单独成入口的理由与
+         * `infer-columns` 同一条：它零 DOM，**服务端要能单独引**（后端解析上传的 xlsx
+         * 走的就是这份），而不该被迫拉进整个表格。
+         */
+        'sheet-import': r('src/sheet-import.ts'),
+        /*
          * 自绘滚动条的公开入口（付费包 `@virt-table-pro/gantt` 的双 pane 要它）。
          * 单独成入口的理由与上面两条同源：只想画一条滚动条的使用方不该被迫拉进整张表。
          * 它与主入口引用同一个 `Scrollbar`，Rollup 会提成共享 chunk —— 不会有两份实现。

@@ -1,18 +1,34 @@
 name: Deploy static content to Pages
 
-# ⚠️ 这个 workflow 发出来的站**不含付费能力**（桩档）。
+# 这个 workflow 发出来的站**带完整付费能力** —— 靠的是入库的 vendor 产物，不是 secret。
 #
-# runner 上没有私有仓库 `virt-table-pro`，`scripts/pro-tgz.mjs` 会 warn 后跳过，
-# 三个微应用于是落到 `off` 档 —— 页面上每个付费插件的 demo 位都是一张说明卡，
-# 右下角还有一条「付费能力未装载」的提示（见 docs/apps/pro-kit/README.md）。
+# 付费插件住在私有仓库 `virt-table-pro`，runner 上没有它。所以维护者在本地跑
+# `pnpm pro:vendor` 把**混淆后**的付费产物打进 `docs/.pro-vendor/` 并提交，
+# CI 直接吃它（`build/pro-mode.ts` 的 `vendor` 档，判定是自动的，不需要设任何环境变量）。
 #
-# 于是 `on.push` 有一个后果要知道：**手动部署一个带付费能力的站之后，下一次 push 会把它
-# 覆盖成桩档站**。三条路，按推荐度：
-#   1. 去掉下面的 `on.push`，只留 `workflow_dispatch` —— 部署变成显式动作；
-#   2. 接受它，每次 push 之后重新手动发一次（很容易忘）；
-#   3. 让 CI 也能拿到付费包：给 pro 仓库配私有远端 + `VT_PRO_TOKEN`，
-#      在 install 之后加一步把 tgz 铺进来（`node scripts/install-pro-tgz.mjs <dir>`）。
-# 目前是第 2 条。
+# 于是 `on.push` 不再有后遗症：**每次 push 发出来的都是带付费能力的站**。
+# （2026-08 之前不是这样：那时 runner 上没有任何付费产物，站必然是桩档，
+# 只能"手动重发一次"来补 —— 而那是一定会忘的事。）
+#
+# ## 两件跟着来的责任
+#
+# 1. **pro 代码改了要重新打产物**，否则线上是旧版付费能力：
+#        pnpm pro:vendor && git add docs/.pro-vendor
+#    pro 没变时重复跑不产生 diff（混淆 seed 取内容哈希），可以放心跑。
+#
+# 2. **演示密钥缺省只有 7 天**（刻意的，用来在线上真的看见"密钥到期会怎样"）。
+#    过期后付费 demo 右下角出现未授权角标，**功能不降级**；`verify:pro-vendor` 会在
+#    构建日志里 warn 但**不判红**。续签：
+#        pnpm pro:vendor --key-only && git add docs/.pro-vendor
+#
+# ## fork 与外部贡献者
+#
+# 他们的 checkout 里如果没有 `docs/.pro-vendor/`，构建照旧落 `off` 档、**全绿**
+# （付费 demo 位变成说明卡）。所以这里刻意**不用** `build:docs:strict` ——
+# strict 会因为"缺付费产物"判红，把所有 fork 的 CI 一起弄红。
+# 「本该带付费能力却发成桩档」这件事由 `verify:pro-leak` 兜住：付费产物可用却没被打进
+# 产物时它判红（见那个脚本里的 `expectPro`）。
+
 on:
   push:
     branches: ['master']
@@ -49,12 +65,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      # 走根脚本而不是逐条敲 vite/vitepress：`build:docs` 串了三道东西，
+      # 走根脚本而不是逐条敲 vite/vitepress：`build:docs` 串了四道东西，
       # 分开写就会像先前那样把它们全绕过去（见文件头）。
+      #   build             → 三端核心包（三个 demo app 的 tsconfig 把 `@virt-table/vanilla`
+      #                       的类型指向 `packages/vanilla/dist` 的 d.ts，而 dist 是 gitignore
+      #                       的；fresh checkout 上不先构建，`tsc -b` 会以 TS2307 起头红一片）
       #   verify:enterprise → 付费文档的 include / 链接 / 锚点
-      #   pro-tgz           → 打包并铺付费包（runner 上没有 pro 仓库，会 warn 后跳过）
+      #   pro-tgz           → 打包并铺付费包（runner 上没有 pro 仓库，会 warn 后跳过，
+      #                       于是档位落到入库的 vendor 产物 —— 见文件头）
+      #   verify:pro-vendor → 入库产物的清单哈希 / 混淆特征 / 密钥有效期
+      #                       （目录不在时直接放过，fork 因此不会红）
       #   docs build        → 三个微应用 + VitePress
-      #   verify:pro-leak   → 公开产物里有没有付费源码痕迹
+      #   verify:pro-leak   → 公开产物里有没有付费源码痕迹，以及"本该有付费能力却没打进去"
       - name: Build docs site
         run: pnpm build:docs
         env:

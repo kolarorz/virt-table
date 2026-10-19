@@ -33,6 +33,10 @@ import '@virt-table/vanilla/core.css';
 或者直接引全量合集 `@virt-table/vanilla/style.css`。详见
 [Vanilla 特殊说明 · 样式引入](/vanilla/guide/notes#样式引入)。
 
+插件、内置组件、`ai-query` / `infer-columns` 各有独立子路径入口（用不到的会被
+tree-shaking 摇掉），完整的子路径与样式对应表见
+[Vanilla 特殊说明 · 包入口与按需引入](/vanilla/guide/notes#包入口与按需引入)。
+
 ## itemKey 必须唯一
 
 `itemKey` 指定的字段值在数据列表中必须唯一。它用于：

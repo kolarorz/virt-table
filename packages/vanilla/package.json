@@ -1,6 +1,6 @@
 {
   "name": "@virt-table/vanilla",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "行列双向虚拟化的高性能表格，零框架依赖：合并单元格、分组表头/表尾、固定行列、树形、编辑器、插件化",
   "type": "module",
   "license": "MIT",
@@ -94,6 +94,10 @@
       "import": { "types": "./dist/ai-query.d.ts", "default": "./dist/ai-query.js" },
       "require": { "types": "./dist/ai-query.d.cts", "default": "./dist/ai-query.cjs" }
     },
+    "./sheet-import": {
+      "import": { "types": "./dist/sheet-import.d.ts", "default": "./dist/sheet-import.js" },
+      "require": { "types": "./dist/sheet-import.d.cts", "default": "./dist/sheet-import.cjs" }
+    },
     "./core.css": "./dist/core.css",
     "./style.css": "./dist/style.css",
     "./package.json": "./package.json"
@@ -106,10 +110,10 @@
     "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@virt-list/core": "^0.0.9"
+    "@virt-list/core": "^0.0.11"
   },
   "devDependencies": {
-    "@virt-list/vanilla": "^0.0.9",
+    "@virt-list/vanilla": "^0.0.11",
     "lodash-es": "^4.18.1",
     "vite": "^7.3.1"
   }

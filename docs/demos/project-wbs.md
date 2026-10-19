@@ -1,14 +1,14 @@
 # 项目管理 WBS
 
+<PlaygroundHost framework="vanilla" example-id="demo-project-wbs" />
+
+## 这个案例做了什么
+
 一份 **5 期 / 3000 个任务 + 35 个工作包**的工程 WBS：左边是任务表（阶段 → 模块 → 任务，三层树），右边是甘特时间轴，中间那条分界可以拖着调宽度、任务面板也能整块收起。
 
 - **行在两边始终对齐**，纵向滚动、树形展开、排序筛选之后都对齐；
 - 时间轴按**时间桶**虚拟化，时间跨度再长、任务再多，DOM 里也只有一屏（看页面上那条统计）；
 - 甘特插件只负责时间轴与条形层，其余（行虚拟化、树形 WBS、单元格组件、编辑、行拖拽、筛选、搜索、导出）都是核心能力。
-
-## 在线体验
-
-<PlaygroundHost framework="vanilla" example-id="demo-project-wbs" />
 
 ## 本案例中涉及企业版功能
 
@@ -83,4 +83,4 @@
 <<< @/apps/vanilla/src/demos/project-wbs.ts
 :::
 
-付费插件不在本仓库里，所以源码里 `@virt-table-pro/gantt` 那条 import 在**没有付费仓库的机器上会解析到一个桩**（表格照常跑、只是没有条）—— 这套「公开仓库怎么消费私有付费包、且公开产物里不含付费源码」的做法见 [`docs/apps/vanilla/src/pro/README.md`](https://github.com/kolarorz/virt-table/blob/master/docs/apps/vanilla/src/pro/README.md)。
+付费插件不在本仓库里，所以源码里 `@virt-table-pro/gantt` 那条 import 在**没有付费仓库的机器上会解析到一个桩**（表格照常跑、只是没有条）—— 这套「公开仓库怎么消费私有付费包、且公开产物里不含付费源码」的做法见 [`contributing/pro-plugins.md`](https://github.com/kolarorz/virt-table/blob/master/contributing/pro-plugins.md)。

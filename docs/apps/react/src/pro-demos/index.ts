@@ -11,21 +11,31 @@
 import type { FC } from 'react';
 import { withProDemoShell } from './shell';
 import { LicenseDemo } from './LicenseDemo';
-import { ViewsDemo } from './ViewsDemo';
+// 命名视图暂不出售，demo 一并摘掉（2026-08-31）。`./views.ts` 与三端的 views.md 都留着，
+// 恢复清单见 `docs/enterprise/index.md` 的同日注释。
+// import { ViewsDemo } from './ViewsDemo';
 import { UndoDemo } from './UndoDemo';
 import { FormulaColumnDemo } from './FormulaColumnDemo';
 import { SheetDemo } from './SheetDemo';
 import { GanttDemo } from './GanttDemo';
+import { XlsxDemo } from './XlsxDemo';
+import { PivotDemo } from './PivotDemo';
+import { StatusBarDemo } from './StatusBarDemo';
+import { SparklineDemo } from './SparklineDemo';
 import { TypesDemo } from './TypesDemo';
 
 export const proDemoRegistry: Record<string, FC> = {
   // 一进来必须是未授权状态，否则「角标出现 → 注入 → 消失」的第一步看不到
   'pro-license': withProDemoShell(LicenseDemo, { license: 'reset' }),
-  'pro-views': withProDemoShell(ViewsDemo),
+  // 'pro-views': withProDemoShell(ViewsDemo),
   'pro-undo': withProDemoShell(UndoDemo),
   'pro-formula': withProDemoShell(FormulaColumnDemo),
   'pro-sheet': withProDemoShell(SheetDemo),
   'pro-gantt': withProDemoShell(GanttDemo),
+  'pro-xlsx': withProDemoShell(XlsxDemo),
+  'pro-pivot': withProDemoShell(PivotDemo),
+  'pro-status-bar': withProDemoShell(StatusBarDemo),
+  'pro-sparkline': withProDemoShell(SparklineDemo),
   'pro-types': withProDemoShell(TypesDemo),
 };
 

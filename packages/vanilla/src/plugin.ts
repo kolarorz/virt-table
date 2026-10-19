@@ -7,6 +7,7 @@ import type {
   VirtTableOptions,
   VirtTableState,
 } from './index';
+import type { MergeCell } from './merge';
 import type { VirtTableLocale } from './locale';
 
 /**
@@ -219,6 +220,54 @@ export interface VirtTableHost<T extends Record<string, any> = any> {
    */
   getState(): VirtTableState;
   setState(state: VirtTableState | null | undefined): boolean;
+
+  // ---- 合并单元格 ----
+  /**
+   * 静态合并配置（`options.merges` / `setMerges()` 传入的那份），返回副本。
+   *
+   * **不含**列 `mergeKey` 产出的自动合并 —— 那部分是派生状态、跨度随数据变。
+   * 要还原「用户看到的合并结构」用 `getEffectiveMerges()`。
+   */
+  getMerges(): MergeCell[];
+  /**
+   * 指定行区间内**实际生效**的合并块：静态 `merges` + 自动合并解析出的真实段。
+   *
+   * 给的是段的**真实起止**，不受渲染窗口影响 —— 这正是导出需要的：xlsx 里的
+   * `<mergeCells>` 描述整张表，而渲染裁剪出的那份只描述当前一屏。
+   *
+   * 坐标系与 `options.merges` 一致：`rowIndex` 是显示列表（树形展开后）的行号，
+   * `colIndex` 是**非固定列**中的列号。
+   *
+   * 不传区间则覆盖整份显示列表 —— 自动合并的段数与行数同阶，百万行会产出十万级
+   * 数组，按需传区间。
+   */
+  getEffectiveMerges(rowBegin?: number, rowEnd?: number): MergeCell[];
+  /**
+   * 整体替换静态合并配置。
+   *
+   * 给「把行集整个换掉」的插件用：合并坐标是按**显示行号**定义的，换了行集之后原来那份
+   * 指向的行已经不存在了 —— 不清掉的话表上会浮着一批位置毫无意义的合并格。
+   * `@virt-table-pro/pivot` 在开启透视时把它存一份并清空，关掉透视时原样还回去。
+   *
+   * 传空数组 = 没有静态合并（列上的 `mergeKey` 自动合并不受影响，那是列配置）。
+   */
+  setMerges(merges: MergeCell[]): void;
+
+  /**
+   * 源数据的行数 —— **筛选、搜索、分页之前**的那一份。
+   *
+   * `ctx.getList()` 给的是管线出口（筛完排完展开完的展示列表），而
+   * `getOptions().list` **不能**当源数据用：核心会把它改写成展示列表交给虚拟滚动，
+   * 筛掉一半之后读它拿到的是筛后的长度（`@virt-table-pro/status-bar` 就是在这上面踩了一次，
+   * 「总行数」跟着筛选一起变了）。
+   *
+   * 只给数量不给数组：源数据是使用方的引用，交出去等于允许插件就地改它 ——
+   * 而管线的唯一数据源就是它，改了之后表格的状态与使用方手里那份会静默分叉。
+   * 真要遍历源数据的插件请自己持有传进来的那份（`transformSourceRows` 的入参就是它）。
+   */
+  getSourceRowCount(): number;
+  /** 源行主键副本，包含树子节点及不可见的源行。 */
+  getSourceRowKeys(): string[];
 }
 
 export interface CellSelectionRange {
@@ -276,6 +325,17 @@ export interface CellSelectionService {
   buildSelectionRows(): SelectionRows | null;
   /** 重绘 overlay（数据/滚动/列几何变化后） */
   refresh(): void;
+  /**
+   * 订阅选区变化，返回退订函数。触发时机与 `onChange` 完全相同
+   * （拖选结束、程序化 `setSelection`、`clearSelection`）。
+   *
+   * 与 `options.onChange` / `options.onCellSelectionChange` 的区别是**多消费者**：
+   * 那两处各只有一个槽位、后者还会被前者顶掉，所以只适合使用方自己用。插件想跟着
+   * 选区更新（状态栏的选区聚合、跟随选区的图表）必须走这一条，否则装两个就会互相抢掉回调。
+   *
+   * 订阅者抛异常会被吞掉并 `console.warn` —— 一个消费者写崩了不该连带让选区功能失灵。
+   */
+  subscribe(listener: (range: CellSelectionRange | null) => void): () => void;
 }
 
 /**
@@ -313,6 +373,41 @@ export interface PluginHooks<T extends Record<string, any> = any> {
   onRendered?: () => void;
   /** 数据管线重建完成（换数据/排序/筛选/折叠展开都会触发） */
   onDataChanged?: (list: T[]) => void;
+  /** 勾选状态变化（单行、全选及命令式 API）；不占用用户回调。 */
+  onCheckedRowsChanged?: (keys: readonly string[]) => void;
+  /**
+   * ⚠️ **钩子表里唯一有返回值的一条** —— 其余全是通知，这个是**变换**。
+   *
+   * 在数据管线的**最前面**把源行集换成别的：返回值取代 `_originList`，之后的
+   * 筛选 → 排序 → 分页 → 聚合 → 结构展开全部作用在返回值上。
+   *
+   * ```
+   * _originList → [transformSourceRows] → 筛选 → 排序 → 分页 → 聚合 → 结构展开 → 提交
+   * ```
+   *
+   * ## 为什么位置在最前面
+   *
+   * 真正需要它的是「把明细行换成另一种行」的插件（`@virt-table-pro/pivot` 把明细换成
+   * 透视结果）。这类插件**同时会换掉列**，而筛选与排序的谓词是照**当前列**建的 ——
+   * 换列之后再筛明细行就是拿透视列的谓词去问明细行，那没有意义。所以变换必须先跑完，
+   * 之后的查询阶段面对的是同一套列与同一批行。
+   *
+   * 代价要如实知道：**源数据级的筛选走不了列头筛选**了（列头筛选此时作用在变换结果上）。
+   * 需要「只统计已完成的订单」这种就在变换里自己筛，或者先筛好数组再 `setList`。
+   *
+   * ## 三条约定
+   *
+   * 1. **不要改传进来的数组**，也不要改里面的行对象。那是使用方的数据，
+   *    核心自己从头到尾没碰过它。要变形就返回新数组。
+   * 2. **返回值可以是树**（行带 `children`）—— 但只有在某一列配了 `type: 'tree'`
+   *    时核心才会展开它并给折叠箭头。透视要复用折叠展开就得自己把那一列配上。
+   * 3. **每次 `_rebuildData` 都会调**（折叠一下、排一次序都算）。所以贵的计算
+   *    必须自己按「入参数组引用 + 自己的配置」记缓存，否则十万行会在每次折叠时重算一遍。
+   *
+   * 多个插件按注册顺序串联（前一个的返回值是后一个的入参）。某一个抛异常时
+   * 只有它被跳过（记一条 `console.error`），链上其余的照常跑 —— 与 setup 失败不连坐同理。
+   */
+  transformSourceRows?: (rows: T[]) => T[];
   /** 横向滚动或纵向滚动（scrollLeft / 纵向 offset） */
   onScroll?: (scrollLeft: number, offset: number) => void;
   /** 列结构变化（setColumns / 列显隐 / 列顺序） */
@@ -476,6 +571,8 @@ export class PluginRuntime<T extends Record<string, any>> {
     onHeaderCellRendered: [],
     onRendered: [],
     onDataChanged: [],
+    onCheckedRowsChanged: [],
+    transformSourceRows: [],
     onScroll: [],
     onColumnsChanged: [],
     onRowHeightChanged: [],
@@ -497,6 +594,10 @@ export class PluginRuntime<T extends Record<string, any>> {
   }
   get hasHeaderCellHooks(): boolean {
     return this._hooks.onHeaderCellRendered.length > 0;
+  }
+  /** 有没有插件要接管源行集（核心据此完全跳过这一步，含那次 try/catch） */
+  get hasSourceTransform(): boolean {
+    return this._hooks.transformSourceRows.length > 0;
   }
 
   /**
@@ -618,8 +719,41 @@ export class PluginRuntime<T extends Record<string, any>> {
     for (const fn of this._hooks.onRendered) fn();
   }
 
+  emitCheckedRowsChanged(keys: readonly string[]): void {
+    for (const fn of this._hooks.onCheckedRowsChanged) fn(keys);
+  }
+
   emitDataChanged(list: T[]): void {
     for (const fn of this._hooks.onDataChanged) fn(list);
+  }
+
+  /**
+   * 串联全部 `transformSourceRows`，返回最终行集。
+   *
+   * 三道兜底，都是「一个坏插件不该搞死整张表」的同一条原则：
+   * 抛异常 → 跳过它、保留上一环的结果；返回非数组 → 同样跳过并告警
+   * （最常见的是忘了 `return`，那会让整张表变空 —— 空表看起来像「数据没加载」，
+   * 是最难查的一种失败）。
+   */
+  applySourceTransform(rows: T[]): T[] {
+    let out = rows;
+    for (const fn of this._hooks.transformSourceRows) {
+      let next: T[];
+      try {
+        next = fn(out);
+      } catch (err) {
+        console.error('[VirtTable] transformSourceRows 抛出异常，已跳过这一环：', err);
+        continue;
+      }
+      if (!Array.isArray(next)) {
+        console.warn(
+          '[VirtTable] transformSourceRows 必须返回数组（忘了 return？），已跳过这一环。',
+        );
+        continue;
+      }
+      out = next;
+    }
+    return out;
   }
 
   emitScroll(scrollLeft: number, offset: number): void {

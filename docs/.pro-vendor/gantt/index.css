@@ -1,0 +1,1798 @@
+/**
+ * 甘特覆盖层。
+ *
+ * ## z-index 为什么是 3
+ *
+ * 核心的层序：`td` 无 z-index → 固定列 `4` → 空态 `5` → 激活格描边 `6` →
+ * 表头/表尾 `10` → 固定列阴影 `20` → 滚动条 `30`。取 3 恰好落在
+ * 「盖住单元格底色」与「被冻结的任务列盖住」之间 —— 横滚时条会正确地滑到
+ * 左侧任务列**之下**，而不是浮在上面。
+ *
+ * ## 为什么 `width: 0`
+ *
+ * 层挂在 `.vt-client`（滚动容器，`position: relative`）里，于是它的绝对定位子元素
+ * 跟着内容一起被平移 —— 横滚零 JS 就来自这里。但**不能**用 `left:0; right:0`：
+ * 绝对定位的百分比与 `right` 是按容器**未滚动时的 padding 盒**解析的，那是可视宽度
+ * 而不是内容宽度，一横滚就露馅。宽度取 0、子元素一律写像素级 `left`，
+ * 让它们自然溢出（甘特的 x 都夹在时间轴列的像素范围内，撑不大 `scrollWidth`）。
+ *
+ * 颜色全部走 CSS 变量，且默认值派生自核心的 `--vt-*` —— 使用方换主题时甘特跟着变，
+ * 不需要再配一遍。
+ *
+ * ⚠️ **两个选择器都要**：时间轴 pane 在 `.vt-root` 之外（它是 root 的兄弟，见 pane.ts），
+ * 只声明在 `.vt-root` 上的话 pane 里这批 `--vtp-gantt-*` 全部解析不到。
+ * 核心的 `--vt-*` 同理，靠给容器加 `vt-fb` 解决。
+ */
+
+.vt-root,
+.vtp-gantt-split {
+  /* 条 */
+  --vtp-gantt-bar-bg: var(--vt-color-primary);
+  /*
+   * 进度段是在条底色上压一层黑。34% 是实测挑的：22% 时 90% 与 100% 两种进度
+   * 在一条 68px 宽的条上肉眼分不出来 —— 进度条画了等于没画。
+   * 不用另一个色值而用叠加，是为了 `barClass` 换了条底色之后进度段自动跟着走。
+   */
+  --vtp-gantt-bar-progress-bg: rgb(0 0 0 / 34%);
+  --vtp-gantt-bar-radius: var(--vt-radius-sm);
+  --vtp-gantt-bar-text: var(--vt-text-inverse);
+  /* 条**外**的文字落在表格底色上，必须用正文色而不是反色 */
+  --vtp-gantt-bar-text-outside: var(--vt-text-color);
+  /* 汇总条 */
+  --vtp-gantt-summary-bg: var(--vt-text-secondary);
+  /* 时间轴标记（贯穿所有行的竖线 / 底纹带） */
+  --vtp-gantt-marker-color: #8b5cf6;
+  --vtp-gantt-marker-width: 2px;
+  /*
+   * 非工作日底纹。必须是**半透明**的：不透明色会把它盖住的那一行的底色整块换掉 ——
+   * 分组行的蓝底、斑马纹、hover 高亮全都会在周末那一列出现一个「洞」，
+   * 看起来像那一列没渲染出来（实测被当成 bug 报过：range 首桶正好是周日时尤其明显）。
+   * 暗色那边一开始就是半透明的，这里跟它对齐。
+   */
+  --vtp-gantt-nonworking-bg: rgb(0 0 0 / 3.5%);
+  /**
+   * 「不计入工期」那几天的斜线颜色。
+   *
+   * **不能复用 `--vtp-gantt-nonworking-bg`**：那是 3.5% 的黑，铺满一格时刚好是一层淡底，
+   * 而拆成 2px 宽的斜线之后每根线只剩那点浓度 —— 实测看不出是斜线，只像脏了一块。
+   * 所以单独给一档，默认取边框色（比底纹重、比正文轻）。
+   */
+  --vtp-gantt-excluded-color: var(--vt-border-color);
+  /* 网格线 */
+  --vtp-gantt-grid-color: var(--vt-border-color-light);
+  --vtp-gantt-grid-group-color: var(--vt-border-color);
+  /*
+   * 「今天」线。用**蓝色**而不是红色：红色在项目管理界面里已经被「有风险 / 延期」
+   * 占掉了语义，一条常驻的红线会让人以为整张表都在告警。
+   */
+  --vtp-gantt-today-color: var(--vt-color-primary);
+  /* 出头旗标的边长。CSS 里要用它反算 top，所以必须是个变量而不是写死 */
+  --vtp-gantt-flag-size: 15px;
+  /* 越界跳转箭头与时间轴边缘的间距 */
+  --vtp-gantt-jump-gap: 6px;
+}
+
+/*
+ * 注：对核心 `.vt-th` / `.vt-td` 的两处调整（时间桶表头去横向内边距、
+ * 只关时间轴区的行横线）**不在这个文件里** —— 它们要按 `data-col-key` 前缀区分
+ * 时间轴列与业务列，而前缀是可配的（`colKeyPrefix`），静态 CSS 只能写死默认值。
+ * 见 index.ts 的 `ensurePrefixStyle()`。
+ */
+
+.vtp-gantt-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  /* 见文件头：3 = 单元格底色之上、冻结列之下 */
+  z-index: 3;
+  /* 层本身不吃指针事件，只有条与手柄打开（否则整个表格都点不动了） */
+  pointer-events: none;
+}
+
+/* ---- 背景装饰层：非工作日 / 网格线 ---- */
+
+/**
+ * 与覆盖层分开的一层，插在 `.vt-client` 的**最前面**（两张 table 之前）。
+ *
+ * 目的是让**分组行整行挡住它**：分组行是结构分隔行，时间轴底纹从它身上透出来
+ * 看着像渲染残留。靠 DOM 顺序而不是 z-index —— 本层与分组格都是「已定位、
+ * z-index: auto」，DOM 里更靠后的分组格胜出。
+ *
+ * **本层刻意不写 z-index**：已定位元素天然排在未定位的 `td` 底色之上（普通数据行
+ * 照样被染色），而冻结列是 `z-index: 4`，照样盖得住它。写了 z-index 就会跳到
+ * 分组格上面，前面那个目的就没了。
+ *
+ * `width: 0` 的理由同覆盖层：`right: 0` 会按未滚动时的可视宽度解析。
+ */
+.vtp-gantt-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.vtp-gantt-nonworking,
+.vtp-gantt-grid {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+
+.vtp-gantt-nonworking {
+  background: var(--vtp-gantt-nonworking-bg);
+}
+/**
+ * **不计入工期**的那几天：斜线。
+ *
+ * 与普通非工作日的浅色块分开，因为它们说的是两件事 —— 浅色块是「这天是周末」，
+ * 斜线是「条上那个『n 天』跳过了这几天」。`workdaysOnly` 下的周末、`skipHolidays` 下的
+ * 法定节假日都画它。
+ *
+ * 斜线用 `repeating-linear-gradient` 而不是背景图：跟着 `--vt-*` 走（暗色自动变），
+ * 也不需要多一个请求。间距 6px 是调过的 —— 4px 在 34px 宽的日格里密得像实心块，
+ * 8px 又疏得看不出是斜线。
+ */
+.vtp-gantt-nonworking--excluded {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--vtp-gantt-excluded-color) 0,
+    var(--vtp-gantt-excluded-color) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+}
+
+
+.vtp-gantt-grid {
+  width: 1px;
+  background: var(--vtp-gantt-grid-color);
+}
+
+.vtp-gantt-grid--group {
+  background: var(--vtp-gantt-grid-group-color);
+}
+
+/* ---- 时间轴标记：一个里程碑 = 一条贯穿所有行的竖线 ---- */
+
+/**
+ * 与「行内里程碑」（菱形，只在自己那一行）刻意画得完全不同 —— 早先两者都是菱形，
+ * 结果没人分得清「这条线是里程碑吗」。竖线贯穿全高 = 轴上的注记，菱形 = 行内的节点。
+ *
+ * 元素本身做成**透明的加宽命中区**（`MARKER_HIT` 宽），真正的线是居中的 `::before`。
+ * 2px 的线太细，指针几乎碰不到，hover 显名就成了摆设。
+ */
+.vtp-gantt-marker {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 9px;
+  /* 命中区要减掉一半宽度才能让线落在 `left` 指定的那个像素上 */
+  margin-left: -4px;
+  /* 层是 pointer-events: none，这里单独开，否则 hover 不到 */
+  pointer-events: auto;
+  cursor: default;
+}
+
+.vtp-gantt-marker::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4px;
+  width: var(--vtp-gantt-marker-width);
+  height: 100%;
+  background: var(--vtp-gantt-marker-color);
+}
+
+/**
+ * 名字**默认不显示，hover 竖线才出来**。
+ *
+ * 静态画面上一堆常驻标签会把时间轴糊住（尤其里程碑密集时它们还会互相压字），
+ * 而线本身已经足够表达「这里有个节点」。
+ *
+ * 位置贴在**可见数据区的上缘**：覆盖层从内容层顶端起算，而那一段是时间轴表头
+ * （`sticky`，会盖住标签），得让开它。
+ *
+ * ⚠️ 高度取 **`--vtp-gantt-head-h`**（`rebuildHead()` 写在 split 容器上 = 时间轴表头的
+ * 实测高度），核心的 `--vt-body-view-t` 只是兜底。二期这里漏了一处：那个变量声明在
+ * `.vt-root` 上，而标签现在住在 **pane** 里（`.vt-root` 之外）—— 变量继承不到就回落 0，
+ * 标签整块躲进表头背后。表现是「hover 里程碑不显示名字」，而 hover 其实一直是好的
+ * （实测 `:hover` 命中、`opacity` 到 1，只是画在了 y=348 而表头底边在 413）。
+ * 旗标那条（`.vtp-gantt-flag`）当时改对了，这条被漏下。
+ *
+ * `z-index: 1` 是为了抬到条之上：标记在静态层、条在条形层，静态层在 DOM 里排前面，
+ * 默认会被条盖住（实测首行的汇总条正好压在标签上）。只抬标签不抬竖线 ——
+ * 线压在条上会把条切成两段。
+ */
+.vtp-gantt-marker__label {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--vtp-gantt-head-h, var(--vt-body-view-t, 0px)) + 3px);
+  left: 4px;
+  padding: 1px 6px;
+  border-radius: 0 var(--vt-radius-sm) var(--vt-radius-sm) 0;
+  background: var(--vtp-gantt-marker-color);
+  color: var(--vt-text-inverse);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vtp-gantt-marker:hover .vtp-gantt-marker__label,
+.vtp-gantt-marker:focus-visible .vtp-gantt-marker__label {
+  opacity: 1;
+}
+
+/**
+ * 「今天」是一条内置的里程碑标记，只换配色。
+ *
+ * 半透明：它压在条上时条还看得见，而不是被切成两段。用户自己加的里程碑不做半透明 ——
+ * 那些是需要被看见的节点，而「今天」是背景参照。
+ */
+.vtp-gantt-marker--today {
+  --vtp-gantt-marker-color: var(--vtp-gantt-today-color);
+}
+
+.vtp-gantt-marker--today::before {
+  opacity: 0.75;
+}
+
+
+
+/* ---- 条 ---- */
+
+.vtp-gantt-bars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+}
+
+.vtp-gantt-bar {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--vtp-gantt-bar-radius);
+  background: var(--vtp-gantt-bar-bg);
+  /* 条要能点、能拖 —— 层是 none，这里单独打开 */
+  pointer-events: auto;
+  /* 条上的文字允许溢出到条外（短条 + 长标题是常态） */
+  overflow: visible;
+  /* 不加 transition：位置每帧由 JS 写，加了就等于条落后于它代表的数据 */
+  cursor: default;
+}
+
+.vtp-gantt-bar--editable:not(.vtp-gantt-bar--locked) {
+  cursor: grab;
+}
+
+.vtp-gantt-bar--dragging {
+  cursor: grabbing;
+  box-shadow: var(--vt-shadow-md);
+  /* 拖动中的条要压在别的条之上，否则被相邻行的条盖住看不清落点 */
+  z-index: 2;
+}
+
+.vtp-gantt-bar__progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--vtp-gantt-bar-progress-bg);
+  pointer-events: none;
+}
+
+/**
+ * 条上的文字。三种落点由 JS 按测量结果给 class（见 index.ts 的 `applyLabelPlacement`）：
+ *
+ *   `--label-in`       放条内（放得下，读起来像条上的标签）
+ *   `--label-out`      放条右侧条外（条太短）
+ *   `--label-out-left` 放条左侧条外（右侧没地方了，再往右会撑大 scrollWidth）
+ *   `--label-clip`     条内截断（两侧都没地方，兜底）
+ *
+ * 基础样式只定位不决定方向，方向全靠下面四条覆盖。
+ */
+.vtp-gantt-bar__text {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  overflow: hidden;
+  color: var(--vtp-gantt-bar-text);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/**
+ * 条内右侧的工期（「12 天」）。
+ *
+ * 字号与标题同一档（测宽那份 font 是共用的，见 index.ts 的 `ensureFont`）。颜色**另有一个
+ * 变量**：它贴在右端，而标题在左端 —— 进度实色段只盖住左边一截，两个文字完全可能压在
+ * 不同的底色上（进度 60% 的条：标题在实色里、工期在浅底里）。
+ *
+ * 放不下时由 JS 直接 `display: none`（宽度是测出来的，CSS 判不了）。
+ */
+.vtp-gantt-bar__days {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  color: var(--vtp-gantt-bar-days-text, var(--vtp-gantt-bar-text));
+  font-size: var(--vt-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vtp-gantt-bar--label-in .vtp-gantt-bar__text,
+.vtp-gantt-bar--label-clip .vtp-gantt-bar__text {
+  /* 右端可能被工期徽标占掉一块（JS 把它的宽度写进 --vtp-gantt-bar-reserve） */
+  max-width: calc(100% - 12px - var(--vtp-gantt-bar-reserve, 0px));
+}
+
+/*
+ * 条外的文字：颜色必须换成正文色 —— 条内那个是反色（白），移到条外就落在表格底色上，
+ * 白字白底等于没有。`max-width: none` 是关键，否则它仍被条宽（可能只有几像素）夹住。
+ */
+.vtp-gantt-bar--label-out .vtp-gantt-bar__text,
+.vtp-gantt-bar--label-out-left .vtp-gantt-bar__text {
+  max-width: none;
+  color: var(--vtp-gantt-bar-text-outside);
+}
+
+.vtp-gantt-bar--label-out .vtp-gantt-bar__text {
+  left: 100%;
+  margin-left: 6px;
+}
+
+.vtp-gantt-bar--label-out-left .vtp-gantt-bar__text {
+  left: auto;
+  right: 100%;
+  margin-right: 6px;
+}
+
+/* ---- 手柄 ---- */
+
+.vtp-gantt-bar__grip {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+  /* 默认透明：手柄只在 hover 时显形，静态画面才干净 */
+  opacity: 0;
+  background: rgb(255 255 255 / 55%);
+}
+
+.vtp-gantt-bar__grip--start {
+  left: 0;
+  border-radius: var(--vtp-gantt-bar-radius) 0 0 var(--vtp-gantt-bar-radius);
+}
+
+.vtp-gantt-bar__grip--end {
+  right: 0;
+  border-radius: 0 var(--vtp-gantt-bar-radius) var(--vtp-gantt-bar-radius) 0;
+}
+
+.vtp-gantt-bar__progress-grip {
+  position: absolute;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border: 2px solid var(--vt-bg);
+  border-radius: var(--vt-radius-full);
+  background: var(--vtp-gantt-bar-bg);
+  cursor: ew-resize;
+  opacity: 0;
+}
+
+.vtp-gantt-bar:hover .vtp-gantt-bar__grip,
+.vtp-gantt-bar:hover .vtp-gantt-bar__progress-grip,
+.vtp-gantt-bar--dragging .vtp-gantt-bar__grip {
+  opacity: 1;
+}
+
+.vtp-gantt-bar--locked .vtp-gantt-bar__grip,
+.vtp-gantt-bar--locked .vtp-gantt-bar__progress-grip {
+  display: none;
+}
+
+/* ---- 汇总条：细一条 + 两端下垂的角，与普通任务一眼区分 ---- */
+
+.vtp-gantt-bar--summary {
+  border-radius: 2px;
+  background: var(--vtp-gantt-summary-bg);
+}
+
+.vtp-gantt-bar--summary::before,
+.vtp-gantt-bar--summary::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  width: 0;
+  height: 0;
+  border-top: 5px solid var(--vtp-gantt-summary-bg);
+}
+
+.vtp-gantt-bar--summary::before {
+  left: 0;
+  border-right: 5px solid transparent;
+}
+
+.vtp-gantt-bar--summary::after {
+  right: 0;
+  border-left: 5px solid transparent;
+}
+
+.vtp-gantt-bar--summary .vtp-gantt-bar__progress {
+  background: rgb(255 255 255 / 30%);
+}
+
+/* ---- 暗色 ---- */
+
+.vt-root--dark,
+.vt-fb--dark,
+.dark .vt-root:not(.vt-root--light),
+.dark .vt-fb:not(.vt-fb--light),
+[data-theme='dark'] .vt-root:not(.vt-root--light),
+[data-theme='dark'] .vt-fb:not(.vt-fb--light) {
+  /* 暗色下压黑会糊成一团，改成提亮 */
+  --vtp-gantt-bar-progress-bg: rgb(255 255 255 / 30%);
+  --vtp-gantt-nonworking-bg: rgb(255 255 255 / 4%);
+  --vtp-gantt-excluded-color: var(--vt-border-color);
+  --vtp-gantt-marker-color: #a78bfa;
+  --vtp-gantt-today-color: var(--vt-color-primary);
+}
+
+/* ==========================================================================
+ * 收起 / 展开左侧任务表的按钮
+ * ========================================================================== */
+
+/**
+ * 贴在冻结任务列与时间轴的交界处（第一个分组表头格的左侧）。
+ *
+ * 挂在 `.vt-root` 上而不是表头里：表头是核心拥有的 DOM（插件只可追加、不可重排），
+ * 而这个按钮要**盖在**表头格上，绝对定位更干净，也不受表头重建影响。
+ *
+ * z-index 见本节末尾那段「三件悬浮件的层序」。
+ */
+/**
+ * 收起 / 展开按钮。**挂在 `.vtp-gantt-split` 上，不是 pane 里。**
+ *
+ * pane 是横向滚动容器，而 `position: absolute` 在滚动容器里的原点是**内容**原点 ——
+ * 挂在里面的话横滚一下按钮就跟着内容漂走了（实测踩过）。split 容器不滚动，
+ * 于是这两个悬浮件的位置只由布局决定：横坐标由 JS 给（pane 相对 split 的左偏移），
+ * 纵向 `top: 0` 与表头对齐。
+ *
+ * 高度与底色走 `--vtp-gantt-head-strip-h/-bg` —— **与右上角的粒度切换器是同一对变量**，
+ * 两个悬浮件因此永远一样高（都只浮在表头的年月那一行里）。早先它是纵向横跨两行的竖带，
+ * 与切换器高矮不一，接缝处看着像两件不相干的东西。
+ */
+.vtp-gantt-panel-toggle {
+  position: absolute;
+  top: 0;
+  /*
+   * **13：压过粒度切换器（12）。**
+   *
+   * 时间轴被挤到 `MIN_TIMELINE_W`（120px）时，切换器（日/周/月/季 + 今天，约 166px）
+   * 会从右沿一路盖回来、把这颗按钮整个埋掉 —— 实测 `elementFromPoint` 打在按钮上取到的
+   * 是 `.vtp-gantt-zoombar`。而这颗按钮是**唯一的恢复路径**（把面板收起来，时间轴才回得来），
+   * 埋掉就等于甘特卡死在那个宽度上。这条 1 的差值就是那条可恢复性不变量。
+   *
+   * 上边界见下面「藏在左表表头之下」那段：本按钮低于左表的 `.vt-header`（14）。
+   */
+  z-index: 13;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /*
+   * `border-box`：右边框算进这 16px 里，于是「16px」就是**竖带占掉的可见宽度** ——
+   * 表头里吸左的年月标题要按这个数让开它（JS 的 `TOGGLE_W` 发布成 `--vtp-gantt-head-inset`），
+   * 少算那 1px 的话标题的第一个字会压在边框上。
+   */
+  box-sizing: border-box;
+  width: 16px;
+  height: var(--vtp-gantt-head-strip-h);
+  padding: 0;
+  border: 0;
+  border-right: var(--vt-border-width) solid var(--vt-border-color);
+  background: var(--vtp-gantt-head-strip-bg);
+  color: var(--vt-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vtp-gantt-panel-toggle:hover {
+  background: var(--vt-header-bg-hover);
+  color: var(--vt-text-color);
+}
+
+.vtp-gantt-panel-toggle:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: -2px;
+}
+
+/* 收起后箭头翻向右边：图标只有一个，靠旋转表达方向 */
+.vtp-gantt-panel-toggle--collapsed svg {
+  transform: rotate(180deg);
+}
+
+/**
+ * ## 三件悬浮件的层序：切换器 < 收起按钮 < 左表表头
+ *
+ * 三件东西都绝对定位在 `.vtp-gantt-split` 上、都只浮在表头那一条里，而**时间轴被挤窄时
+ * 它们会互相压**（实测：时间轴到 120px 下限时，`.vt-header` 占 29~1131、收起按钮 1132~1148、
+ * 切换器 1082~1248 —— 后者同时压住前两个）。所以这三层的相对次序是有理由的，不是排版顺序：
+ *
+ * | z | 谁 | 为什么在这一层 |
+ * | --- | --- | --- |
+ * | 10 | `.vtp-gantt-pane__head`（时间轴表头） | 三件悬浮件都要浮在它上面 |
+ * | 12 | `.vtp-gantt-zoombar`（粒度切换器） | 最低的那件：它最宽，挤窄时该被别人裁掉 |
+ * | 13 | `.vtp-gantt-panel-toggle`（收起按钮） | 唯一的恢复路径，不许被切换器埋掉 |
+ * | 14 | 左表的 `.vt-header` | 甘特的悬浮件不许盖到任务表的列标题上 |
+ * | 15 | `.vtp-gantt-resizer`（调宽把手） | 分界线得一直抓得到，包括表头那一段 |
+ * | 16 | `.vtp-gantt-marker-popup` | 浮层开着时谁都别盖它 |
+ *
+ * 再往上是核心的固定列阴影（20）与滚动条（30），以及 `vtRowDrag` 的 ghost（39~40）、
+ * tooltip（50）、加载遮罩（60/100）—— 都在 16 之上，这一段没有跨过去。
+ */
+
+/**
+ * 把左表表头抬到悬浮件之上（核心给的是 10）。
+ *
+ * 双 pane 之后 `.vt-header` 只覆盖任务面板那一段，而切换器贴的是**整幅**的右沿 ——
+ * 时间轴一窄，它就伸到任务表的列标题上面去了。那两样都是「表头里的字」，一个浮在另一个
+ * 上面看着就是渲染错乱；正确的观感是**切换器被分界线裁掉**，所以让表头赢。
+ *
+ * 三个类是刻意的：核心那条 `.vt-header` 只有一个类，特异度更高才不看两份样式表的加载顺序
+ * （与 `.vtp-gantt-split.vt-fb`、藏掉左表竖条那两条同一个理由）。只抬**表头**不抬表尾：
+ * 表尾在下边缘，那里没有悬浮件，只有滚动条（30）压着它 —— 那个次序本来就是对的。
+ */
+.vtp-gantt-split > .vt-root > .vt-header {
+  z-index: 14;
+}
+
+/* ==========================================================================
+ * 表头「加里程碑」按钮与输入浮层
+ * ========================================================================== */
+
+/**
+ * 一个浮动按钮，hover 到哪个日期格就挪过去 —— 时间轴动辄几百列，逐格塞 DOM
+ * 既要在每次表头重建时重跑一遍，又会在 hover 之外的时间白占几百个节点。
+ *
+ * z-index 12：与收起按钮同层，压过表头（10）与表头里的冻结格（11），低于滚动条（30）。
+ */
+.vtp-gantt-add-marker {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vt-radius-sm);
+  background: var(--vtp-gantt-marker-color);
+  color: var(--vt-text-inverse);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.vtp-gantt-add-marker:hover {
+  opacity: 1;
+}
+
+.vtp-gantt-add-marker:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: 1px;
+}
+
+.vtp-gantt-marker-popup {
+  position: absolute;
+  /*
+   * 16：高于「加里程碑」按钮（12），也高于收起按钮（13）、左表表头（14）与调宽把手（15）。
+   *
+   * 浮层开着时谁都别盖它 —— 尤其那条把手：它是 7px 的**透明**命中区，压在浮层上会静静
+   * 吃掉那一列的点击（浮层贴着分界线打开时就会撞上）。见收起按钮那节末尾的层序表。
+   */
+  z-index: 16;
+  /* 名字一行、色板一行、删除一行 —— 竖着排 */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-md);
+  background: var(--vt-bg-elevated);
+  box-shadow: var(--vt-shadow-md);
+}
+
+/**
+ * ⚠️ **`[hidden]` 必须显式写一条。**
+ *
+ * `hidden` 属性靠 UA 样式表里的 `[hidden] { display: none }` 生效，而**作者样式的优先级
+ * 永远高于 UA 样式** —— 上面那句 `display: flex` 直接把它盖掉了。表现是：浮层从挂载起就
+ * 一直可见，只是里面还没内容，于是在两个 pane 的交界处画出一个**14×14 的小圆点**
+ * （6px padding + 1px 边框 + 圆角 + 阴影）。
+ *
+ * 位置要在 `display: flex` **之后**（同特异度靠后者胜）。
+ */
+.vtp-gantt-marker-popup[hidden] {
+  display: none;
+}
+
+.vtp-gantt-marker-popup__row {
+  display: flex;
+  gap: 4px;
+}
+
+/**
+ * 预设色板。一排小圆点，当前色多一圈描边。
+ *
+ * 用**预设**而不是 `<input type="color">`：里程碑的颜色是分类用的（发布 / 评审 / 冻结），
+ * 任意取色只会让同一张图上出现十几种半斤八两的紫。
+ */
+.vtp-gantt-marker-popup__colors {
+  display: flex;
+  gap: 6px;
+  padding: 0 1px;
+}
+
+.vtp-gantt-marker-popup__color {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full, 999px);
+  /* 描边与色块之间留一圈底色，选中态才看得出是「套了个环」而不是变粗了 */
+  box-shadow: inset 0 0 0 1px var(--vt-bg-elevated);
+  cursor: pointer;
+}
+
+.vtp-gantt-marker-popup__color--on {
+  border-color: var(--vt-text-secondary);
+}
+
+/* 删除：这个面板是这些标记唯一的管理入口，只能改不能删的话点错一天就收不回来了 */
+.vtp-gantt-marker-popup__del {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vt-color-danger);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.vtp-gantt-marker-popup__del:hover {
+  text-decoration: underline;
+}
+
+.vtp-gantt-marker-popup__input {
+  width: 130px;
+  padding: 3px 6px;
+  border: var(--vt-border-width) solid var(--vt-border-color-strong);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+  color: var(--vt-text-color);
+  font: inherit;
+  font-size: var(--vt-font-size-sm);
+}
+
+.vtp-gantt-marker-popup__input:focus {
+  border-color: var(--vt-color-primary);
+  outline: none;
+}
+
+.vtp-gantt-marker-popup__ok {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+  font-size: var(--vt-font-size-sm);
+  cursor: pointer;
+}
+
+.vtp-gantt-marker-popup__ok:hover {
+  background: var(--vt-color-primary-hover);
+}
+
+/**
+ * 「可以在这排期」的提示：hover 到没有条的行的时间轴格上时显示的 `+`。
+ *
+ * 一个浮动元素跟着 hover 走（一屏几百个格子，不能每格一个），挂在 `.vt-root` 上
+ * 用绝对定位覆盖到当前那一格。
+ *
+ * `pointer-events: none` 是关键：它盖在格子上，吃掉指针事件的话
+ * `onBodyOver` / `onBodyClick` 就都收不到了 —— 提示自己把要提示的操作挡掉。
+ */
+.vtp-gantt-add-bar {
+  position: absolute;
+  /* 3 = 与条形层同层：盖住单元格底色，但被冻结的任务列（4）盖住 */
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 1px dashed var(--vt-color-primary);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-color-primary-softer);
+  color: var(--vt-color-primary);
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+ * 越界跳转箭头
+ * ========================================================================== */
+
+/**
+ * 条被横滚出可视时间轴时，在时间轴的左 / 右边缘给那一行放一枚箭头。
+ *
+ * ## 为什么是 sticky
+ *
+ * 箭头要**钉在滚动视口的边缘**，而这一层在 pane 的内容里（内容坐标随横滚平移）。
+ * 逐帧按 `scrollLeft` 写 `left` 也能对上，但横滚是合成器在平移、scroll 事件是异步的
+ * —— JS 写的位置永远慢半帧，箭头跟着手指抖。`position: sticky; left: 0` 把这件事交给
+ * 浏览器（与表头里年月标签吸左同一手法），横向位置零 JS。
+ *
+ * 宽高都是 0：它是 in-flow 的（sticky 不脱流），而且是内容层的**第一个**子节点 ——
+ * 占位就会把 `sticky top: 0` 的表头顶下去。箭头自己是它的绝对定位子节点。
+ *
+ * z-index 6：压过条（覆盖层 3），低于表头（10）—— 于是滚到表头底下的箭头被表头挡住，
+ * 不需要另做裁剪；底部则由 pane 的 `overflow-y: hidden` 裁掉。
+ * （6 与核心「激活格描边」同层，语义一致：都是浮在内容之上的指示物。）
+ */
+.vtp-gantt-jumpers {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  width: 0;
+  height: 0;
+  /* 层不吃指针事件，否则会挡住「点空白处新建工期」；箭头自己再打开 */
+  pointer-events: none;
+}
+
+/**
+ * 一枚箭头。
+ *
+ * `translateY(-50%)`：JS 给的 `top` 是**行的正中**（而不是「行顶 + 半个按钮高」）——
+ * 这样按钮多大只由 CSS 说了算，改尺寸不用回去改 JS。
+ */
+.vtp-gantt-jumper {
+  position: absolute;
+  left: var(--vtp-gantt-jump-gap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: var(--vt-border-width) solid var(--vt-border-color);
+  border-radius: var(--vt-radius-full);
+  background: var(--vt-bg-elevated);
+  color: var(--vt-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  /*
+   * 一点投影。它经常压在**别的行的条**上（层在条之上），只有边框的话会与条的边缘糊在一起，
+   * 看着像条上多长了个疙瘩；有投影才读得出「浮在上面的一枚按钮」。
+   */
+  box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    color var(--vt-transition-fast) var(--vt-ease),
+    border-color var(--vt-transition-fast) var(--vt-ease),
+    background-color var(--vt-transition-fast) var(--vt-ease);
+  /* 层是 none，这里收回来 */
+  pointer-events: auto;
+}
+
+/**
+ * 右侧那一枚：`--vtp-gantt-jump-view` 是 JS 写的**视口宽度**。本层被 sticky 钉在视口
+ * 左沿，所以「层原点 + 视口宽」就是视口右沿；再 `translateX(-100%)` 把按钮挪到线内侧。
+ *
+ * 用变量而不是让 JS 直接算 `left`，是为了**按钮尺寸只写在 CSS 里** —— JS 不需要知道
+ * 它有多宽。变量缺省 0 时按钮落在左沿，但那种情况下 `syncJumpers()` 根本不会显示它。
+ */
+.vtp-gantt-jumper--right {
+  left: calc(var(--vtp-gantt-jump-view, 0px) - var(--vtp-gantt-jump-gap));
+  transform: translate(-100%, -50%);
+}
+
+/* 图标只有一个「向左」，向右那枚靠旋转（与收起面板那颗按钮同一做法） */
+.vtp-gantt-jumper--right svg {
+  transform: rotate(180deg);
+}
+
+.vtp-gantt-jumper:hover {
+  border-color: var(--vt-color-primary);
+  background: var(--vt-color-primary-softer);
+  color: var(--vt-color-primary);
+}
+
+.vtp-gantt-jumper:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: 1px;
+}
+
+/* ==========================================================================
+ * 里程碑旗标层
+ * ========================================================================== */
+
+/**
+ * 旗标要露在**表头之上**，而覆盖层（`.vtp-gantt-layer`，`z-index: 3`）自己是一个
+ * 层叠上下文 —— 里面写多大的 z-index 都出不去。所以旗标单独一层，直接挂在
+ * `.vt-client` 上，成为表头的兄弟节点。（实测踩过：写在覆盖层里的旗标一个都看不见。）
+ *
+ * 仍然在滚动容器内，所以横滚由合成器平移、零 JS；代价是它会滑到冻结列后面而又比
+ * 冻结列高，那一段由 `syncFlagVisibility()` 按 `scrollLeft` 隐掉。
+ *
+ * `width: 0` 的理由同覆盖层：`right: 0` 会按未滚动时的可视宽度解析。
+ */
+.vtp-gantt-flags {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  /* 12：压过表头（10）与表头里的冻结格（11），低于固定列阴影（20）与滚动条（30） */
+  z-index: 12;
+  pointer-events: none;
+}
+
+/**
+ * 一个里程碑的旗标。**只有里程碑有**：今天的标识是表头那一格的蓝色圆底
+ * （`.vtp-gantt-today-pill`）。早先两者都是旗标、只差形状（小旗子 vs 一个 `T`），
+ * 而 `T` 得先有人教你它是什么意思。
+ */
+.vtp-gantt-flag {
+  position: absolute;
+  /*
+   * 贴在**日期表头格的左下角**：底边正好压在可见数据区的上缘
+   * （核心发布的 `--vt-body-view-t` = 表头高度），于是旗标的左下角与竖线的顶端相接，
+   * 看起来就是「一根从表头插下去的旗杆」。
+   *
+   * 早先是 `top: 2px`（贴在整个表头的顶端）—— 那会跑到年月那一层去，离自己的日期格
+   * 隔着一整行，也和线断开了。
+   */
+  /*
+   * `--vtp-gantt-head-h` 由 `rebuildHead()` 写在 pane 内容层上 = 时间轴表头的实测高度。
+   * 一期用的是核心发布的 `--vt-body-view-t`（那时表头是核心的）—— 留作兜底。
+   */
+  top: calc(
+    var(--vtp-gantt-head-h, var(--vt-body-view-t, 0px)) - var(--vtp-gantt-flag-size)
+  );
+  /*
+   * 左缘**不偏移**：旗标与竖线用的是同一个 x（都由 `xOf()` 给出），而竖线那 9px 的
+   * 命中区是靠 `margin-left: -4px` 自己抵掉的 —— 旗标这边再 `+4px` 就会比线右 4px。
+   * 旗标浮在表头上方时看不出来，现在要与线相接，4px 就是一道明显的错位（实测量到）。
+   */
+  margin-left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vtp-gantt-flag-size);
+  height: var(--vtp-gantt-flag-size);
+  /* 左下角不倒圆角：那里要和竖线接上，倒了会露出一个缺口 */
+  border-radius: 3px 3px 3px 0;
+  background: var(--vtp-gantt-marker-color);
+  color: var(--vt-text-inverse);
+  font-size: 10px;
+  font-weight: var(--vt-font-weight-semibold);
+  line-height: 1;
+  /* 名字走原生 title，所以要能接指针（整层是 none） */
+  pointer-events: auto;
+  cursor: default;
+}
+
+/**
+ * 时间轴右上角悬浮的粒度切换器（日 / 周 / 月 / 季 + 今天）。
+ *
+ * 位置：`right` 让开纵向滚动条（核心把它的宽度发布成 `--vt-scrollbar-size`），
+ * 高度与 `top` 由 JS 对齐表头**第一行**（年月那一行）—— 年月标题现在是吸左的，
+ * 那一行的右侧本来就空着，两件事配套。
+ *
+ * z-index 12：压过时间轴表头（10），但**低于收起按钮（13）与左表表头（14）** ——
+ * 它是三件悬浮件里最宽的一件，时间轴挤窄时该由它让位。详见收起按钮那节末尾的层序表。
+ */
+/**
+ * 粒度切换器。同样挂 `.vtp-gantt-split`（理由见上面收起按钮那段：pane 会滚，split 不会）。
+ *
+ * `right` 那一项原来要给核心的纵向滚动条让位；双 pane 之后滚动条在左表那侧，
+ * 这里只留一点边距。
+ */
+.vtp-gantt-zoombar {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /*
+   * 高度与底色**与收起按钮共用同一对变量**（见 `.vtp-gantt-split` 那段）：两个件都只浮在
+   * 表头第一行（年月行）里，一样高这件事因此由变量保证，而不是两处各写一遍同样的 calc。
+   */
+  height: var(--vtp-gantt-head-strip-h);
+  background: var(--vtp-gantt-head-strip-bg);
+  pointer-events: auto;
+}
+
+.vtp-gantt-zoombar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 7px;
+  border: var(--vt-border-width) solid transparent;
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-fill-color);
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--vt-transition-fast),
+    color var(--vt-transition-fast);
+}
+
+.vtp-gantt-zoombar__btn:hover {
+  background: var(--vt-fill-color-hover, var(--vt-fill-color));
+  color: var(--vt-text-color);
+}
+
+/* 当前档位：实心主色，和它旁边那几个一眼分得开 */
+.vtp-gantt-zoombar__btn--on {
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+}
+
+.vtp-gantt-zoombar__btn--on:hover {
+  background: var(--vt-color-primary);
+  color: var(--vt-text-inverse);
+}
+
+/* 「今天」不是档位，是个动作 —— 用描边而不是填充，免得看着像第五档 */
+.vtp-gantt-zoombar__btn--today {
+  margin-left: 6px;
+  border-color: var(--vt-border-color);
+  background: var(--vt-bg-color);
+}
+
+/* 可编辑时旗标是**编辑入口**（点它改名字与颜色），给指针反馈 */
+.vtp-gantt-flag--editable {
+  cursor: pointer;
+}
+
+.vtp-gantt-flag--editable:hover {
+  filter: brightness(1.12);
+}
+
+/**
+ * 「今天」在**表头那一格**的标识：日期外面一个蓝色圆底（与今天线同一支蓝）。
+ *
+ * 日历里通用的写法。早先是在竖线顶端挂一枚写着 `T` 的小牌 —— 那个得先有人教你
+ * 它是什么意思，而圆底是自解释的。旗标那套只留给里程碑（小旗子 = 有个节点）。
+ *
+ * 尺寸靠 `min-width` + 左右内边距：一两个字符（日视图的「17」）时是正圆，
+ * 粗粒度下（「8月」）自然摊成胶囊，不必为两种情况写两套。
+ */
+.vtp-gantt-today-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.9em;
+  height: 1.9em;
+  padding: 0 0.35em;
+  border-radius: var(--vt-radius-full, 999px);
+  background: var(--vtp-gantt-today-color);
+  color: var(--vt-text-inverse);
+  font-weight: var(--vt-font-weight-semibold);
+  line-height: 1;
+}
+
+/* ==========================================================================
+ * 拖拽换序（editable.reorder）
+ * ========================================================================== */
+
+/**
+ * 落点提示线。挂在 `.vt-client` 里，所以横滚由合成器平移、零 JS
+ * （与旗标层同一套做法）。
+ *
+ * ## 为什么 z-index 是 8
+ *
+ * 文件头那张层序表：`td` 无 → 固定列 `4` → 空态 `5` → 激活格描边 `6` →
+ * 表头 `10` → 表头里的冻结格 `11` → 固定列阴影 `20` → 滚动条 `30`。
+ * 提示线必须压过**冻结的任务列**（4）—— 它要跨满「任务列 + 整条时间轴」，
+ * 被冻结区截掉一半就失去了「这一行会落到这里」的意思；同时压过激活格描边（6），
+ * 免得刚点过的那一格把线咬掉一段。再往上没必要：行永远在表头之下。
+ *
+ * ## 为什么宽度由 JS 给
+ *
+ * 同覆盖层与背景层（见文件头）：绝对定位的 `width: 100%` 按容器**未滚动时的
+ * padding 盒**解析，那是可视宽而不是内容宽。这里的 `left/width` 由
+ * `getColumnRange(0, 最后一列)` 现算成内容坐标，于是横滚到哪儿线都是满的。
+ * 核心 `vtRowDrag` 的 `.vt-row-drop-line` 正是写死 `width: 100%`，
+ * 那在普通表格里够用、在甘特这种内容远宽于视口的表上就露馅了。
+ */
+.vtp-gantt-drop-line {
+  position: absolute;
+  /*
+   * 跨满**两个 pane**：挂在 `.vtp-gantt-split` 上，`left/right: 0` 就是整幅宽度。
+   * 一期是单表，线挂在 `.vt-client` 里、宽度得用 `getColumnRange(0, 末列)` 现算
+   * （`width: 100%` 在那里会按未滚动时的可视宽解析）—— 双 pane 之后这个问题自然消失。
+   */
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 8;
+  pointer-events: none;
+  display: none;
+  background: var(--vtp-gantt-drop-color, var(--vt-color-primary));
+  box-shadow: 0 0 0 1px var(--vt-color-primary-soft, transparent);
+  /* 两端各一个小帽子，让线在长条内容上仍然读得出「这是一条插入位置」 */
+  border-radius: 1px;
+}
+
+/**
+ * 拖拽进行中：整表光标切成 grabbing，并**关掉文本选中**。
+ *
+ * 挂在 `.vt-root` 而不是被拖的那一行 —— 行 DOM 是核心的，且会被行 DOM 池回收：
+ * 拖拽中一旦发生（自动）滚动，挂在 `tr` 上的 class 就会粘到复用后的另一行上，
+ * 表现是「随便哪一行忽然变灰」。root 是稳定节点，没有这个问题。
+ *
+ * 这也是本插件不做「源行半透明」与跟随光标 ghost 的原因：那两样都需要往
+ * 会被回收的节点上挂状态。视觉线索由提示线 + 光标承担，够用且不会错位。
+ */
+.vtp-gantt-reordering,
+.vtp-gantt-reordering * {
+  cursor: grabbing !important;
+}
+
+.vtp-gantt-reordering {
+  user-select: none;
+}
+
+/**
+ * 跟随光标的 ghost。
+ *
+ * 挂在 `.vt-root` 里（不是 body）—— 下面的颜色全是 `--vt-*`，而那批变量只声明在
+ * `.vt-root` / `.vt-fb` 上；挂到 body 会让它们整批落空，ghost 变成「透明底 + 黑字」。
+ * `position: fixed` 在 root 里依然按视口定位，也不会被 root 的 `overflow: hidden` 裁掉。
+ */
+.vtp-gantt-drag-ghost {
+  position: fixed;
+  z-index: 999;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 5px 12px;
+  border-radius: var(--vt-radius-md, 6px);
+  background: var(--vtp-gantt-drop-color, var(--vt-color-primary));
+  color: var(--vt-text-inverse, #fff);
+  font-size: var(--vt-font-size-xs, 12px);
+  font-weight: var(--vt-font-weight-medium, 500);
+  line-height: 1.6;
+  box-shadow: var(--vt-shadow-md, 0 4px 12px rgb(0 0 0 / 18%));
+  opacity: 0.94;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/**
+ * 被拖着换序的那一条：**留在原位但明显「被拿起来了」** —— 降透明 + 虚线描边。
+ *
+ * 为什么源条不跟着光标走：条的位置每帧由 `syncBars()` 按行矩形算出来，让它跟手就得在
+ * 每帧同步里加一条「这一条例外」的分支；而 ghost 已经承担了「你正拖着的是这个」的表达。
+ * 虚线描边是为了在**深色条**上也读得出来（只降透明的话，深色条降到 45% 仍然很实）。
+ */
+.vtp-gantt-bar--reordering {
+  opacity: 0.45;
+  outline: 1px dashed var(--vtp-gantt-drop-color, var(--vt-color-primary));
+  outline-offset: 1px;
+}
+
+/**
+ * 被拖着换序的那一行（任务列那侧的观感）。
+ *
+ * 用 `background-image` 叠一层色，**不动 `background-color`** —— 冻结列的 `td` 靠自己的
+ * 不透明底色遮住从下面滚过去的条，把底色换成半透明的话，横滚时条会从任务名底下透出来。
+ * 叠加层不影响原有的 `background-color`，两种列都安全。
+ *
+ * class 由插件**每帧幂等重刷**（`paintReorderMark()`）—— 行 DOM 属核心且会被行池回收，
+ * 挂上去不管的话，拖拽中一滚动就会粘到复用后的另一行上。
+ */
+.vtp-gantt-row--reordering > td {
+  background-image: linear-gradient(
+    var(--vtp-gantt-reorder-row-bg, color-mix(in srgb, var(--vt-color-primary) 12%, transparent)),
+    var(--vtp-gantt-reorder-row-bg, color-mix(in srgb, var(--vt-color-primary) 12%, transparent))
+  );
+}
+
+/**
+ * 拖拽换序进行中：把光标底下的 **hover 态全部按住**。
+ *
+ * 拖着一行从别人身上经过时，本来会一路点亮：核心的行 hover 底色
+ * （`.vt-client--highlight-hover-row .vt-tr:hover > .vt-td`）、被经过的条冒出来的两端手柄与
+ * 进度手柄（`.vtp-gantt-bar:hover .vtp-gantt-bar__grip`）、里程碑的名字、旗标的 hover 色、
+ * 以及空白行那个 `+`。它们全是「这里可以点」的邀请，而此刻唯一有意义的邀请是**落点提示线** ——
+ * 其余的都是噪音，还会让人以为松手会落在那个手柄上。
+ *
+ * 做法是关掉命中测试而不是逐条覆盖那些 `:hover` 规则：
+ *
+ * 1. **一条规则管全部**，包括核心的和将来新加的 —— 覆盖式写法每加一个 hover 效果就得补一条；
+ * 2. `pointer-events: none` 让元素不再是命中目标，于是 `:hover` 压根不匹配，
+ *    JS 那套 `pointerover` 驱动的提示（`+` 提示条）也一起停摆；
+ * 3. **本模块不需要命中测试**：落点是拿指针 Y 去撞 `getRenderedRowRects()` 算出来的
+ *    （见 `reorder.ts` 的 `resolveTarget`），而拖拽事件收在 `document` 上 —— 那一层不受影响。
+ *
+ * 表头也一起按住：往上拖过表头时，核心的 `th:hover` 与本插件的「新增里程碑」按钮同样会冒头。
+ */
+.vtp-gantt-reordering .vt-tbody,
+.vtp-gantt-reordering .vt-thead,
+.vtp-gantt-reordering .vtp-gantt-bar,
+.vtp-gantt-reordering .vtp-gantt-marker,
+.vtp-gantt-reordering .vtp-gantt-flag {
+  pointer-events: none;
+}
+
+/*
+ * 这两个是 JS 按 `pointerover` 摆出来的浮动提示，拖拽开始那一刻可能**已经**显示着
+ * （用户往往就是先 hover 到某一行才按下去的）。上面关掉命中测试只能阻止它们继续跟手，
+ * 已经露出来的那一个得由这里收走。
+ */
+.vtp-gantt-reordering .vtp-gantt-add-bar,
+.vtp-gantt-reordering .vtp-gantt-add-marker {
+  display: none;
+}
+
+/* ==========================================================================
+ * 双 pane 布局：左表格 / 右时间轴各自横滚
+ *
+ * 一期整张甘特是一张 <table>，`.vt-client` 是唯一的 overflow-x，业务列靠 sticky 钉住 ——
+ * 于是左侧压根不参与滚动，业务列一多就够不到最右那几列。左右要各自横滚就必须有两个滚动
+ * 视口，所以时间轴搬进了插件自己的 pane（见 pane.ts 开头的完整推导）。
+ * ========================================================================== */
+
+/**
+ * ## 颜色从哪来
+ *
+ * 这个容器在 JS 里**同时带上 `vt-fb`**（见 pane.ts）：核心把整套 `--vt-*` 变量声明在
+ * `.vt-root, .vt-fb` 上，而这里是 `.vt-root` 的**父节点** —— 变量往下继承、不往上。
+ * 不带 `vt-fb` 的话 pane 里所有 `var(--vt-…)` 全部落空，表现就是「表格白的、甘特黑的」。
+ *
+ * 下面这几条字体 / 文字色是照 `.vt-root` 自己那份抄的（核心的 `.vt-fb` 只带变量、
+ * 不带排版），否则时间轴表头的日期会用浏览器默认字体，与左表对不上。
+ */
+/**
+ * ⚠️ **`vt-fb` 要脱掉它的「面板打扮」。**
+ *
+ * 那个类不是纯 token 载体 —— 它是**筛选管理器面板**自己的类，核心的
+ * `components/vt-filter-builder.css` 给它加了 `padding: 12px 14px`、边框、圆角、阴影，
+ * 还把字号调小成 `--vt-font-size-sm`。照单继承的结果：split 容器比它的子节点高出 13px
+ * （12px padding + 1px 边框），于是挂在 split 上的收起按钮与切换器整体比表头高 12px ——
+ * 那正是「没对齐」。
+ *
+ * 用 `.vtp-gantt-split.vt-fb`（两个类）而不是单类：它必须压过那条 `.vt-fb` 规则，
+ * 而两份样式表的加载顺序不由我们决定，靠特异度才稳。
+ */
+.vtp-gantt-split.vt-fb {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  /* 面板底色换成表格底色：两个 pane 之间那道缝透出来的就是它 */
+  background: var(--vt-bg);
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+}
+
+.vtp-gantt-split {
+  /* 提示线与 ghost 挂在这里，需要它当定位基准 */
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  /* 高度由外壳的 flex 给（工具栏占掉一条之后剩下的都归它） */
+  min-height: 0;
+  min-width: 0;
+  color: var(--vt-text-color);
+  font-family: var(--vt-font-family);
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+}
+
+/*
+ * 左表（使用方的 root）：宽度由 JS 给 flex-basis（`panelWidth` / 收起）。
+ * `min-width: 0` 是 flex 子项的老坑 —— 不写它，内容宽的表格会把 flex-basis 顶开。
+ */
+.vtp-gantt-split > .vt-root {
+  min-width: 0;
+}
+
+/**
+ * 右 pane：**唯一**的横向滚动容器。纵向不滚 —— pane 里一行 DOM 都没有，
+ * 行永远只由左表拥有，条的纵坐标取 `getRenderedRowRects()` 换算而来（单行模型）。
+ * 滚轮的纵向分量由 JS 桥接给 `scrollByY()`，见 pane.ts。
+ */
+.vtp-gantt-pane {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  /*
+   * `border-box`：下面那两条边框要算进 `height: 100%` 里（见 `.vt-root--border ~` 那条）。
+   */
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 横向滚动链不外溢：拖到尽头别把整页带着走 */
+  overscroll-behavior-x: none;
+  background: var(--vt-bg);
+  /*
+   * **原生滚动条整个关掉**，横向那条改由自绘（见下一节与 pane.ts）。
+   *
+   * 两个理由，缺一条都不成立：
+   *   1. macOS 的浮层滚动条只在滚动那一瞬间出现，「hover 显形」原生做不到；
+   *   2. Windows / Linux 上它是**占位**的经典滚动条，会吃掉 pane 底部 15px 可视高 ——
+   *      而行是左表给的，pane 矮一截的结果是最后一行的条被裁掉一半，两侧看着错位。
+   *
+   * 与核心 `.vt-client` 那两句是同一个写法（index.css §3）。
+   */
+  scrollbar-width: none;
+}
+
+.vtp-gantt-pane::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/**
+ * 时间轴那半边的**右沿与底沿**：把整幅甘特的外框合上。
+ *
+ * 左表带边框时四边都有框，而 pane 是它的兄弟、`.vtp-gantt-split.vt-fb` 又把外层的
+ * `.vt-fb` 边框整个去掉了（见上面那段）—— 于是右沿与底沿一直是**开口**的：条画到边上
+ * 直接断在容器底色里，与左表那半边看着不是同一个控件。
+ *
+ * **只补右与下两条。** 上沿归 `.vtp-gantt-pane__head` 自己的 `border-bottom`（真给 pane
+ * 补一条上边框，会把整个内容层连表头一起下推 1px，与左表 thead 错开 —— 见文件末尾
+ * 「没有缝」那段）；左沿是左表的右边框，再补一条就成了双线。
+ *
+ * **跟着左表的 `border` 开关走**，所以挂在 `.vt-root--border` 的兄弟选择器上而不是直接写在
+ * `.vtp-gantt-pane` 里：`border: false` 时左表四边都没框，只有时间轴这半边挂着两条线，
+ * 那是比「开口」更难看的一种不对称。顺带也让 `--vtp-gantt-frame-b`（量的是**左表**下边框，
+ * 见 pane.ts）与这条底框永远同厚 —— 三条滚动条的下基线才还是一条线。
+ *
+ * 厚度与颜色都用核心 token：使用方拿媒体查询把 `--vt-border-width` 调成 0 时，这两条
+ * 自动跟着消失。
+ */
+.vtp-gantt-split > .vt-root--border ~ .vtp-gantt-pane {
+  border-right: var(--vt-border-width) solid var(--vt-border-color);
+  border-bottom: var(--vt-border-width) solid var(--vt-border-color);
+}
+
+/* ==========================================================================
+ * 两条自绘滚动条
+ *
+ * DOM 与行为来自核心的 `@virt-table/vanilla/scrollbar`（轨道 `.virt-scrollbar` +
+ * 滑块 `.virt-scrollbar__thumb`，与左表那两条**同一个实现**），这里只做三件事：
+ * 把 `--virt-scrollbar-*` 映射到表格的 `--vt-scrollbar-*` token、把两条轨道摆到位、
+ * 写显形规则。核心 index.css §3.1 是这一节的模板 —— 那份绑 `.vt-root`，这份绑
+ * `.vtp-gantt-split`，选择器不通用，所以必须各写一份（这也正是核心那个子路径不带 CSS 的原因）。
+ *
+ * 轨道挂在 split 上、不在 pane 里：pane 是横向滚动容器，绝对定位在里面的原点是**内容**
+ * 原点，横滚一下轨道就漂走了（与收起按钮、粒度切换器同一条理由，见 pane.ts）。
+ * ========================================================================== */
+.vtp-gantt-split .vtp-gantt-scrollbar {
+  --virt-scrollbar-size: var(--vt-scrollbar-size);
+  --virt-scrollbar-track-bg: var(--vt-scrollbar-track);
+  --virt-scrollbar-thumb-bg: var(--vt-scrollbar-thumb);
+  --virt-scrollbar-thumb-bg-hover: var(--vt-scrollbar-thumb-hover);
+  --virt-scrollbar-thumb-bg-active: var(--vt-scrollbar-thumb-hover);
+  --virt-scrollbar-thumb-radius: var(--vt-radius-full);
+  --virt-scrollbar-thumb-inset: 2px;
+
+  position: absolute;
+  /*
+   * 30：与核心那两条同层。要压过时间轴表头（10）、两个悬浮件与收起按钮（12）、
+   * 调宽把手（13），否则轨道落在表头带里就点不到了。
+   */
+  z-index: 30;
+  display: none;
+  background: var(--virt-scrollbar-track-bg);
+  opacity: 0;
+  transition: opacity var(--vt-transition) var(--vt-ease);
+}
+
+/* 内容长到需要滚动时 `Scrollbar.update()` 才加这个类 */
+.vtp-gantt-split .vtp-gantt-scrollbar.is-enabled {
+  display: block;
+}
+
+/**
+ * 横条：贴 pane 的底边，只覆盖**时间轴那一侧**。
+ *
+ * 左边那一段是左表的地盘，核心自己的横条在那里（两侧各自横滚，各有一条，这是双 pane
+ * 的应有之义）。起点由 `--vtp-gantt-pane-x`（pane 相对 split 的左偏移，pane.ts 发布）给。
+ *
+ * **下基线是 `--vtp-gantt-frame-b`（左表下边框的厚度），不是 `bottom: 0`。**
+ * 核心那条横条是 `.vt-root` 的绝对定位子节点，`bottom: 0` 量到的是它的 padding 盒 ——
+ * 边框**内**沿；而本条轨道挂在 split 上，`bottom: 0` 是 split 的**外**沿，比它低一个边框
+ * 厚度。写 0 的话两条横条的滑块差 1px 高（实测量到）。厚度由 pane.ts 量出来发布，
+ * `border` 关着时它就是 `0px`，这条式子自动退化成 `bottom: 0` —— pane 那条下边框与左表
+ * 同厚、同开关（见上面 `.vt-root--border ~ .vtp-gantt-pane`），所以时间轴这一侧也对得上。
+ *
+ * `+ 4px` 是给**调宽把手**让路：把手是 7px 的透明命中区、以分界线为中心（`margin-left: -3px`），
+ * 占掉 `[x-3, x+4]`。轨道 z-index 30 压过把手的 13，不让开的话贴着底边那 10px 高的一段
+ * 就拖不动分栏了。代价是横条最左边 4px 到不了 —— 那是滑块的起点位置，肉眼看不出。
+ */
+.vtp-gantt-split .vtp-gantt-scrollbar--h {
+  left: calc(var(--vtp-gantt-pane-x, 0px) + 4px);
+  right: 0;
+  bottom: var(--vtp-gantt-frame-b, 0px);
+  height: var(--virt-scrollbar-size);
+}
+
+/**
+ * 竖条：**整个甘特唯一的一条**，贴最外侧右缘、从时间轴表头下缘起。
+ *
+ * 纵向只有一份真相（行永远只由左表拥有），所以竖条也只该有一条；它落在最外缘而不是两个
+ * pane 的分界处，于是「收起任务表之后没竖条可用」这件事从根上不存在（见下面「藏掉左表那条」）。
+ *
+ * `top` 让开时间轴表头 —— 那一行里还浮着粒度切换器，轨道横穿过去会把它压住（z 30 > 12）。
+ * `bottom` 与横条**共用同一条基线**（见上面 `--vtp-gantt-frame-b` 那段）：三条滚动条的
+ * 下沿是一条线，右下角才不会露出一截比邻居低的滑块。
+ *
+ * 底边不为横条让位，与核心那两条一样：轨道透明，右下角交叠时只看到两个滑块，
+ * 而它们各自被行程限制，实际很少同时压到那个角。
+ */
+.vtp-gantt-split .vtp-gantt-scrollbar--v {
+  top: var(--vtp-gantt-head-h, 0px);
+  bottom: var(--vtp-gantt-frame-b, 0px);
+  right: 0;
+  width: var(--virt-scrollbar-size);
+}
+
+/**
+ * 显形规则：**指针悬在甘特上**、滚动中（`.is-active`，由 JS 加）、正在拖拽、
+ * 或常驻（`.is-persistent`，`scrollbarAutoHide: 0`）。
+ *
+ * 悬停判定挂在 `.vtp-gantt-split` 上 —— 整幅甘特（含左表与时间轴表头）都算，
+ * 与核心把它挂在 `.vt-root` 上而不是 `.vt-client` 上是同一个取舍：鼠标停在表头上时
+ * 滚动条也该看得见。默认淡出是为了不遮挡内容，与 macOS 的浮层滚动条一致。
+ */
+.vtp-gantt-split:hover > .vtp-gantt-scrollbar.is-enabled,
+.vtp-gantt-split .vtp-gantt-scrollbar.is-enabled.is-persistent,
+.vtp-gantt-split .vtp-gantt-scrollbar.is-enabled.is-active,
+.vtp-gantt-split .vtp-gantt-scrollbar.is-enabled.is-dragging {
+  opacity: 1;
+}
+
+.vtp-gantt-split .vtp-gantt-scrollbar .virt-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--virt-scrollbar-thumb-bg);
+  border-radius: var(--virt-scrollbar-thumb-radius);
+  cursor: default;
+  /*
+   * 位置由 JS 每帧写 transform，这里**绝不能**加 transition：加了就意味着滑块落后于
+   * 它所代表的内容，快速拖拽时尤其明显。
+   */
+  transition: background-color var(--vt-transition-fast) linear;
+}
+
+.vtp-gantt-split .vtp-gantt-scrollbar--v .virt-scrollbar__thumb {
+  right: var(--virt-scrollbar-thumb-inset);
+  left: var(--virt-scrollbar-thumb-inset);
+  width: auto;
+}
+
+.vtp-gantt-split .vtp-gantt-scrollbar--h .virt-scrollbar__thumb {
+  top: var(--virt-scrollbar-thumb-inset);
+  bottom: var(--virt-scrollbar-thumb-inset);
+  height: auto;
+}
+
+.vtp-gantt-split .vtp-gantt-scrollbar .virt-scrollbar__thumb:hover {
+  background: var(--virt-scrollbar-thumb-bg-hover);
+}
+
+.vtp-gantt-split .vtp-gantt-scrollbar.is-dragging .virt-scrollbar__thumb {
+  background: var(--virt-scrollbar-thumb-bg-active);
+}
+
+/**
+ * **藏掉左表那条竖条。**
+ *
+ * 核心把它画在 `.vt-root` 的右缘 —— 双 pane 下那是两个 pane 的**分界处**，也就是整幅
+ * 画面的中间：手在时间轴右侧时它远在天边，任务面板一收起（root 宽度 0）它连位置都没有了。
+ * 而它与上面那条竖条驱动的是**同一个**纵向偏移，两条同时 hover 显形就是两个指示器指着
+ * 同一件事。所以这里只留最外缘那条。
+ *
+ * 横条不动：两侧各自横滚，那是两件不同的事，各留一条才对。
+ *
+ * 四个类是**故意**的：核心那条 `.vt-root .virt-scrollbar.is-enabled { display: block }`
+ * 是三个类，两份样式表的加载顺序不由我们决定 —— 特异度必须更高才稳（与
+ * `.vtp-gantt-split.vt-fb` 那条同一个理由）。
+ */
+.vtp-gantt-split > .vt-root > .virt-scrollbar.virt-scrollbar--vertical {
+  display: none;
+}
+
+/**
+ * 左表那条**横条**的显形范围要放宽到整幅甘特。
+ *
+ * 核心的显形规则是 `.vt-root:hover > .virt-scrollbar`，也就是「指针在**表格**上」才亮 ——
+ * 双 pane 下这意味着：手停在时间轴那侧时，右边两条亮着、左边任务表那条不亮。而用户看到的
+ * 是**一个**组件，「hover 甘特就把滚动条显出来」不该在中间那条分界线上换一套规则。
+ *
+ * 纯追加、不与核心那条打架（两条都只是把 `opacity` 设成 1，而这条的条件更宽）。
+ * 竖条不需要这一条 —— 它在上面已经整个藏掉了。
+ */
+.vtp-gantt-split:hover
+  > .vt-root
+  > .virt-scrollbar.virt-scrollbar--horizontal.is-enabled {
+  opacity: 1;
+}
+
+/**
+ * 内容层：宽度 = 桶数 × 桶宽（由 JS 写）。所有浮层与表头都是它的绝对定位子节点，
+ * 因此横滚由合成器平移、零 JS —— 与一期「内容坐标 + 合成器平移」是同一条性质。
+ */
+.vtp-gantt-pane__content {
+  position: relative;
+  height: 100%;
+}
+
+/**
+ * 时间轴表头。`sticky top: 0` 让它在纵向上钉住（虽然 pane 自己不纵滚，但内容层高度
+ * 100% 时这样最省事），横向则跟着内容一起平移 —— 于是「表头与格子对不齐」这类问题
+ * 从根上不存在，也不需要 JS 同步偏移。
+ *
+ * 高度由 JS 按**左表 thead 的实测高度**给（见 `rebuildHead()`），两行 44% / 56% 分 ——
+ * 两侧表头一样高，左表第一行才与时间轴第一行齐平。
+ */
+.vtp-gantt-pane__head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--vt-header-bg);
+  border-bottom: 1px solid var(--vt-border-color);
+  box-sizing: border-box;
+}
+
+.vtp-gantt-head__row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  /*
+   * 边框算进高度里。不写的话年月行的 1px 下边框会额外顶出 1px，
+   * 而日期行的 `top` 是按「年月行高度」给的 —— 两者就差 1px，
+   * 悬浮件按同一组变量画出来的分界线也会跟着错开 1px。
+   */
+  box-sizing: border-box;
+}
+
+.vtp-gantt-head__row--group {
+  background: var(--vt-header-group-bg, var(--vt-header-bg));
+  border-bottom: 1px solid var(--vt-border-color-light);
+}
+
+.vtp-gantt-head__cell,
+.vtp-gantt-head__group {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: var(--vt-text-secondary);
+  font-size: var(--vt-font-size-xs, 12px);
+  /* 桶格之间只画一条右分隔线，画满四边会在窄桶上糊成一片 */
+  border-right: 1px solid var(--vt-border-color-light);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.vtp-gantt-head__cell--nonworking {
+  background: var(--vtp-gantt-nonworking-bg);
+}
+
+/**
+ * 法定节假日：日期本身**换个颜色**（日历里通用的写法），并给一层比周末更明确的底。
+ *
+ * 表头一直标（不看 `skipHolidays`）—— 表头说的是「这一天是什么」，底纹说的是
+ * 「这一天算不算工期」。于是「为什么这一列画着斜线」在表头上有答案，鼠标停上去还有名字。
+ */
+.vtp-gantt-head__cell--holiday {
+  background: var(--vtp-gantt-holiday-bg, transparent);
+  color: var(--vtp-gantt-holiday-color, var(--vt-color-danger));
+  cursor: help;
+}
+
+.vtp-gantt-head__group {
+  justify-content: flex-start;
+  color: var(--vt-text-color);
+  font-weight: var(--vt-font-weight-medium, 500);
+  border-right-color: var(--vt-border-color);
+  /*
+   * **裁剪要用 `clip`，不能用 `hidden`。**
+   *
+   * 两者的裁剪效果一样，但 `overflow: hidden` 会让这一格成为一个**滚动容器**
+   * （scrollport）—— 而 `position: sticky` 是相对**最近的滚动容器**吸附的，于是里面那个
+   * 年月标题变成「相对这一格吸附」，而这一格自己永远不滚：吸附完全失效，标题跟着格子一起
+   * 滚出屏幕。这就是「跨两屏的 8 月滚到后半段就看不见年份了」的原因（上面 `.vtp-gantt-head__cell,
+   * .vtp-gantt-head__group` 那条给了 `overflow: hidden`，本条把分组格改回来）。
+   *
+   * `overflow: clip` 只裁剪、不建滚动容器，标签这才能相对 pane 吸在可视区左沿。
+   * 两条一起写：不认 `clip` 的旧浏览器仍然按 `hidden` 裁剪（只是没有吸附），不会溢出到邻格。
+   */
+  overflow: hidden;
+  overflow: clip;
+}
+
+/**
+ * 年月标签**吸左**：一个跨两屏的「2026年8月」若居中，会飘在屏幕正中、与哪一列都对不上；
+ * 吸左则一直贴在可视区左沿，像个「当前所在月份」的标签（飞书就是这样）。
+ *
+ * 更要紧的是**年份**：横滚进一个跨好几屏的月份之后，屏幕上只剩一排日号，
+ * 「这是哪年哪月」全靠这个标签一直挂在左沿。所以吸附不是观感，是**信息不丢**。
+ *
+ * 一期这是核心分组格里的 sticky 内层白给的，现在用 `position: sticky` 自己实现 ——
+ * 前提是父格不能是滚动容器，见上面 `.vtp-gantt-head__group` 的 `overflow: clip`。
+ *
+ * `left` 不是 0 而是一个变量：**要让开左上角那颗「收起任务列」按钮**（它绝对定位在 pane
+ * 的左沿、z-index 12，标题吸到 0 就整块躲到它背后去了）。变量由 JS 在挂上按钮时才发布，
+ * 没有按钮时缺省 0。
+ */
+.vtp-gantt-head__group-label {
+  position: sticky;
+  left: var(--vtp-gantt-head-inset, 0px);
+  padding: 0 8px;
+}
+
+/*
+ * 收起面板时把它的左右边框也收掉：`.vt-root--border` 会留下 2px，
+ * 而「收起」应当是彻底不占位（实测量到 2px 的残留）。
+ */
+.vtp-gantt--panel-collapsed {
+  border-left-width: 0;
+  border-right-width: 0;
+}
+
+/**
+ * 悬浮在表头上的那两个件（收起按钮、粒度切换器）的**高度与底色**。
+ *
+ * 两个都只浮在表头的**第一行（年月行）**里，所以这里是一对共享变量而不是两处各写一遍 ——
+ * 「两个件一样高」是**构造上**的，不是两个恰好相等的表达式（那种迟早会被改歪一个）。
+ * 高度来自 `rebuildHead()` 发布的 `--vtp-gantt-head-group-h`，与表头**同一个数**。
+ *
+ * 留出 1px：年月行与日期行之间那条分隔线（`--vt-border-color-light`）要能从悬浮件底下
+ * 透出来，否则那条线会被咬掉两段。
+ *
+ * 早先收起按钮是一条**纵向横跨两行**的竖带，底色因此是「按两行分界的硬边渐变 + 中间补
+ * 1px 分隔线」那一大段。收进一行之后那段渐变自动退化成单色（所有色标都落在元素高度之外），
+ * 留着只是死复杂度 —— 所以一并改成年月行的底色。
+ */
+.vtp-gantt-split {
+  --vtp-gantt-head-strip-h: calc(var(--vtp-gantt-head-group-h, 30px) - 1px);
+  --vtp-gantt-head-strip-bg: var(--vt-header-group-bg);
+}
+
+/**
+ * 两个 pane 之间的**调宽把手**。
+ *
+ * 平时**完全看不见**：7px 宽的透明命中区（1px 的东西鼠标压不准，这是分栏 UI 的通用做法），
+ * hover 或拖动时才现出一条 2px 的蓝线。不做常驻分界线 —— 只有两栏的界面里那是噪音，
+ * 而且左表自己已经有右边框了。
+ *
+ * 绝对定位、**不占布局**（不是 flex 项），所以两个 pane 仍然紧贴；横坐标由 JS 给
+ * （= pane 相对 split 的左偏移，与收起按钮同一条线）。
+ */
+.vtp-gantt-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3px;
+  /*
+   * 15：压过三件悬浮件（12 / 13）**与左表表头（14）**。
+   *
+   * 不压过的话，贴着分界线的那半个收起按钮、以及表头那一整段高度，都会把把手挡掉 ——
+   * 而把手是纵贯全高的，最上面那一段正好落在表头带里。见收起按钮那节末尾的层序表。
+   */
+  z-index: 15;
+  cursor: col-resize;
+  /* 触屏上别把它当成滚动起点 */
+  touch-action: none;
+}
+
+.vtp-gantt-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vtp-gantt-resizer:hover::after,
+.vtp-gantt-split--resizing .vtp-gantt-resizer::after {
+  background: var(--vt-color-primary);
+}
+
+/*
+ * 拖动期间：光标钉成 col-resize（否则划过表格时会变成 text），并关掉文本选中 ——
+ * 不关的话拖几下就把整张表的文字刷蓝了。
+ */
+.vtp-gantt-split--resizing,
+.vtp-gantt-split--resizing * {
+  cursor: col-resize !important;
+}
+
+.vtp-gantt-split--resizing {
+  user-select: none;
+}
+
+/* ==========================================================================
+ * 外壳与工具栏槽
+ *
+ * 外壳是纵向 flex：工具栏槽在上、双 pane 在下。**槽里的那条按钮条不是本包画的** ——
+ * 核心的 `vtToolbar` 插件把它挂进来（甘特通过 `provide('toolbarSlot', …)` 把这个元素
+ * 交出去，于是按钮条横跨任务面板与时间轴，而不是只盖住左表）。
+ *
+ * 没装工具栏时这条槽是空的、不占高度（没有 padding / min-height，`:empty` 天然塌成 0）。
+ *
+ * 一期这里还有一整条按钮条 + 五个面板的样式（约 400 行）。那四个通用面板
+ * （字段配置 / 筛选 / 分组 / 排序）已经连同样式一起沉到核心 `plugins/toolbar.css`，
+ * 本包只剩「甘特图配置」面板里那几件甘特独有的东西。
+ * ========================================================================== */
+
+.vtp-gantt-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  color: var(--vt-text-color);
+  font-family: var(--vt-font-family);
+  font-size: var(--vt-font-size);
+  line-height: var(--vt-line-height);
+}
+
+/* 双 pane 那一层吃掉剩余高度 */
+.vtp-gantt-shell > .vtp-gantt-split {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ==========================================================================
+ * 「甘特图配置」面板里甘特独有的那几件
+ *
+ * 面板外壳、标题、行、分割线、开关与下拉的排版全部来自核心的面板基元
+ * （`ctx.ui.*` → `.vt-toolbar-panel*`），所以这里只画核心没有的东西：
+ * 一排预设色块、「开关 + 下拉」并排的那一行、以及置灰行的标题颜色。
+ * ========================================================================== */
+
+/* 「进度显示」那一行：左边一个开关、右边一个列选择，下拉吃掉剩余宽度 */
+.vtp-gantt-cfg-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vtp-gantt-cfg-inline > .vt-field-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * 整行不可用（没配 `holidays` 的「跳过法定节假日」）：**标题也要跟着灰**。
+ * 只灰开关的话，那一行看着像「开关坏了」而不是「这一项现在用不了」。
+ */
+.vtp-gantt-cfg-row--disabled > .vt-toolbar-panel-label {
+  color: var(--vt-text-disabled, var(--vt-text-secondary));
+}
+
+/* 「指定颜色」的一排预设色块。给一小组而不是取色器 —— 条的颜色是分类用的，不是审美选择 */
+.vtp-gantt-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vtp-gantt-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vt-radius-full, 999px);
+  cursor: pointer;
+}
+
+/* 选中的那个：外面一圈同色描边（不是加粗边框 —— 那会让色块看起来变小） */
+.vtp-gantt-swatch.is-active {
+  box-shadow:
+    /* 内圈那道缝要与**面板**同色（面板是 elevated 那一层，暗色主题下与 --vt-bg 不同） */
+    0 0 0 2px var(--vt-bg-elevated),
+    0 0 0 4px var(--vt-color-primary);
+}
+
+.vtp-gantt-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--vt-focus-ring-color);
+}
+
+/* ==========================================================================
+ * 左表与时间轴之间**没有缝**：表格的右上 / 右下角去掉圆角
+ *
+ * 核心给 `.vt-root` 四个角都上了 `--vt-radius-md`。双 pane 下这两个角正对着时间轴，
+ * 圆角在那儿会露出两个小三角的容器底色 —— 看起来像两块拼在一起的板子，而它们本该是
+ * 同一张甘特图。左侧两个角保留（那是整个组件的外缘）。
+ *
+ * **右边框留着**：这 1px 就是两个 pane 之间那道分界（调宽把手平时是透明的），
+ * 所以 pane 那侧不再补一条左边框（补了是双线）。pane 只补右与下两条、**不补上边框**：
+ * 它 `height: 100%` 且表头是内容层的子节点 —— 上边框会把时间轴表头整体下推 1px，
+ * 与左表 thead 错开。见上面 `.vt-root--border ~ .vtp-gantt-pane` 那条。
+ * ========================================================================== */
+
+.vtp-gantt-split > .vt-root {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/*
+ * 工具栏在上时，左表**上面那个左角**也归它 —— 否则按钮条那条平底压在一段圆弧上，
+ * 中间露出一个小三角的容器底色（与右侧那两个角同一个毛病）。
+ *
+ * `:not(:empty)` 是判据：没装核心的 `vtToolbar` 时这条槽是空的、不占高度，
+ * 左表就该照旧圆着自己那个角。用兄弟选择器表达「谁在我上面」，不给表格加类。
+ *
+ * 这里**只收圆角、不补边框**：工具栏槽是 split 的兄弟、跨满整幅宽度，而左右两侧的竖框
+ * 都只从 split 那一段起（左沿是左表的左边框、右沿是 pane 的右边框）—— 给按钮条也画一圈，
+ * 那两条竖边就各自多出一截、且上端悬空。核心的 `.vt-toolbar--card` 因此只在
+ * 「工具栏自己包壳」时才加，甘特这条槽不吃那一套。
+ */
+.vtp-gantt-toolbar-slot:not(:empty) + .vtp-gantt-split > .vt-root {
+  border-top-left-radius: 0;
+  /*
+   * **上边框也一起去掉。** 工具栏自己那条 `border-bottom` 已经横跨了两个 pane，而左表的
+   * 上边框只覆盖任务面板那一段 —— 两条叠起来，同一条缝在任务面板侧是 2px、时间轴侧 1px
+   * （实测就是这个数）。粗细不一的那半条线看着像没对齐。
+   *
+   * 留工具栏那条而不是留左表那条：只有它是**通栏**的。
+   */
+  border-top-width: 0;
+}

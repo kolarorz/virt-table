@@ -25,13 +25,24 @@ import {
 /*
  * 浮动图片是**付费插件**，住在另一个私有仓库 `virt-table-pro`。
  * 同级目录没有那个仓库时，`@virt-table-pro/*` 会被 vite alias 指到 `docs/apps/pro-kit/stubs/` 下的桩
- * （表格照常跑，只是没有这张图）—— 完整取舍见 `docs/apps/pro-kit/README.md`。
+ * （表格照常跑，只是没有这张图）—— 完整取舍见 `contributing/pro-plugins.md`。
  */
 import { vtFloatingImage } from '@virt-table-pro/floating-image';
 /** 单元格公式（A1 记法、依赖图、增量重算）——「偏差」那一列就是一条公式 */
 import { vtFormula } from '@virt-table-pro/formula';
 /** 撤销/重做：查询状态自动入栈，数据变更由本文件在写回时 `recordChange()` 显式录制 */
 import { vtUndo } from '@virt-table-pro/undo';
+/**
+ * 真 xlsx 导出（zip + OOXML）。这个案例里它的入口**只给选区与透视结果** ——
+ * 理由见下面 `exportXlsxSelection()` 的注释：65 列 × 10 万行 = 650 万格，
+ * 全表导 xlsx 会产出几百 MB 的 XML，那不是「慢」，那是把浏览器挂死。
+ */
+import { vtXlsx } from '@virt-table-pro/xlsx';
+/**
+ * 透视表。默认**不开**（`vtPivot()` 不配维度也不配值时完全让路），由工具栏那颗
+ * 「透视」按钮里的面板打开 —— 顺带演示「面板 UI 由使用方做」到底有多简单。
+ */
+import { vtPivot, type PivotOptions } from '@virt-table-pro/pivot';
 /*
  * 付费包的样式要自己引 —— 它的 dist 里 JS 与 CSS 是分开产出的（与核心的插件一样）。
  * 这几行就是客户集成时该抄的：各插件样式 + 未授权角标样式 + 查看器样式
@@ -39,6 +50,7 @@ import { vtUndo } from '@virt-table-pro/undo';
  */
 import '@virt-table-pro/floating-image/index.css';
 import '@virt-table-pro/formula/index.css';
+import '@virt-table-pro/pivot/index.css';
 import '@virt-table-pro/license/index.css';
 import '@virt-table/vanilla/components/image-viewer.css';
 // 演示密钥两个案例共用一份（各设一把会在切换案例时互相覆盖，见那个文件的头注）
@@ -92,6 +104,21 @@ import {
  * 仍然只能手写的部分（都是「库不该管」的那类）：A/B/…/BM 列名、条件格式规则本身，
  * 以及「把当前选区合并起来」这个命令 —— 核心给了几何（`expandSelectionForMerges`）与写入
  * （`setMerges`），但没有现成的「合并选区」动作。
+ *
+ * ## 五个付费插件，两个是后来加的
+ *
+ * 公式 / 撤销 / 浮动图片是这个案例一开始就有的。2026-08-31 又加了两个，它们放在一起才
+ * 构成一条完整的路 —— **十万行明细太大不适合直接导 xlsx，先透视成汇总再导**：
+ *
+ * - **`vtPivot`**（工具栏「透视」）：9.75 万条明细 → 11 行交叉表，实测 39ms。
+ *   那个面板是**本文件自己画的**（插件 v1 只给 API），用的是核心的面板基元。
+ *   三件这个案例撞出来的事写在 `registerToolbarItem('pivot')` 上面那段注释里。
+ * - **`vtXlsx`**（工具栏「导出」）：选区 / 透视结果 → 真 xlsx，以及分页打印 / PDF。
+ *   **刻意不给「导出全表 xlsx」**，理由见 `exportXlsxSelection()` 上面那段。
+ *
+ * ⚠️ 两处「让位」不能忘：核心的 `vtExport` 与本文件那颗导出面板都叫「导出」，所以前者传
+ * `toolbar: false`；`vtXlsx` 同理传 `toolbar: false`（入口由本文件给）。少任何一个，
+ * 工具栏上就会并排出现两颗同名按钮 —— 这条是真浏览器冒烟时抓出来的。
  */
 
 /* ==========================================================================
@@ -714,6 +741,14 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
   let currentColCount = COL_COUNT;
   let tableRef: VirtTable<SpreadsheetRow> | null = null;
   let setStatusFn: ((text: string) => void) | null = null;
+  /**
+   * 「导出选区为真 xlsx」的前向引用。
+   *
+   * 与 `setStatusFn` 同一个模式、同一个原因：右键菜单的 provider 必须在
+   * `new VirtTable(...)` **之前**造好（它是 options 的一部分），而这个动作要用到表格实例。
+   * 建表之后把实现塞进来。
+   */
+  let exportXlsxSelectionFn: (() => void) | null = null;
 
   /**
    * 剪贴板：合并区的读写直接落在表格上（`getMerges`/`setMerges`），
@@ -1104,6 +1139,21 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
       },
     });
 
+    /*
+     * 同一块选区的另一条出路：**真 xlsx**（付费 `vtXlsx`）。
+     * 与上面那条 CSV 的差别不在「格式更高级」，而在收到文件的人能拿它干什么 ——
+     * 数字是数字（能再排序、能进公式）、列宽与对齐在、Excel 打开不弹格式警告。
+     *
+     * 付费包缺席（桩档）时这个方法运行时不存在，所以整条菜单项不放出来 ——
+     * 放一条点了没反应的菜单比没有更糟。
+     */
+    if (table.exportXlsx) {
+      items.push({
+        label: '导出选区为真 xlsx',
+        action: () => exportXlsxSelectionFn?.(),
+      });
+    }
+
     return items;
   };
 
@@ -1125,7 +1175,17 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
       vtContextMenu<SpreadsheetRow>(contextMenuProvider),
       vtClipboard<SpreadsheetRow>(clipboardHooks),
       vtSearch<SpreadsheetRow>(),
-      vtExport<SpreadsheetRow>(),
+      /*
+       * 核心的导出（CSV / 伪装 .xls / 打印）。
+       *
+       * `toolbar: false` 是必须的：本文件另注册了一颗「导出」面板（真 xlsx + PDF 排版 +
+       * 全表 CSV），两颗都放出来的话工具栏上会**并排出现两个「导出」**——
+       * 它们的 key 不同（`export` / `exportXlsx`）所以核心不会拒绝，只是看着莫名其妙。
+       * 这一条正是 `vtXlsx` 文档里那条建议：同时装时把入口留给一颗。
+       *
+       * 插件本身仍然要装 —— 本文件那颗面板里的「全表 → CSV」用的就是它的 `exportCsv()`。
+       */
+      vtExport<SpreadsheetRow>({ toolbar: false }),
       /**
        * 工具栏。它**一颗按钮都不自带**（要哪颗装哪个插件），所以这里就是一条空货架 ——
        * 撤销/重做那两颗由本文件在建表之后 `registerToolbarItem()` 注册。
@@ -1212,6 +1272,28 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
           );
         },
       }),
+      /**
+       * 真 xlsx 导出。`toolbar: false` —— 入口由本文件那颗「导出」面板给（见
+       * `registerToolbarItem('exportXlsx')`），免得与核心 `vtExport` 那颗并排出现两个「导出」。
+       *
+       * `freeze` 冻住表头一行；`numberFormats` 只给三个工时列，其余列是文本或日期。
+       */
+      vtXlsx<SpreadsheetRow>({
+        toolbar: false,
+        sheetName: '工程排期',
+        freeze: { rows: 1 },
+        numberFormats: {
+          [KEY_PLANNED]: '#,##0.0',
+          [KEY_ACTUAL]: '#,##0.0',
+          [KEY_DELTA]: '#,##0.0;[Red]-#,##0.0',
+        },
+      }),
+      /**
+       * 透视表。**装上但不开** —— `vtPivot()` 不配 `rows` 也不配 `values` 时完全让路
+       * （行一条不动、列一列不换），所以它对这个案例的默认形态零影响。
+       * 打开的入口是工具栏那颗「透视」按钮里的面板。
+       */
+      vtPivot<SpreadsheetRow>(),
       vtSheetStats(renderStats),
     ],
   });
@@ -1379,6 +1461,316 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
   ];
   listeners.push(...undoItems);
 
+  /* ==========================================================================
+   * 导出（付费插件 vtXlsx）—— 入口刻意**不给「导出全表 xlsx」**
+   *
+   * 65 列 × 10 万行 = 650 万格。真 xlsx 是 zip 里的 XML，每一格至少 30 字节 ——
+   * 全表导出会先在内存里拼出几百 MB 的字符串再去压缩，那不是「慢」，是把标签页挂死。
+   * 所以这个案例给的是两条**有界**的路，它们恰好覆盖真实需求：
+   *
+   *   · **导出选区** —— 「把这块给对方看」，大小由用户框出来的范围决定
+   *   · **导出透视结果** —— 「把十万行的汇总给对方看」，透视后只有几十行
+   *
+   * 这也是这两个插件放在一起才成立的那个故事：先透视再导出。
+   * CSV 那条留着（核心 `vtExport` 的能力）：它是流式拼文本，全表导也只是几十 MB 的纯文本。
+   * ========================================================================== */
+
+  /** 选区里有多少格（拿来做导出前的体量提示） */
+  const selectionCellCount = (): number => {
+    const sel = table.getCellSelection?.();
+    if (!sel) return 0;
+    return (sel.endRow - sel.startRow + 1) * (sel.endCol - sel.startCol + 1);
+  };
+
+  const exportXlsxSelection = (): void => {
+    if (!table.exportXlsx) {
+      setStatus('付费插件未装载，xlsx 导出不可用（CSV 仍然可以）');
+      return;
+    }
+    const cells = selectionCellCount();
+    if (cells === 0) {
+      setStatus('先框选一块区域再导 xlsx —— 全表 650 万格不适合走 xlsx，见「导出」面板里的说明');
+      return;
+    }
+    void table.exportXlsx({ selectionOnly: true, filename: '选区.xlsx' });
+    setStatus(
+      `已导出选区为**真 xlsx**（${cells.toLocaleString('zh-CN')} 格）—— ` +
+        'zip + OOXML，不是 HTML 伪装的 .xls：数字是数字、列宽与对齐都在，Excel 打开不弹格式警告',
+    );
+  };
+
+  // 右键菜单那条（provider 在建表之前造，见 `exportXlsxSelectionFn` 的注释）
+  exportXlsxSelectionFn = exportXlsxSelection;
+
+  const exportXlsxPivot = (): void => {
+    if (!table.exportXlsx) {
+      setStatus('付费插件未装载，xlsx 导出不可用（CSV 仍然可以）');
+      return;
+    }
+    if (!isPivoting()) {
+      setStatus('先在「透视」面板里开启透视，再导它的结果 —— 那时全表只有几十行');
+      return;
+    }
+    const r = table.getPivotResult?.();
+    void table.exportXlsx({
+      filename: '透视汇总.xlsx',
+      sheetName: '汇总',
+      freeze: { rows: 1 },
+      autoFilter: true,
+      // 合计行写成活 SUBTOTAL：收到文件的人筛一下，合计自己跟着变
+      liveSummary: true,
+    });
+    setStatus(
+      `已导出透视结果为真 xlsx：${r?.rows.length ?? 0} 行 × 多级分组表头都还原了 —— ` +
+        `${(r?.sourceCount ?? 0).toLocaleString('zh-CN')} 条明细的汇总，这才是适合走 xlsx 的体量`,
+    );
+  };
+
+  listeners.push(
+    table.registerToolbarItem({
+      key: 'exportXlsx',
+      label: '导出',
+      order: 40,
+      side: 'right',
+      icon:
+        '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M12 4v10M8.5 10.5 12 14l3.5-3.5M5 18h14"/></svg>',
+      panel: (p) => {
+        p.ui.title('导出');
+        const cells = selectionCellCount();
+        p.ui.hint(
+          cells > 0
+            ? `当前选区 ${cells.toLocaleString('zh-CN')} 格`
+            : '全表 650 万格不适合走 xlsx —— 先框一块，或者先透视',
+        );
+        const rows: Array<[string, () => void]> = [
+          ['选区 → 真 xlsx', exportXlsxSelection],
+          ['透视结果 → 真 xlsx', exportXlsxPivot],
+          [
+            '打印 / PDF（分页 + 每页重复表头）',
+            () => {
+              if (!table.exportPdf) {
+                setStatus('付费插件未装载，PDF 排版不可用');
+                return;
+              }
+              void table.exportPdf({
+                title: isPivoting() ? '工程排期 · 汇总' : '工程排期 · 明细',
+                landscape: true,
+                fitWidth: true,
+                footNote: '由 virt-table 导出',
+                // 明细太宽太长，只打选区；透视结果整张打
+                selectionOnly: !isPivoting(),
+              });
+              setStatus(
+                '已排版并唤起打印 —— 在对话框里选「另存为 PDF」。' +
+                  '每页会重复表头（虚拟滚动的 DOM 里只有一屏行，浏览器原生打印结构上打不全）',
+              );
+            },
+          ],
+          [
+            '全表 → CSV（流式文本，体量没问题）',
+            () => {
+              table.exportCsv({ filename: '工程排期.csv' });
+              setStatus('已导出全表 CSV —— 纯文本流式拼接，650 万格也扛得住');
+            },
+          ],
+        ];
+        for (const [label, run] of rows) {
+          p.el.appendChild(
+            p.ui.button(label, 'plain', () => {
+              p.close();
+              run();
+            }),
+          );
+        }
+        p.resize();
+      },
+    }),
+  );
+
+  /* ==========================================================================
+   * 透视（付费插件 vtPivot）—— 面板 UI 由**使用方**做
+   *
+   * 插件 v1 刻意只给声明式配置 + `setPivotConfig()`，不带面板。这一段就是「自己做那个
+   * 面板」的完整样子：三个下拉 + 两颗按钮，用的是**核心的面板基元**（`p.ui.*`），
+   * 所以外观与「撤销/重做」那两颗、与列头筛选下拉是同一套。
+   *
+   * ## 三件这个案例特有的事
+   *
+   * 1. **要 `filter` 掉非明细行。** 第 0 行是表头行、每 40 行一条「阶段小结」带 ——
+   *    它们的「模块」格里放的是标题文字，直接聚合会多出「阶段小结」这种假维度取值。
+   * 2. **合并区由插件自己收拾。** 这张表有 2.7 万个合并区，坐标按十万行明细算的；
+   *    透视出 40 行汇总时那份坐标毫无意义。`vtPivot` 在开启时存一份并清空、关掉时还回去，
+   *    这里一行都不用写（那正是为它在核心补 `setMerges` 白名单的原因）。
+   * 3. **公式与透视互不相干。** 偏差列（`=I{n}-H{n}`）在透视模式下压根不存在 ——
+   *    列被换掉了。切回明细时公式原文还在行上（存在 `row._formulas`），照旧生效。
+   * ========================================================================== */
+
+  /** 可当维度的列：都是取值有重复的语义列（逐行唯一的工单号/子任务不能当维度） */
+  const DIM_FIELDS: Array<{ value: string; label: string }> = [
+    { value: colIndexToKey(1), label: '模块' },
+    { value: colIndexToKey(4), label: '状态' },
+    { value: colIndexToKey(5), label: '优先级' },
+    { value: colIndexToKey(3), label: '负责人' },
+  ];
+
+  /** 可当值的聚合。key 是「列字母:聚合」，`buildPivot()` 再拆开 */
+  const VALUE_CHOICES: Array<{ value: string; label: string }> = [
+    { value: `${KEY_ACTUAL}:sum`, label: '实际工时 求和' },
+    { value: `${KEY_PLANNED}:sum`, label: '预计工时 求和' },
+    { value: `${KEY_DELTA}:sum`, label: '偏差 求和' },
+    { value: 'A:count', label: '工单数' },
+    { value: `${KEY_ACTUAL}:avg`, label: '实际工时 均值' },
+  ];
+
+  /** 面板里三个下拉的当前选择（面板关掉再打开时要记得住） */
+  let pivotRowField = DIM_FIELDS[0].value;
+  let pivotColField = '';
+  let pivotValueKey = VALUE_CHOICES[0].value;
+
+  const labelOf = (list: Array<{ value: string; label: string }>, v: string): string =>
+    list.find((o) => o.value === v)?.label ?? v;
+
+  /** 三个下拉的当前选择 → 一份 `PivotOptions` */
+  const buildPivot = (): PivotOptions<SpreadsheetRow> => {
+    const [field, agg] = pivotValueKey.split(':') as [string, 'sum' | 'avg' | 'count'];
+    return {
+      rows: [pivotRowField],
+      ...(pivotColField ? { columns: [pivotColField] } : {}),
+      values: [
+        { field, agg, title: labelOf(VALUE_CHOICES, pivotValueKey) },
+        { field: 'A', agg: 'count', title: '工单数' },
+      ],
+      dimTitle: labelOf(DIM_FIELDS, pivotRowField),
+      dimWidth: 220,
+      valueWidth: 130,
+      /*
+       * 只统计**明细行**：第 0 行是表头行（`id === HEADER_ROW`），每 40 行一条小结带
+       * （`_band`）。不筛掉的话会多出「阶段小结」这种假维度取值，而那正是
+       * 「源数据级的条件只能放 filter」那条约定要解决的场景 ——
+       * 列头筛选在透视模式下筛的是透视结果，筛不到明细。
+       */
+      filter: (row) => row.id !== HEADER_ROW && !row._band,
+      // 工时带一位小数，工单数是整数 —— 两种一起显示时不做千分位反而更好读
+      formatValue: (v) =>
+        typeof v === 'number'
+          ? v.toLocaleString('zh-CN', { maximumFractionDigits: 1 })
+          : '',
+    };
+  };
+
+  /** 现在是透视模式吗（`getPivotConfig()` 是唯一真源，demo 不留平行状态） */
+  const isPivoting = (): boolean => Boolean(table.getPivotConfig?.());
+
+  const applyPivot = (): void => {
+    const t0 = performance.now();
+    table.setPivotConfig?.(buildPivot());
+    const ms = Math.round(performance.now() - t0);
+    const r = table.getPivotResult?.();
+    table.refreshToolbar();
+    setStatus(
+      `透视：${labelOf(DIM_FIELDS, pivotRowField)}` +
+        (pivotColField ? ` × ${labelOf(DIM_FIELDS, pivotColField)}` : '') +
+        ` → ${labelOf(VALUE_CHOICES, pivotValueKey)} · ` +
+        `${(r?.sourceCount ?? 0).toLocaleString('zh-CN')} 条明细聚合成 ${r?.rows.length ?? 0} 行，` +
+        `耗时 ${ms}ms —— 折叠展开与分组表头都是核心的，2.7 万个合并区已由插件自己收起`,
+    );
+  };
+
+  const closePivot = (): void => {
+    table.setPivotConfig?.(null);
+    table.refreshToolbar();
+    setStatus(
+      '已退回明细视图：65 列、10 万行、2.7 万个合并区与整列公式都回来了 —— ' +
+        '透视是可逆的，装了它不等于失去原来那张表',
+    );
+  };
+
+  listeners.push(
+    table.registerToolbarItem({
+      key: 'pivot',
+      label: '透视',
+      order: 30,
+      icon:
+        '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg>',
+      // 徽标：开着透视时显示「开」，于是不必点开面板也知道当前在哪个视图
+      badge: () => (isPivoting() ? '开' : ''),
+      panel: (p) => {
+        p.ui.title('透视');
+        // 付费包缺席（桩档）时这些方法运行时不存在 —— 说清楚，而不是给一个点不动的面板
+        if (!table.setPivotConfig) {
+          p.ui.empty('付费插件未装载，透视不可用');
+          p.resize();
+          return;
+        }
+        p.ui.hint('把 10 万行明细聚合成一张交叉表。排序/筛选会作用在结果上');
+
+        p.ui.row(
+          '行维度',
+          p.ui.select({
+            options: DIM_FIELDS,
+            value: pivotRowField,
+            placeholder: '选一列',
+            emptyText: '没有可用的列',
+            onChange: (v) => {
+              pivotRowField = v;
+              if (isPivoting()) applyPivot();
+            },
+          }).el,
+        );
+
+        p.ui.row(
+          '列维度',
+          p.ui.select({
+            options: [{ value: '', label: '（不交叉）' }, ...DIM_FIELDS],
+            value: pivotColField,
+            placeholder: '（不交叉）',
+            emptyText: '没有可用的列',
+            onChange: (v) => {
+              pivotColField = v;
+              if (isPivoting()) applyPivot();
+            },
+          }).el,
+        );
+
+        p.ui.row(
+          '值',
+          p.ui.select({
+            options: VALUE_CHOICES,
+            value: pivotValueKey,
+            placeholder: '选一个',
+            emptyText: '没有可用的聚合',
+            onChange: (v) => {
+              pivotValueKey = v;
+              if (isPivoting()) applyPivot();
+            },
+          }).el,
+        );
+
+        const foot = p.ui.footer();
+        if (isPivoting()) {
+          foot.appendChild(
+            p.ui.button('退回明细', 'plain', () => {
+              closePivot();
+              p.close();
+            }),
+          );
+        }
+        foot.appendChild(
+          p.ui.button(isPivoting() ? '重新透视' : '开始透视', 'primary', () => {
+            applyPivot();
+            p.close();
+          }),
+        );
+        p.resize();
+      },
+    }),
+  );
+
+
   /*
    * 三个坐标框 → 图。反向（拖拽 → 框）在插件的 `onChange` 里，两条路都只改
    * **同一份状态**（插件里那张图的配置），demo 自己不留一份平行的 x/y。
@@ -1430,6 +1822,7 @@ export function bootstrapDemoSpreadsheet(root: HTMLElement): () => void {
     table.destroy();
     // 模块级挂钩必须还回去：留着的话下一次挂载的列会往已经销毁的表格上录历史
     editRecorder = null;
+    exportXlsxSelectionFn = null;
     listeners.forEach((off) => off());
     root.innerHTML = '';
   };

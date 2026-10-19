@@ -33,14 +33,61 @@ import '@virt-table/vanilla/plugins/search.css';           // vtSearch
 import '@virt-table/vanilla/components/vt-filter-builder.css'; // VtFilterBuilder
 ```
 
-懒得一个个数的话，`style.css` 是全量合集（核心 + 全部插件 + 内置组件，约 45 kB，
-比只引 `core.css` 的 27 kB 多 18 kB）：
+懒得一个个数的话，`style.css` 是全量合集（核心 + 全部插件 + 内置组件，约 81 kB，
+比只引 `core.css` 的 31 kB 多 50 kB）：
 
 ```ts
 import '@virt-table/vanilla/style.css';
 ```
 
 哪些插件带独立 CSS，见 [插件机制](../api/plugins)。
+
+## 包入口与按需引入
+
+`@virt-table/vanilla` 是**多入口**包 —— 可选层不进主入口，用不到的连 CSS 一起被
+tree-shaking 摇掉。子路径与样式的对应关系：
+
+| 子路径 | 内容 | 配套样式 |
+| --- | --- | --- |
+| `@virt-table/vanilla` | `VirtTable` 与核心类型、插件契约 | `core.css`（**必引**，31 kB） |
+| `/plugins`（或 `/plugins/<名>`） | 14 个插件 | `/plugins/<名>.css`（带样式的插件才有） |
+| `/components` | 18 个内置单元格组件 | `/components/index.css`（25 kB） |
+| `/components/vt-filter-builder` | 高级筛选构建器（CSS 较大，单独成 chunk） | `/components/vt-filter-builder.css`（10 kB） |
+| `/components/image-viewer` | 图片查看器（与 `VtImage` 共用一份实现） | `/components/image-viewer.css` |
+| `/ai-query` | 自然语言查询的纯逻辑层（schema / 校验 / 映射） | 无（零 DOM，可在 Node 里跑） |
+| `/infer-columns` | 从样本数据推断列（类型 / 标题 / 宽度 / 对齐） | 无（零 DOM，可在 Node 里跑） |
+| `/style.css` | — | 全量合集（核心 + 插件 + 组件，81 kB） |
+
+```ts
+import { VirtTable } from '@virt-table/vanilla';
+import { vtSearch } from '@virt-table/vanilla/plugins';   // 或 /plugins/search
+import { VtSelect } from '@virt-table/vanilla/components';
+
+import '@virt-table/vanilla/core.css';
+import '@virt-table/vanilla/plugins/search.css';
+import '@virt-table/vanilla/components/index.css';
+```
+
+::: tip 单元格组件只有 barrel 一个 JS 入口
+`vt-filter-builder` 与 `image-viewer` 除外，其余 18 个组件共用一份 `components.css`，
+按组件拆入口拆不出对应的 CSS。**按需只引一个组件靠 tree-shaking 完成**：实测从 barrel
+引 1 个组件只增加约 2.8 kB，引 1 个插件约 4.7 kB。
+:::
+
+`ai-query` 与 `infer-columns` 是**零 DOM 的纯逻辑入口**，可以在 Node / 服务端跑 ——
+模型产出的校验、列推断都更该发生在那一侧。
+
+CDN 走 UMD 全量单文件：
+
+```html
+<link rel="stylesheet" href="https://unpkg.com/@virt-table/vanilla/dist/style.css" />
+<script src="https://unpkg.com/@virt-table/vanilla"></script>
+<script>
+  const table = new VirtTable.VirtTable(el, {
+    /* ... */
+  });
+</script>
+```
 
 ## 触屏支持范围
 
@@ -51,7 +98,7 @@ import '@virt-table/vanilla/style.css';
 | 滚动、点击、勾选、排序、展开/折叠 | ✅ | 原生行为 |
 | 列宽拖拽 | ✅ | 手柄 8px 宽，`touch-action: none` 只让出这一小条 |
 | 行拖拽排序（`vtRowDrag`） | ✅ | 走 `type: 'drag'` 列的专用手柄 |
-| 列拖拽排序（`vtColumnDrag`） | ✅ | 可拖列头是 `touch-action: pan-y`——横向手势归拖拽、纵向留给滚动。**代价：在表头上横滑滚动表格会失效**（表体横滑照旧） |
+| 列拖拽排序（`vtColumnDrag`） | ✅ | 可拖列头不再把单指平移交给浏览器；横向手势归拖拽，纵向由 `InputController` 滚动表格。**代价：在表头上横滑滚动表格会失效**（表体横滑照旧） |
 | 单元格框选（`vtCellSelection`） | ❌ 刻意不支持 | 表体上手指拖动的语义是「滚动表格」，要改成框选就得给表体设 `touch-action: none`，会直接废掉表格滚动。鼠标 / 手写笔不受影响 |
 | 溢出 tooltip（`textOverflow: 'tooltip'`） | ❌ | 触屏没有 hover 概念 |
 

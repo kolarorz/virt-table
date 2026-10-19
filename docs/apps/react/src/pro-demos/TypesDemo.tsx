@@ -3,8 +3,8 @@ import { VirtTableReact, type VirtTableRef } from '@virt-table/react';
 import { vtCellEditor } from '@virt-table/vanilla/plugins';
 import { setLicenseKey, vtLicense } from '@virt-table-pro/license';
 import '@virt-table-pro/license/index.css';
-import { vtViews } from '@virt-table-pro/views';
-import '@virt-table-pro/views/index.css';
+// import { vtViews } from '@virt-table-pro/views';
+// import '@virt-table-pro/views/index.css';
 import { vtUndo, type HistoryChangeInfo } from '@virt-table-pro/undo';
 import { PRO_DEMO_LICENSE_KEY } from '../../../pro-kit/demo-license';
 import { columns, makeRows } from '../../../pro-kit/shared/data';
@@ -21,15 +21,18 @@ const EMPTY: HistoryChangeInfo = { canUndo: false, canRedo: false, labels: { und
  * 这一页的价值在 `pnpm typecheck` 而不是界面：`@virt-table-pro/*` 各包末尾的
  * `declare module '@virt-table/vanilla'` 扩展了 `VirtTablePluginApi`，而 React 的
  * `VirtTableRef extends VirtTablePluginApi`（核心 packages/react/src/index.ts）。
- * 所以下面这些 `tableRef.current!.saveView?.(...)` / `.undo?.()` / `.recordChange?.(...)`
+ * 所以下面这些 `tableRef.current!.undo?.()` / `.recordChange?.(...)` / `.refreshLicenseBadge?.()`
  * 能不能过 typecheck，就是这条链路通不通的判据 —— 不通的话这里会红。
  *
  * 与其它 demo 的分工：那些验证**单个插件的行为**（一张表只装一个），
- * 这一张刻意把三个付费插件装在一起，顺带验证它们互不干扰。
+ * 这一张刻意把多个付费插件装在一起，顺带验证它们互不干扰。
+ *
+ * 2026-08-31：原来还装着 `vtViews`（判据是 `saveView` / `listViews`），命名视图暂不出售后
+ * 一并摘掉，恢复清单见 `docs/enterprise/index.md` 的同日注释。
  */
 export function TypesDemo({ setStatus }: ProDemoProps) {
   const tableRef = useRef<VirtTableRef>(null);
-  const viewsBtn = useRef<HTMLButtonElement>(null);
+  // const viewsBtn = useRef<HTMLButtonElement>(null);
   const [rows] = useState(() => makeRows());
   const [history, setHistory] = useState<HistoryChangeInfo>(EMPTY);
 
@@ -53,6 +56,7 @@ export function TypesDemo({ setStatus }: ProDemoProps) {
   return (
     <>
       <div className="pg-toolbar">
+        {/* 命名视图暂不出售，两个按钮一并摘掉（2026-08-31）
         <button
           className="pg-btn"
           ref={viewsBtn}
@@ -71,6 +75,7 @@ export function TypesDemo({ setStatus }: ProDemoProps) {
         >
           保存当前视图
         </button>
+        */}
         <button
           className="pg-btn"
           disabled={!history.canUndo}
@@ -116,7 +121,7 @@ export function TypesDemo({ setStatus }: ProDemoProps) {
             border: true,
             plugins: [
               vtLicense(),
-              vtViews({ storageKey: 'vtp-react-types' }),
+              // vtViews({ storageKey: 'vtp-react-types' }),
               vtUndo({ onChange: setHistory }),
               vtCellEditor(),
             ],

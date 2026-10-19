@@ -1,0 +1,114 @@
+/**
+ * 状态栏的样式。
+ *
+ * 条本身在 `.vt-root` **外面**（见 index.ts 的 `ensureHost`），所以这里的选择器
+ * 不能挂 `.vt-root` 前缀 —— 挂了一条规则都不生效。它拿 token 靠外壳上的 `.vt-fb`
+ * （核心给「表格之外的 DOM」准备的变量载体）。
+ *
+ * 颜色一律走 `--vt-*`，每个都带 fallback：本包的 CSS 可能在核心 core.css 之前被打包器
+ * 排到前面，那一瞬间 token 还没定义。写死的灰在暗色主题下会变成一块亮斑。
+ */
+
+.vt-status-bar-shell {
+  display: flex;
+  flex-direction: column;
+  /* 表格吃掉剩下的高度，条按内容高 —— 与 vt-toolbar-shell 同一套 */
+  min-height: 0;
+}
+
+.vt-status-bar-shell > .vt-root {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.vt-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--vt-border-color, #ebeef5);
+  /* 上边框交给表格自己那条，别叠成 2px */
+  border-top: none;
+  background: var(--vt-header-bg, #f5f7fa);
+  color: var(--vt-text-secondary, #6b7280);
+  font-size: 12px;
+  line-height: 20px;
+  /* 条不参与横向滚动，长了就换行 —— 一条会横向滚的状态栏等于看不见 */
+  overflow: hidden;
+}
+
+.vt-status-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+/* 右侧那组推到最右，中间留白 */
+.vt-status-group--end {
+  margin-left: auto;
+}
+
+.vt-status-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+/* 可点（copyOnClick）时才给指针与悬停反馈；span 版不给，免得看着能点却点不动 */
+button.vt-status-item {
+  cursor: pointer;
+}
+
+button.vt-status-item:hover {
+  background: var(--vt-fill-light, rgb(0 0 0 / 6%));
+}
+
+button.vt-status-item:focus-visible {
+  outline: 2px solid var(--vt-color-primary, #409eff);
+  outline-offset: -2px;
+}
+
+.vt-status-label {
+  opacity: 0.75;
+}
+
+.vt-status-value {
+  color: var(--vt-text-color, #303133);
+  font-weight: 600;
+  /*
+   * 数字等宽：拖选时这些值一直在变，非等宽字体下整条会左右抖动 ——
+   * 抖动比数字本身更抓眼睛，读数反而更慢。
+   */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 复制成功那一下：换个底色，900ms 后由 JS 摘掉 class */
+.vt-status-item.is-copied {
+  background: var(--vt-color-success-light, rgb(103 194 58 / 18%));
+}
+
+.vt-status-item.is-copied .vt-status-value {
+  color: var(--vt-color-success, #67c23a);
+}
+
+/*
+ * 减少动效偏好下不做过渡。这条不是装饰 —— 状态栏在拖选时高频重绘，
+ * 带过渡会让值看起来「追着鼠标慢半拍」。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .vt-status-item {
+    transition: background-color 0.15s ease;
+  }
+}

@@ -26,6 +26,8 @@ export { bootstrapTableCellSelection } from './plugins/cell-selection';
 export { bootstrapTableSearch } from './plugins/search';
 export { bootstrapTableFilterConfig } from './plugins/filter-config';
 export { bootstrapTableGroupConfig } from './plugins/group-config';
+export { bootstrapTableColumnMenu } from './plugins/column-menu';
+export { bootstrapTableImport } from './plugins/import';
 export { bootstrapTableSortConfig } from './plugins/sort-config';
 export { bootstrapTableRowHeight } from './plugins/row-height';
 export { bootstrapTableAIQuery } from './ai/ai-query';

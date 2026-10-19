@@ -1,27 +1,11 @@
 # pnpm 多包管理与发布流程
 
-本项目使用 **pnpm workspace** 管理 3 个 npm 包。本文档说明日常开发、版本管理和发布的完整流程。
+本项目使用 **pnpm workspace** 管理 3 个 npm 包。本文说明版本管理与发布的完整流程。
 
 结构与流程沿用 [virt-list](https://github.com/kolarorz/virt-list) 的那一套，**但多了一步
 `pnpm verify:pack`**，原因见「为什么必须校验产物」一节 —— 这是本仓库特有的、已经吃过两次亏的坑。
 
-## 仓库结构
-
-```text
-virt-table/
-├── packages/                    # 可发布的 npm 包
-│   ├── vanilla/                 # @virt-table/vanilla — 表格本体，零框架依赖
-│   ├── react/                   # @virt-table/react   — React 封装
-│   └── vue/                     # @virt-table/vue     — Vue 3 封装
-├── docs/                        # VitePress 文档站 + demo 微应用（不发布）
-├── scripts/
-│   ├── release.mjs              # 一键发布
-│   ├── verify-pack.mjs          # 发布前产物校验（对着 tarball 验）
-│   └── emit-dcts.mjs            # 由 .d.ts 生成配对的 .d.cts
-├── package.json                 # 根 package.json（private: true）
-├── pnpm-workspace.yaml
-└── vitest.config.ts
-```
+仓库结构、常用命令与本地开发流程见 [本地开发](./setup.md)，本文只讲发布。
 
 ## 包依赖关系
 
@@ -48,22 +32,6 @@ vanilla 的构建**刻意不 external** 任何依赖（`@virt-list/*` 与 `lodas
 （`VirtTableOptions extends Omit<VirtListOptions, 'horizontal'>`、`VirtTableEvents extends
 VirtListEvents`、`get core()`、`get state()`），挪走之后 TS 使用方会直接报找不到模块，
 连 `list` / `itemKey` / `estimatedSize` 这些最基础的选项都会消失。
-
-## 日常开发
-
-```bash
-pnpm install
-
-pnpm dev              # 文档站 + 三端 demo 全起
-pnpm dev:docs         # 仅 VitePress
-pnpm dev:vanilla      # 原生 JS demo
-pnpm dev:react        # React demo
-pnpm dev:vue          # Vue demo
-
-pnpm test             # 全部测试（一次性）
-pnpm test:watch       # 监听模式
-pnpm typecheck        # 3 个包 + 文档站 + 3 个 demo 应用
-```
 
 ## 添加依赖
 
@@ -96,6 +64,19 @@ pnpm build            # 三个包，按 vanilla → react → vue 顺序
 pnpm build:vanilla    # 单个包
 pnpm build:docs       # 文档站
 ```
+
+`build:docs` 不只是构建文档站，它串了六道：三端核心包 → 企业版文档校验 → 打并铺付费包
+→ 校验入库的付费产物 → 微应用 + VitePress → 付费源码泄漏扫描。付费插件在另一个**私有**
+仓库，它在不在、以哪种形态在，决定了这次构建带不带付费能力（四个档位：`src` /
+`installed` / `vendor` / `off`）。
+
+那部分与本文件的 npm 发布流程是两件事，写在各自的地方：
+
+| 想知道 | 看哪里 |
+| --- | --- |
+| 四个档位怎么判定、怎么加一个付费 demo | [付费插件接入](./pro-plugins.md) |
+| CI 为什么能带付费能力、产物怎么重新生成 | `scripts/pro-vendor.mjs` 头注 |
+| 给客户交付 / 签发密钥 / 发付费新版本 | 私有仓库的 `publish.md` |
 
 每个包的 build 末尾都会跑 `node ../../scripts/emit-dcts.mjs dist`，把每个 `.d.ts` 复制一份
 同名 `.d.cts`。这不是可选步骤：包是 `"type": "module"`，`exports` 的 `require` 条件若
@@ -263,7 +244,7 @@ beta 验证通过后回到正式版：`pnpm release 0.2.0`。
 - [x] `version` 已更新且三包一致 —— 脚本自动写入并校验
 - [x] `workspace:^` 替换为真实版本区间 —— pnpm publish 自动处理
 - [ ] `@virt-table` organization 权限就绪（首发）
-- [ ] [CHANGELOG](./CHANGELOG.md) 的 `[未发布]` 段已整理成本次版本号
+- [ ] [CHANGELOG](../CHANGELOG.md) 的 `[未发布]` 段已整理成本次版本号
 - [ ] `peerDependencies` 版本范围仍然合理（react ≥18 / react-dom ≥18 / vue ≥3）
 
 ## 发布后验证

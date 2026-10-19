@@ -32,6 +32,6 @@
   每个子路径。本仓库的 demo 与 typecheck 全部走 `src` 别名，产物与 exports 映射没有
   真实消费者，这一步是唯一能兜住它们的地方。
 - 新增 `pnpm release` / `pnpm release:dry`（`scripts/release.mjs`），流程见
-  [PUBLISHING.md](./PUBLISHING.md)。
+  [发布流程](./contributing/publishing.md)。
 - 依赖的 `@virt-list/core` 升到 0.0.7（其 `update` 事件新增第三个参数 `reason`，
   表格已原样透传；对使用方不是破坏性变更 —— 少写参数的旧 handler 仍然可赋值）。

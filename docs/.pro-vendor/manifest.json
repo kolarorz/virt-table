@@ -1,0 +1,164 @@
+{
+  "packages": [
+    {
+      "name": "@virt-table-pro/charts",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "charts/index.css",
+          "bytes": 1700,
+          "sha256": "c9875f78628ea1a591afa2d99c779b5219f7d8057c3cf00140376dfeba27dc7f"
+        },
+        {
+          "path": "charts/index.js",
+          "bytes": 14844,
+          "sha256": "f73143042590e6b50fdc82c8083b22b42f42503670e2f9554cdd8adcd688105e"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/floating-image",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "floating-image/geometry.js",
+          "bytes": 4182,
+          "sha256": "afc280a574d45c3ac78505671b394915d7b36364f5c3afed0006f569be2c475c"
+        },
+        {
+          "path": "floating-image/index.css",
+          "bytes": 7833,
+          "sha256": "31a1864cb102094bf9f2929ee2ced3486b71a977f87b1b4aa3a2ef27ae91da68"
+        },
+        {
+          "path": "floating-image/index.js",
+          "bytes": 16915,
+          "sha256": "c2b64f9bd5fdec8edb4f82cbe58106cd2678f62a6b4918409257a891255f81f1"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/formula",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "formula/index.css",
+          "bytes": 3120,
+          "sha256": "75fd6efcd40ef6b1fc018c326284cf65916c5ca6fd6c0e405a76411a0c830fe5"
+        },
+        {
+          "path": "formula/index.js",
+          "bytes": 43356,
+          "sha256": "91a62f79a65597d69c036aebf2a71c77684736ba8318a1849868cedaa589ac21"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/gantt",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "gantt/index.css",
+          "bytes": 71725,
+          "sha256": "f704afd2f58994e9ba9dcd39ed95a35df9a1037a11a01003ea27914c3c52aefc"
+        },
+        {
+          "path": "gantt/index.js",
+          "bytes": 79672,
+          "sha256": "75e294945d26c5d6caa5729dc5eacfb80c908ee7f635c9d7e5198eb6240953de"
+        },
+        {
+          "path": "gantt/time.js",
+          "bytes": 8799,
+          "sha256": "28e0f8e0b13f40b1561ea723439c585f85215a9e6b38d0c5df385b793b290933"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/license",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "license/index.css",
+          "bytes": 1538,
+          "sha256": "7410bc31f1e6b96d4cc28e5fc645fedc09ef70572e40856db02bbb928326d4d6"
+        },
+        {
+          "path": "license/index.js",
+          "bytes": 8528,
+          "sha256": "6799a1c62f40b92db17763add2e906e89884cc8fa73483248ee81ad92a3bf70d"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/pivot",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "pivot/index.css",
+          "bytes": 1176,
+          "sha256": "0a4af4ccee3e8652b30f2787acf4b1d5888e86e504e3e3485adfe98c30ffbdd1"
+        },
+        {
+          "path": "pivot/index.js",
+          "bytes": 12282,
+          "sha256": "e16c8e3b4c77194e9774e23cab03d6dd78f207b1a56bbab7bdfd938e3001611c"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/status-bar",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "status-bar/index.css",
+          "bytes": 2997,
+          "sha256": "26a9b3c1e862f7afdb66ca544c5da4c78dbed245014ab00e69227857895e756b"
+        },
+        {
+          "path": "status-bar/index.js",
+          "bytes": 11380,
+          "sha256": "b1f57f5bd7c9fd6d0eb6b2a8487aaec6dcf2029d05ce1ef9291c38af37ac59b2"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/undo",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "undo/index.js",
+          "bytes": 10866,
+          "sha256": "257ca7eef69c443d0cd34d6ca8787e8a9d8f816a02691fd1be2ec5f3181dd96d"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/views",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "views/index.css",
+          "bytes": 4046,
+          "sha256": "f62fd0a0d729703b14bdfb59485cfd38e1115d0f65953254465d370b3424467a"
+        },
+        {
+          "path": "views/index.js",
+          "bytes": 8796,
+          "sha256": "50e113aa03ab5d20f2ef645193dcda432547fc732390da7c98627c18a950d61f"
+        }
+      ]
+    },
+    {
+      "name": "@virt-table-pro/xlsx",
+      "version": "0.0.1",
+      "files": [
+        {
+          "path": "xlsx/index.js",
+          "bytes": 48353,
+          "sha256": "a4a211260eb23b398da1ee4c262032a5141d7883ad88bcb60362f65f44b4e4e6"
+        }
+      ]
+    }
+  ]
+}

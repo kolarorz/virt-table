@@ -17,9 +17,14 @@
 | <ProLink to="formula/column">公式 · 计算列</ProLink> | 一列的值由同行其它列算出 |
 | <ProLink to="formula/cell">公式 · 单元格公式</ProLink> | A1 记法、区域引用、依赖图、增量重算 |
 | <ProLink to="floating-image">浮动图片</ProLink> | 贴在纸上、可拖可缩放旋转的图 |
-| <ProLink to="views">命名视图</ProLink> | 列宽/列序/排序/筛选/分页存成可切换的视图 |
 | <ProLink to="undo">撤销 / 重做</ProLink> | 查询状态自动入栈，数据变更显式录制 |
+| <ProLink to="xlsx">真 xlsx 与 PDF</ProLink> | zip + OOXML：样式/合并/多级表头/冻结/多 sheet，与打印排版 |
+| <ProLink to="pivot">透视表</ProLink> | 行列维度分组聚合、交叉分析、小计与总计 |
 | <ProLink to="license">许可与角标</ProLink> | 密钥怎么设、未授权时会发生什么 |
 
-规划中：<ProLink to="pivot">透视表</ProLink> · <ProLink to="xlsx">xlsx / PDF 导出</ProLink> ·
-<ProLink to="charts">集成图表</ProLink> · <ProLink to="collab">协同</ProLink>
+<!-- 命名视图暂不出售，从上面这张表里摘掉了一行（2026-08-31，恢复清单见 docs/enterprise/index.md 的同日注释）。
+注释放在表格**外面**：markdown 表格里夹一行 HTML 注释会把表截成两半。
+| <ProLink to="views">命名视图</ProLink> | 列宽/列序/排序/筛选/分页存成可切换的视图 |
+-->
+
+规划中：<ProLink to="charts">集成图表</ProLink> · <ProLink to="collab">协同</ProLink>

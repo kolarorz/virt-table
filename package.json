@@ -1,7 +1,7 @@
 {
   "name": "virt-table",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.1",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@9.15.2",
@@ -20,11 +20,13 @@
     "build:vanilla": "pnpm -C packages/vanilla build",
     "build:react": "pnpm -C packages/react build",
     "build:vue": "pnpm -C packages/vue build",
-    "build:docs": "pnpm build && pnpm verify:enterprise && node scripts/pro-tgz.mjs && pnpm -C docs build && pnpm verify:pro-leak",
+    "build:docs": "pnpm build && pnpm verify:enterprise && node scripts/pro-tgz.mjs && pnpm verify:pro-vendor && pnpm -C docs build && pnpm verify:pro-leak",
     "build:docs:strict": "VT_PRO_STRICT=1 pnpm build:docs",
     "verify:enterprise": "node scripts/check-enterprise-docs.mjs",
     "verify:pro-leak": "node scripts/check-pro-leak.mjs",
     "pro:tgz": "node scripts/pro-tgz.mjs",
+    "pro:vendor": "node scripts/pro-vendor.mjs",
+    "verify:pro-vendor": "node scripts/check-pro-vendor.mjs",
     "preview": "pnpm -C docs preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -43,7 +45,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@virt-list/core": "^0.0.9",
-    "@virt-list/vanilla": "^0.0.9"
+    "@virt-list/core": "^0.0.11",
+    "@virt-list/vanilla": "^0.0.11"
   }
 }

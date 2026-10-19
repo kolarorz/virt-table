@@ -137,16 +137,22 @@ export function vtExport<T extends Record<string, any> = any>(
                 [t.exportExcel, () => api.exportExcel()],
                 [t.print, () => api.print()],
               ] as Array<[string, () => void]>) {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                // 复用共享的面板条目样式（与列头筛选下拉里的选项同款）
-                btn.className = 'vt-filter-item';
-                btn.textContent = label;
-                btn.addEventListener('click', () => {
-                  p.close();
-                  run();
-                });
-                p.el.appendChild(btn);
+                /*
+                 * 用面板基元的 `button` 而不是 `.vt-filter-item`。
+                 *
+                 * 曾经是后者（「复用列头筛选下拉里的选项样式」），但 2026-08-21 把四个面板
+                 * 拆成独立插件之后 `_panel.css` 只被 `column-filter` / `field-config` /
+                 * `filter-config` 内联了 —— **`toolbar.css` 里没有它**。于是「只装
+                 * vtToolbar + vtExport」时这三行是没有样式的裸按钮（本插件自己没有 CSS 产物，
+                 * 也不该为三行按钮新开一份）。`.vt-toolbar-panel-btn` 来自 `_panel-ui.css`，
+                 * 那份是 `toolbar.css` 内联的，所以跟谁一起装都有样式。
+                 */
+                p.el.appendChild(
+                  p.ui.button(label, 'plain', () => {
+                    p.close();
+                    run();
+                  }),
+                );
               }
               p.resize();
             },

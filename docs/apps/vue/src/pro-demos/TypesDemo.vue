@@ -6,15 +6,20 @@
  * 原因与核心侧的修法见 `./types.ts` 里 `TableInstance` 的注释，以及文档站的「调试栈」。
  *
  * 与其它 demo 的分工：那些验证**单个插件的行为**（一张表只装一个），
- * 这一张刻意把三个付费插件装在一起，顺带验证它们互不干扰。
+ * 这一张刻意把多个付费插件装在一起，顺带验证它们互不干扰。
+ *
+ * 2026-08-31：原来还装着 `vtViews`，命名视图暂不出售后一并摘掉（恢复清单见
+ * `docs/enterprise/index.md` 的同日注释）。判据不受影响 —— `vtLicense` 的
+ * `refreshLicenseBadge` / `getLicenseStatus` 与 `vtUndo` 的 `undo` / `recordChange`
+ * 同样来自各包末尾的 `declare module`，链路断了这里照样会红。
  */
 import { onMounted, onUnmounted, ref } from 'vue';
 import { VirtTableVue } from '@virt-table/vue';
 import { vtCellEditor } from '@virt-table/vanilla/plugins';
 import { setLicenseKey, vtLicense } from '@virt-table-pro/license';
 import '@virt-table-pro/license/index.css';
-import { vtViews } from '@virt-table-pro/views';
-import '@virt-table-pro/views/index.css';
+// import { vtViews } from '@virt-table-pro/views';
+// import '@virt-table-pro/views/index.css';
 import { vtUndo, type HistoryChangeInfo } from '@virt-table-pro/undo';
 import { PRO_DEMO_LICENSE_KEY } from '../../../pro-kit/demo-license';
 import { columns, makeRows } from '../../../pro-kit/shared/data';
@@ -26,7 +31,7 @@ import Icon from './Icon.vue';
 const emit = defineEmits<{ status: [string] }>();
 
 const tableRef = ref<ProTableInstance | null>(null);
-const viewsBtn = ref<HTMLButtonElement | null>(null);
+// const viewsBtn = ref<HTMLButtonElement | null>(null);
 const history = ref<HistoryChangeInfo>({
   canUndo: false,
   canRedo: false,
@@ -42,7 +47,7 @@ const options = {
   border: true,
   plugins: [
     vtLicense(),
-    vtViews({ storageKey: 'vtp-vue-types' }),
+    // vtViews({ storageKey: 'vtp-vue-types' }),
     vtUndo({ onChange: (info) => (history.value = info) }),
     vtCellEditor(),
   ],
@@ -65,12 +70,12 @@ onMounted(() => {
 });
 onUnmounted(() => onCellEdit(null));
 
-const save = (): void => {
-  const name = prompt('视图名称', tableRef.value?.getCurrentView?.() ?? '我的视图');
-  if (!name) return;
-  tableRef.value?.saveView?.(name);
-  emit('status', `当前视图：${name} · 已保存 ${tableRef.value?.listViews?.().length ?? 0} 个`);
-};
+// const save = (): void => {
+//   const name = prompt('视图名称', tableRef.value?.getCurrentView?.() ?? '我的视图');
+//   if (!name) return;
+//   tableRef.value?.saveView?.(name);
+//   emit('status', `当前视图：${name} · 已保存 ${tableRef.value?.listViews?.().length ?? 0} 个`);
+// };
 
 const applyLicense = (): void => {
   setLicenseKey(PRO_DEMO_LICENSE_KEY);
@@ -84,10 +89,12 @@ const applyLicense = (): void => {
 
 <template>
   <div class="pg-toolbar">
+    <!-- 命名视图暂不出售，两个按钮一并摘掉（2026-08-31）
     <button class="pg-btn" ref="viewsBtn" @click="tableRef?.toggleViewPanel?.(viewsBtn ?? undefined)">
       视图面板
     </button>
     <button class="pg-btn" @click="save">保存当前视图</button>
+    -->
     <button class="pg-btn" :disabled="!history.canUndo" @click="tableRef?.undo?.()">
       <Icon :paths="UNDO_PATHS" />
       撤销

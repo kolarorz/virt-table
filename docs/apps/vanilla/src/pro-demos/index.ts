@@ -19,22 +19,32 @@ import { proDemoBootstrap } from './shell';
 import { basicsDemo } from './basics';
 import { moneyDemo } from './money';
 import { licenseDemo } from './license';
-import { viewsDemo } from './views';
+// 命名视图暂不出售，demo 一并摘掉（2026-08-31）。`./views.ts` 与三端的 views.md 都留着，
+// 恢复清单见 `docs/enterprise/index.md` 的同日注释。
+// import { viewsDemo } from './views';
 import { undoDemo } from './undo';
 import { formulaDemo } from './formula';
 import { sheetDemo } from './sheet';
 import { floatingImageDemo } from './floating-image';
+import { xlsxDemo } from './xlsx';
+import { pivotDemo } from './pivot';
+import { statusBarDemo } from './status-bar';
+import { sparklineDemo } from './sparkline';
 import type { ProDemo } from './types';
 
 const demos: ProDemo[] = [
   basicsDemo,
   moneyDemo,
   licenseDemo,
-  viewsDemo,
+  // viewsDemo,
   undoDemo,
   formulaDemo,
   sheetDemo,
   floatingImageDemo,
+  xlsxDemo,
+  pivotDemo,
+  statusBarDemo,
+  sparklineDemo,
 ];
 
 export const proDemoRegistry: Record<string, (root: HTMLElement) => () => void> =

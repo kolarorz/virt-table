@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -13,8 +13,25 @@ import { fileURLToPath, URL } from 'node:url';
  *
  * | 阶段 | 可用档位 | 优先级 |
  * | --- | --- | --- |
- * | `dev`（`vite serve`） | `src` / `installed` / `off` | **src** > installed > off |
- * | `build`（`vite build`） | `installed` / `off` | **installed** > off，**`src` 根本不参与** |
+ * | `dev`（`vite serve`） | `src` / `installed` / `vendor` / `off` | **src** > installed > vendor > off |
+ * | `build`（`vite build`） | `installed` / `vendor` / `off` | **installed** > vendor > off，**`src` 根本不参与** |
+ *
+ * ## 四档分别服务谁
+ *
+ * | 档 | 谁 | 付费产物从哪来 |
+ * | --- | --- | --- |
+ * | `src` | 维护者本机 `pnpm dev` | 同级目录的付费仓库源码，有 HMR |
+ * | `installed` | 维护者本机 `pnpm build:docs` | 现打的 tgz，铺进各 app 的 node_modules |
+ * | `vendor` | **CI** | `docs/.pro-vendor/`，**入库**的混淆产物 |
+ * | `off` | 外部贡献者 / fork | 桩 |
+ *
+ * `vendor` 档是为 CI 存在的：runner 上既没有付费仓库、也不该有 registry 凭据，而文档站
+ * 又必须带着付费能力发出去。于是维护者本地跑一次 `pnpm pro:vendor` 把混淆产物提交进来，
+ * CI 直接吃它 —— 不需要任何 secret，fork 也照样能构建（落 `off`）。
+ *
+ * 排在 `installed` **之后**：维护者本机两样都在时应当走 `installed`，因为那一档顺带验证了
+ * 「客户装到的那组包真能用」（裸包名 + 包自己的 `exports` 解析）。vendor 档没有 `exports`
+ * 可验（它刻意不带 `package.json`），验证价值更低，所以只在 `installed` 缺席时兜底。
  *
  * 为什么 `build` 阶段把 `src` 整个排除掉，而不是把它排在最后：
  * 维护者机器上 pro 源码**一直都在**，如果构建期也认 `src`，那么任何一次忘了铺 tgz 的
@@ -37,7 +54,7 @@ import { fileURLToPath, URL } from 'node:url';
  * 直接抛。正式发布走那个入口 —— 「本该带付费能力却发成桩档」的站点是这条链路上最贵的
  * 一类事故，而它没有任何外部症状。
  */
-export type ProMode = 'src' | 'installed' | 'off';
+export type ProMode = 'src' | 'installed' | 'vendor' | 'off';
 
 /** 本仓库根 */
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -60,6 +77,84 @@ export const proSrcPresent = (): boolean =>
 /** 某个 app 的 `node_modules` 里铺好离线包了没有 */
 export const proInstalledIn = (appDir: string): boolean =>
   existsSync(resolve(appDir, 'node_modules/@virt-table-pro/license/package.json'));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// vendor 档：入库的混淆产物
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 入库的付费产物目录。**这个目录是要提交进公开仓库的**，`.gitignore` 里有一段专门说明。
+ *
+ * 刻意放在 `docs/` 下且以点开头：
+ *   - 不在 `docs/public/` 下 —— 那里的东西会被 VitePress **原样拷进站点**，
+ *     等于把付费产物挂成可直接下载的静态文件；
+ *   - 点开头 ⇒ VitePress 收集页面用的 fast-glob 默认不匹配点目录，不会把里面的
+ *     `README.md` 收成一个文档页。
+ */
+const VENDOR_DIR = resolve(REPO_ROOT, 'docs/.pro-vendor');
+
+interface VendorFile {
+  path: string;
+  bytes: number;
+  sha256: string;
+}
+interface VendorManifest {
+  packages: Array<{ name: string; version: string; files: VendorFile[] }>;
+}
+/** 密钥与 bundle **分两个文件**存，见 `scripts/pro-vendor.mjs` 头注（为了 git 体积） */
+interface VendorLicense {
+  key: string;
+  exp: string;
+  domains?: string[];
+  sub?: string;
+  generated?: string;
+}
+
+/** vite 会多次读配置，manifest 只解析一次 */
+let vendorManifestCache: VendorManifest | null | undefined;
+
+function readVendorManifest(): VendorManifest | null {
+  if (vendorManifestCache !== undefined) return vendorManifestCache;
+  const file = resolve(VENDOR_DIR, 'manifest.json');
+  if (!existsSync(file)) return (vendorManifestCache = null);
+  try {
+    vendorManifestCache = JSON.parse(readFileSync(file, 'utf8')) as VendorManifest;
+  } catch (err) {
+    /*
+     * manifest 坏了要**抛**而不是退回 off：这个目录是入库的，坏掉说明提交出了问题，
+     * 静默落桩档会让 CI 发出一个没有付费能力的站，而那件事没有任何外部症状。
+     */
+    throw new Error(
+      `${file} 解析失败：${(err as Error).message}\n` +
+        '  它由 pnpm pro:vendor 生成并入库。删掉整个 docs/.pro-vendor/ 可退回 off 档。',
+    );
+  }
+  return vendorManifestCache;
+}
+
+/** 入库的混淆产物在不在（判据取 manifest，与 `installed` 那条判据同源：取一个必然存在的文件） */
+export const proVendorPresent = (): boolean => readVendorManifest() !== null;
+
+/**
+ * vendor 档随产物一起入库的**测试密钥**。
+ *
+ * 缺省只签 7 天 —— 它的用途就是让「密钥到期会怎样」这件事**在线上被真的看见**：
+ * 过期之后站上会出现未授权角标而功能一点不降级，这正是要验证的行为。
+ * 到期了重新签：`pnpm pro:vendor --key-only`。
+ *
+ * 拿不到就返回 null，调用方回落到 `pro-kit/demo-license.ts` 里那把 2099 长期演示密钥。
+ */
+export function proVendorLicense(): VendorLicense | null {
+  const file = resolve(VENDOR_DIR, 'license.json');
+  if (!existsSync(file)) return null;
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as VendorLicense;
+  } catch {
+    // 密钥文件坏了不该拦住构建：回落到长期演示密钥，站照常发
+    console.warn(`⚠️  ${file} 解析失败 —— 回落到文档站的长期演示密钥。`);
+    return null;
+  }
+}
 
 export interface ResolveOptions {
   /** 该 app 的目录（`installed` 是**逐 app** 的：每个 app 有自己的 node_modules） */
@@ -88,11 +183,12 @@ export function resolveProMode(opts: ResolveOptions): ProMode {
   const forced = process.env.VT_PRO;
   const hasSrc = proSrcPresent();
   const hasInstalled = proInstalledIn(appDir);
+  const hasVendor = proVendorPresent();
 
   if (forced) {
-    if (forced !== 'src' && forced !== 'installed' && forced !== 'off') {
+    if (forced !== 'src' && forced !== 'installed' && forced !== 'vendor' && forced !== 'off') {
       complain(
-        `VT_PRO 只接受 src / installed / off，收到 "${forced}" —— 按 off 处理。`,
+        `VT_PRO 只接受 src / installed / vendor / off，收到 "${forced}" —— 按 off 处理。`,
         strict,
         `bad:${forced}`,
       );
@@ -127,21 +223,34 @@ export function resolveProMode(opts: ResolveOptions): ProMode {
       );
       return 'off';
     }
+    if (forced === 'vendor' && !hasVendor) {
+      complain(
+        'VT_PRO=vendor 但 docs/.pro-vendor/manifest.json 不在 —— 退回 off。\n' +
+          '  那批产物由 pnpm pro:vendor 生成并**入库**；外部贡献者的 checkout 里本就没有。',
+        strict,
+        `no-vendor:${label}`,
+      );
+      return 'off';
+    }
     return forced;
   }
 
   if (phase === 'dev') {
     if (hasSrc) return 'src';
     if (hasInstalled) return 'installed';
+    if (hasVendor) return 'vendor';
     return 'off';
   }
 
   // build 阶段：src 不参与
   if (hasInstalled) return 'installed';
+  if (hasVendor) return 'vendor';
   if (hasSrc) {
     complain(
-      `构建期发现付费仓库源码，但 ${appDir} 没有铺离线包 —— 退回 off（公开产物不吃源码）。\n` +
-        '  想让这次产物带上付费能力：pnpm build:docs。',
+      `构建期发现付费仓库源码，但 ${appDir} 没有铺离线包、也没有入库的 vendor 产物 —— ` +
+        '退回 off（公开产物不吃源码）。\n' +
+        '  想让这次产物带上付费能力：pnpm build:docs（本机打 tgz），' +
+        '或 pnpm pro:vendor（打一份入库产物给 CI 用）。',
       strict,
       `build-no-tgz:${label}`,
     );
@@ -151,12 +260,21 @@ export function resolveProMode(opts: ResolveOptions): ProMode {
 
 /** 把档位打进日志。缺了这一行，「这次到底有没有带上付费能力」只能等站点发出去靠肉眼发现 */
 export function logProMode(label: string, mode: ProMode): void {
-  const tail =
-    mode === 'off'
-      ? '（解析到桩，没有付费能力）'
-      : mode === 'src'
-        ? '（吃付费仓库源码，有 HMR）'
-        : '（吃离线包，与客户装到的字节一致）';
+  let tail: string;
+  if (mode === 'off') tail = '（解析到桩，没有付费能力）';
+  else if (mode === 'src') tail = '（吃付费仓库源码，有 HMR）';
+  else if (mode === 'installed') tail = '（吃离线包，与客户装到的字节一致）';
+  else {
+    /*
+     * vendor 档把**密钥到期日**一起打出来。那把密钥缺省只有 7 天，过期之后站上会长出
+     * 未授权角标 —— 「这次发出去的站带的密钥哪天过期」值得在构建日志里一眼看见，
+     * 否则只能等角标出现在线上才发现。
+     */
+    const lic = proVendorLicense();
+    tail = lic
+      ? `（吃入库的混淆产物，密钥到期 ${lic.exp}）`
+      : '（吃入库的混淆产物，未随带密钥 → 回落长期演示密钥）';
+  }
   console.log(`[${label}] 付费插件档位：${mode}${tail}`);
 }
 
@@ -235,6 +353,46 @@ export function proSrcAlias(): Alias[] {
 }
 
 /**
+ * `vendor` 档的 alias：`@virt-table-pro/*` → `docs/.pro-vendor/` 里**入库的混淆产物**。
+ *
+ * 形状与 `proSrcAlias()` 一模一样（CSS → 其它子路径 → 裸包名，具体到通用），
+ * 只是替换目标换成 vendor 目录。**同样必须用数组 + 正则**：对象形式是前缀匹配，
+ * `@virt-table-pro/gantt/time` 会被拼成 `.../index.js/time`。
+ *
+ * ## 为什么这一档需要 alias，而 `installed` 档一条都不加
+ *
+ * vendor 产物**刻意不带 `package.json`**（见付费仓库 `scripts/lib/vendor.mjs` 头注：
+ * 让这批入库到公开仓库的字节尽量不能被拿去当包用）。没有 manifest 就没有 `exports`
+ * 映射，vite 的裸包名解析无从下手，所以必须由 alias 把每条子路径显式指到文件。
+ *
+ * 包清单取自 **manifest**（不是 `readdirSync`）：manifest 是 `pnpm pro:vendor` 写的
+ * 唯一权威，少拷了一个包时这里就不会给它 alias，于是那个包解析失败 —— 是**响的**失败。
+ * 靠扫目录的话，一个空目录会被当成"包在"，症状变成运行时 undefined。
+ */
+export function proVendorAlias(): Alias[] {
+  const manifest = readVendorManifest();
+  if (!manifest) return [];
+  const empty = resolve(STUB_DIR, 'empty.css');
+
+  return manifest.packages.flatMap((pkg) => {
+    const short = pkg.name.replace('@virt-table-pro/', '');
+    const dir = resolve(VENDOR_DIR, short);
+    // CSS 未必有（`undo` 就没有）。没有就指到空文件 —— demo 里那几行 CSS import 是
+    // 照客户真实用法写的，不能因为这个包没 CSS 就从源码里消失
+    const hasCss = pkg.files.some((f) => f.path === `${short}/index.css`);
+    return [
+      {
+        find: new RegExp(`^@virt-table-pro/${short}/(.+\\.css)$`),
+        replacement: hasCss ? resolve(dir, 'index.css') : empty,
+      },
+      // `@virt-table-pro/floating-image/geometry` → `<vendor>/floating-image/geometry.js`
+      { find: new RegExp(`^@virt-table-pro/${short}/(.+)$`), replacement: `${dir}/$1.js` },
+      { find: new RegExp(`^@virt-table-pro/${short}$`), replacement: resolve(dir, 'index.js') },
+    ];
+  });
+}
+
+/**
  * `off` 档的 alias：全部指到桩。
  *
  * CSS 指到一个空文件而不是删掉那几行 import —— 那几行是照客户用法写的，
@@ -257,6 +415,7 @@ export function proStubAlias(): Alias[] {
 export function proAliasFor(mode: ProMode): Alias[] {
   if (mode === 'installed') return [];
   if (mode === 'src') return proSrcAlias();
+  if (mode === 'vendor') return proVendorAlias();
   return proStubAlias();
 }
 

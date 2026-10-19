@@ -1,12 +1,12 @@
 # HR 人员与薪酬
 
+<PlaygroundHost framework="vanilla" example-id="demo-hr-payroll" />
+
+## 这个案例做了什么
+
 一张表管完 9 个部门、4940 名员工的编制与薪酬：部门行是汇总、展开是明细，改一个人的薪资，所在部门的成本与全公司合计同时跟着走。
 
 这是企业内部系统里最常见的那类表——**汇总与明细在同一张表上**，字段里混着可编辑的、派生的、和不该给所有人看的。
-
-## 在线体验
-
-<PlaygroundHost framework="vanilla" example-id="demo-hr-payroll" />
 
 ## 串起的能力
 

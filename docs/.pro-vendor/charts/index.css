@@ -1,0 +1,49 @@
+/**
+ * 迷你图的样式。**两件事**：让 SVG 铺满格子，和悬停提示的外观。
+ *
+ * 图形本身的颜色不在这里 —— 那些是 `buildSparklineSvg` 按 spec 写进 SVG 属性的
+ * （默认值就是 `var(--vt-color-primary)`）。放属性里而不是放 CSS：一列可能有多种图型
+ * 多种配色，用 class 表达会变成给每种组合发明一个类名。
+ */
+
+.vt-root td.vtp-spark-cell {
+  /* padding 由插件的 `padding` 选项通过画布尺寸表达，这里只负责不让内容撑开行高 */
+  padding: 0 4px;
+  overflow: hidden;
+  /* 迷你图不是文字，行内基线对齐会让它偏下半格 */
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.vt-root .vtp-spark {
+  display: block;
+  width: 100%;
+  /*
+   * 高度跟着格子走。用 100% 而不是固定值：核心有三档密度 + `setRowHeight`，
+   * 写死高度会在紧凑档露出一条空白、在宽松档被裁掉顶部。
+   */
+  height: 100%;
+  /* 别拦鼠标 —— 悬停提示靠 td 上的委托监听，SVG 吃掉事件的话 target 就永远是 path */
+  pointer-events: none;
+}
+
+.vtp-spark-tip {
+  position: absolute;
+  z-index: 12;
+  /* 贴在格子上沿再往上抬 —— 盖住自己那一格会挡住正在看的那条线 */
+  transform: translate(-50%, -100%);
+  margin-top: -4px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--vt-tooltip-bg, rgb(38 38 38 / 92%));
+  color: var(--vt-tooltip-color, #fff);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 贴到右边界时改成向左对齐，否则会被 .vt-root 的 overflow 裁掉 */
+.vtp-spark-tip.is-flipped {
+  transform: translate(-100%, -100%);
+}

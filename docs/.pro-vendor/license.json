@@ -1,0 +1,10 @@
+{
+  "key": "VTP1.eyJzdWIiOiJ2aXJ0LXRhYmxlIOaWh-aho-ermSDCtyBDSSDmtYvor5Xlr4bpkqUiLCJwcm9kdWN0cyI6IioiLCJleHAiOiIyMDI2LTA5LTA3IiwiaWF0IjoiMjAyNi0wOC0zMSIsImRvbWFpbnMiOlsia2Vuby1sZWUuZ2l0aHViLmlvIiwia29sYXJvcnouZ2l0aHViLmlvIl19.kn4wk9",
+  "exp": "2026-09-07",
+  "domains": [
+    "keno-lee.github.io",
+    "kolarorz.github.io"
+  ],
+  "sub": "virt-table 文档站 · CI 测试密钥",
+  "generated": "2026-08-31"
+}

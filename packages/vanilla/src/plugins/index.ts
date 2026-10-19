@@ -23,6 +23,18 @@ export {
   type ContextMenuItem,
 } from './context-menu';
 export { vtExport, type ExportOptions, type ExportPluginOptions } from './export';
+/**
+ * 导入：CSV / TSV / xlsx → 行（可选连列一起推断）。解析本体在
+ * `@virt-table/vanilla/sheet-import`（零 DOM，服务端也能跑），这个插件只负责
+ * 拿文件、落表、报结果。付费的「导入向导」（列映射 / 校验定位到格）是另一回事。
+ */
+export {
+  vtImport,
+  type ImportPluginOptions,
+  type ImportOptions,
+  type ImportResult,
+  type ImportSource,
+} from './import';
 export {
   vtClipboard,
   type ClipboardOptions,
@@ -76,7 +88,17 @@ export {
 } from './toolbar';
 export { vtCellSelection, type CellSelectionOptions } from './cell-selection';
 export { vtKeyboardNav } from './keyboard-nav';
-export { vtColumnFilter, type ColumnFilterOptions } from './column-filter';
+export {
+  vtColumnFilter,
+  type ColumnFilterOptions,
+  type ColumnFilterService,
+} from './column-filter';
+export {
+  vtColumnMenu,
+  type ColumnMenuOptions,
+  type ColumnMenuItemKey,
+  type ColumnMenuTexts,
+} from './column-menu';
 export {
   vtColumnDrag,
   vtRowDrag,
@@ -109,6 +131,21 @@ export {
   type AIColumnCellStatus,
   type AIColumnComputeContext,
 } from './ai-column';
+// 导入的纯逻辑层：CSV 解析 / zip 解包 / xlsx 读取，可脱离表格单独用（也能跑在服务端）
+export {
+  parseCsv,
+  sniffDelimiter,
+  unzip,
+  readXlsx,
+  rowsToObjects,
+  serialToDate,
+  canInflate,
+  type SheetValue,
+  type ImportedSheet,
+  type ParseCsvOptions,
+  type RowsToObjectsOptions,
+  type RowsToObjectsResult,
+} from '../sheet-import';
 // 列推断：agent / 模型产出的数据事前不知道 schema，这个从样本里把列算出来
 export { inferColumns, humanizeKey, type InferColumnsOptions } from '../infer-columns';
 // 自然语言查询的纯逻辑层：可脱离表格单独使用（例如在服务端预校验模型的产出）

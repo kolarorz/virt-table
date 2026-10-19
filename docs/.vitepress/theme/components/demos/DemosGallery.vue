@@ -1,128 +1,64 @@
 <script setup lang="ts">
 /**
- * Demos 落地页的主体：一排案例卡片 + 一块 demo 舞台。
+ * Demos 落地页的主体：一堵**纯卡片墙**，点一张就去那个案例自己的页面。
  *
- * 早先上面还有一块 hero（左文案 + 右大截图），已经删掉 —— 那张大图和卡片缩略图是同一张
- * 截图，两处并存等于同一件事说两遍，而「选中」和「加载」两个状态还得各画一套高亮。
- * 现在卡片区是**唯一**的切换入口：缩略图底部浮出「▶ 加载 demo」，点了就在下面挂起来；
- * 开头的定位文案回到 `docs/demos/index.md` —— 散文本来就该写在 markdown 里。
+ * ## 这一页刻意**不挂 demo**（2026-08-31 改的）
  *
- * 进来就先把**电子表格**挂上（`DEFAULT_SLUG`）：一个案例站最没说服力的样子就是首屏
- * 只有截图，得先点一下才有东西动。同时只挂一个 —— 另一个案例是点了才付钱，所以首屏
- * 的代价固定是「一个实例」，与用户手点第一张卡片一样，不会因为默认加载而翻倍。
+ * 早先这里有一块「舞台」：点卡片就地把 demo 挂起来，首屏还默认挂着电子表格。结果同一个
+ * demo 跑在**两处** —— 这里一处、案例页的「在线体验」一处。合成一处时留的是案例页那一处：
  *
- * `PlaygroundHost` 自己 watch 了 `exampleId`，所以换案例是卸载重挂，**同时只有一个
- * 实例活着**（与 AiScenarios.vue 同一套做法）。
+ * - **一个 demo 一个 URL**。案例页能分享、能被搜索引擎收录、能被企业版文档与
+ *   `demoCases.ts` 之外的地方直接链过去；而「总览页上第几张卡片被点开了」不是个地址。
+ * - **从外部链接落进 `/demos/spreadsheet` 的人得看到真表格**。舞台留在总览页的话，
+ *   那些人只会看到一篇说明文。
+ * - 十万行 × 65 列的案例挂起来不便宜（造数 + 建表 + 9.75 万条公式）。总览页的职责是
+ *   **让人挑**，挑的时候不该先付一次挂载的钱。
+ *
+ * 代价如实记下来：**总览页首屏不再有东西在跑**。原来那块舞台的注释里写着
+ * 「一个案例站最没说服力的样子就是首屏只有截图」—— 那句话仍然对，只是它该由**案例页**
+ * 的首屏来满足，而不是由总览页替所有案例满足一遍。
  *
  * 截图由 `scripts/shoot-demos.mjs` 生成到 `docs/public/demos/<slug>.png`，改了案例的
  * 外观记得重跑一次。
  */
-import { computed, nextTick, ref } from 'vue';
 import { withBase } from 'vitepress';
 import { DEMO_CASES, type DemoCase } from '../../../demoCases';
 
-/** 首屏默认挂哪个案例。找不到（或它被标成规划中）就退回「什么都不挂」 */
-const DEFAULT_SLUG = 'spreadsheet';
-
 /**
- * 已加载的案例；`null` 表示舞台空着（点了「收起」之后）。
+ * 案例 slug → 它用到的付费插件名。
  *
- * 这是本组件**唯一**的状态 —— 删掉 hero 之后「选中」不再需要单独存一份：
- * 卡片的高亮就是「正在运行的那个」。
- */
-const loaded = ref<DemoCase | null>(
-  DEMO_CASES.find((c) => c.slug === DEFAULT_SLUG && !c.planned) ?? null,
-);
-
-const stageRef = ref<HTMLElement | null>(null);
-
-/**
- * 舞台下面那条**企业版横幅**的数据：案例 slug → 它用到的付费插件。
+ * 原来这是一整块「企业版横幅」的数据（紧贴舞台，说的是"正在运行的那个案例"）。
+ * 舞台没了之后横幅也没了依附对象 —— 改成卡片上的一行短标签：挑案例的时候就该看得见
+ * 「这个案例里有付费能力」，而逐条说明在案例页的「本案例中涉及企业版功能」那一节（长版）。
  *
- * 故意就放在这里、不进 `demoCases.ts`：案例页底下已经有一节长版（标题 + 逐条说明），
- * 这里只要够横幅用的短标签。两处内容本来就该不一样（一个是文档、一个是提示条），
- * 抽成共享清单反而要为「长短两种写法」再加字段。加/改案例时这两处一起改。
+ * 故意不进 `demoCases.ts`：那份清单同时被 Node 侧的 `config.ts` 吃，而这是纯展示数据。
+ * 加/改案例时这里与案例页那一节一起改。
  */
-const PRO_BY_SLUG: Record<string, { id: string; name: string; items: string[] }[]> = {
-  spreadsheet: [
-    {
-      id: 'formula',
-      name: '单元格公式',
-      items: ['偏差列整列是公式', 'fx 栏写 A1 公式', '引用高亮', '增量重算'],
-    },
-    {
-      id: 'undo',
-      name: '撤销 / 重做',
-      items: ['Ctrl/Cmd+Z', '编辑 / 清空 / 合并 / 粘贴', '一次编辑一条'],
-    },
-    {
-      id: 'floating-image',
-      name: '浮动图片',
-      items: ['拖动（边缘自动滚动）', '四角缩放 / 旋转', '点图看大图与下载', '锁定为水印'],
-    },
-  ],
-  'project-wbs': [
-    {
-      id: 'gantt',
-      name: '甘特图',
-      items: [
-        '时间轴与甘特条',
-        '拖条改期 / 改工期 / 拖进度',
-        '配置面板换日期列与上色维度',
-        '工作日历（节假日 + 补班）',
-        '里程碑竖线',
-        '日 / 周 / 月 / 季',
-        '拖分界调宽',
-      ],
-    },
-  ],
+const PRO_BY_SLUG: Record<string, string[]> = {
+  spreadsheet: ['公式', '撤销 / 重做', '浮动图片', '透视表', '真 xlsx 与 PDF'],
+  'project-wbs': ['甘特图'],
 };
-
-/** 只说**正在运行的那个**案例：横幅紧贴舞台，说别的案例会让人以为是当前 demo 的能力 */
-const proOfLoaded = computed(() => (loaded.value ? PRO_BY_SLUG[loaded.value.slug] ?? [] : []));
-
-/** 不传 id 就是企业版首页；`withBase` 是必须的（站点部署在子路径下） */
-const enterpriseHref = (id?: string) => withBase(id ? `/enterprise/#${id}` : '/enterprise/');
 
 const shotOf = (c: DemoCase) => withBase(`/demos/${c.slug}.png`);
 const pageOf = (c: DemoCase) => withBase(`/demos/${c.slug}`);
-
-const loadedExampleId = computed(() =>
-  loaded.value ? `demo-${loaded.value.slug}` : '',
-);
-
-async function load(c: DemoCase) {
-  if (c.planned) return;
-  const wasClosed = loaded.value === null;
-  loaded.value = c;
-  await nextTick();
-
-  const el = stageRef.value;
-  if (!el) return;
-  /*
-   * 舞台已经在视野里就别抢滚动位置；在视野外才带过去 —— 默认已经挂了一个案例，
-   * 所以「首次加载」不再等于「舞台在视野外」：手机上卡片各占一整行，点第二张卡片时
-   * 舞台往往还在一屏之下，不滚过去就像是点了没反应。
-   */
-  const { top } = el.getBoundingClientRect();
-  if (wasClosed || top < 0 || top > window.innerHeight * 0.6) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
+const enterpriseHref = withBase('/enterprise/');
 </script>
 
 <template>
   <div class="dg">
     <div class="dg-cards">
+      <!--
+        能点的卡片是 `<a>` 而不是 `<button>`：它就是一个跳转，用按钮的话会丢掉
+        中键新开、右键复制链接、以及爬虫看得见的 href。规划中的那张没有目标页
+        （`demoCases.ts` 里打了 `planned`），所以退化成 `<div>`。
+      -->
       <component
-        :is="c.planned ? 'div' : 'button'"
+        :is="c.planned ? 'div' : 'a'"
         v-for="c in DEMO_CASES"
         :key="c.slug"
-        :type="c.planned ? undefined : 'button'"
+        :href="c.planned ? undefined : pageOf(c)"
         class="dg-card"
-        :class="{ 'is-running': c.slug === loaded?.slug, 'is-planned': c.planned }"
-        :aria-pressed="c.planned ? undefined : c.slug === loaded?.slug"
-        @click="load(c)"
+        :class="{ 'is-planned': c.planned }"
       >
         <span class="dg-card-shot">
           <template v-if="!c.planned">
@@ -134,9 +70,7 @@ async function load(c: DemoCase) {
             />
             <!-- 只占截图底部一条：悬停才浮出，触屏设备常显（没有 hover 可用） -->
             <span class="dg-card-veil">
-              <span class="dg-card-cta">
-                {{ c.slug === loaded?.slug ? '↻ 重新加载' : '▶ 加载 demo' }}
-              </span>
+              <span class="dg-card-cta">查看案例与源码 →</span>
             </span>
           </template>
           <span v-else class="dg-card-todo">规划中</span>
@@ -145,80 +79,42 @@ async function load(c: DemoCase) {
         <span class="dg-card-body">
           <span class="dg-card-head">
             <span class="dg-card-title">{{ c.title }}</span>
-            <span v-if="c.slug === loaded?.slug" class="dg-badge dg-badge--live">运行中</span>
-            <span v-else-if="c.planned" class="dg-badge">规划中</span>
+            <span v-if="c.planned" class="dg-badge">规划中</span>
           </span>
           <span class="dg-card-tagline">{{ c.tagline }}</span>
           <span class="dg-card-scale">{{ c.scale }}</span>
           <span class="dg-tags">
             <span v-for="t in c.tags" :key="t" class="dg-tag">{{ t }}</span>
           </span>
+          <!--
+            付费信号：挑案例时就该看得见。这里只给插件名，逐条说明在案例页那一节。
+            **不是链接** —— 整张卡片已经是一个 `<a>`，里面再套一个 `<a>` 是非法嵌套
+            （浏览器会把内层拆出去，点击区域随之错乱）。想去企业版就走下面那一行。
+          -->
+          <span v-if="PRO_BY_SLUG[c.slug]" class="dg-card-pro">
+            <span class="dg-card-pro-tag">企业版</span>
+            <span class="dg-card-pro-names">{{ PRO_BY_SLUG[c.slug].join(' · ') }}</span>
+          </span>
         </span>
       </component>
     </div>
 
-    <div ref="stageRef" class="dg-stage">
-      <template v-if="loaded">
-        <div class="dg-stage-head">
-          <span class="dg-stage-title">
-            <span class="dg-dot" aria-hidden="true" />
-            正在运行：{{ loaded.title }}
-          </span>
-          <span class="dg-stage-actions">
-            <a class="dg-stage-link" :href="pageOf(loaded)">完整说明与源码 →</a>
-            <button type="button" class="dg-stage-close" @click="loaded = null">收起</button>
-          </span>
-        </div>
-        <!-- 同时只有这一个实例活着：换案例即卸载重挂 -->
-        <PlaygroundHost framework="vanilla" :example-id="loadedExampleId" />
-      </template>
-
-      <p v-else class="dg-stage-empty">
-        舞台已收起。点上面任意一张卡片，真实 demo 会重新加载在这里 ——
-        <strong>同时只有一个实例活着</strong>，这一页自己也得遵守「只为看得见的东西付钱」。
-      </p>
-    </div>
-
-    <!--
-      企业版横幅：紧跟舞台，说的是**正在运行的那个案例**用到了哪些付费插件。
-      整块是链接区（点哪条都落到企业版页对应插件），所以用色块而不是正文列表 ——
-      正文里那种项目符号列表在 demo 底下会被当成"案例说明"的一部分读过去。
-    -->
-    <section class="dg-pro">
-      <span class="dg-pro-tag">企业版</span>
-
-      <template v-if="proOfLoaded.length">
-        <span class="dg-pro-lead">这个案例用到的付费插件：</span>
-        <span v-for="p in proOfLoaded" :key="p.id" class="dg-pro-group">
-          <a class="dg-pro-name" :href="enterpriseHref(p.id)">
-            {{ p.name }}
-            <code>@virt-table-pro/{{ p.id }}</code>
-            <span aria-hidden="true">→</span>
-          </a>
-          <span class="dg-pro-items">
-            <a
-              v-for="item in p.items"
-              :key="item"
-              class="dg-pro-item"
-              :href="enterpriseHref(p.id)"
-            >{{ item }}</a>
-          </span>
-        </span>
-      </template>
-
-      <span v-else class="dg-pro-lead">
-        这个案例没有用到付费插件。
-        <a class="dg-pro-name" :href="enterpriseHref()">看看企业版有哪些插件 →</a>
-      </span>
-    </section>
+    <p class="dg-foot">
+      <!-- 这里是 Vue 模板不是 markdown，加粗只能用 <strong> —— `**…**` 会原样显示出星号 -->
+      每个案例页的首屏就是<strong>真实运行的表格</strong>，下面接完整说明与可展开的源码。
+      带「企业版」标签的案例里有付费插件 ——
+      <a :href="enterpriseHref">看看有哪些 →</a>
+    </p>
   </div>
 </template>
 
 <style scoped>
 /*
- * 全部走 class 选择器：scoped 会补 [data-v-xxx]，而 demo 内部的 DOM 由 qiankun
- * 同文档挂载、拿不到这个属性，所以天然不会被命中。但仍然不写裸元素后代选择器 ——
- * `PlaygroundHost` 的根节点会继承本组件的 scope id，`.dg-stage div` 之类会漏进去。
+ * 全部走 class 选择器，且不写裸元素后代选择器。
+ *
+ * 这一页现在不挂 demo 了（见脚本段头注），所以「不能命中 demo 内部 DOM」那条约束在这里
+ * 已经不适用 —— 但写法保持不变：案例页那边的组件仍然要守这条，两处风格一致才不会有人
+ * 从这里抄一份带裸元素选择器的样式过去。
  *
  * 尺寸一律 **mobile first**：基础值给窄屏，`@media (min-width: 640px)` 往上加
  * （与 styles/ 下几个文件同一个方向，全站没有 max-width 查询）。
@@ -263,11 +159,6 @@ async function load(c: DemoCase) {
   border-color: var(--vtd-primary-border);
   box-shadow: var(--vtd-shadow-md);
   transform: translateY(-2px);
-}
-
-.dg-card.is-running {
-  border-color: var(--vtd-primary);
-  box-shadow: var(--vtd-shadow-md);
 }
 
 .dg-card.is-planned {
@@ -379,10 +270,6 @@ async function load(c: DemoCase) {
   color: var(--vtd-text);
 }
 
-.dg-card.is-running .dg-card-title {
-  color: var(--vtd-primary);
-}
-
 .dg-badge {
   padding: 1px 8px;
   border-radius: var(--vtd-radius-full);
@@ -390,11 +277,6 @@ async function load(c: DemoCase) {
   color: var(--vtd-text-3);
   font-size: 11px;
   font-weight: 600;
-}
-
-.dg-badge--live {
-  background: var(--vtd-success-soft);
-  color: var(--vtd-success);
 }
 
 .dg-card-tagline {
@@ -430,173 +312,51 @@ async function load(c: DemoCase) {
   color: var(--vtd-text-3);
 }
 
-/* ---- 舞台：真实 demo 挂在这里 ---- */
-.dg-stage {
-  margin: 20px 0 0;
-  scroll-margin-top: calc(var(--vp-nav-height, 64px) + 16px);
-}
-
-/* 窄屏竖排：标题一行、动作一行；宽屏才左右对齐（见下方 min-width: 640px） */
-.dg-stage-head {
+/*
+ * 卡片上的付费标签。
+ *
+ * 与卡片其余文字**同一层缩进**、只靠一枚小色块区分 —— 不做成醒目的角标：它是选案例时
+ * 的一条参考信息，不是这一页要推销的东西（推销放在企业版页）。
+ */
+.dg-card-pro {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--vtd-border-light);
-}
-
-.dg-stage-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--vtd-text);
-}
-
-.dg-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--vtd-radius-full);
-  background: var(--vtd-success);
-}
-
-.dg-stage-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-}
-
-.dg-stage-link {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--vtd-primary);
-}
-
-.dg-stage-close {
-  /* 手机上按 4px 上下内边距只有 26px 高，点不准；宽屏再收回去 */
-  padding: 6px 14px;
-  cursor: pointer;
-  border: 1px solid var(--vtd-border);
-  border-radius: var(--vtd-radius-md);
-  background: var(--vtd-bg);
-  color: var(--vtd-text-2);
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
   font-size: 12px;
-  transition:
-    border-color var(--vtd-transition-fast) var(--vtd-ease),
-    color var(--vtd-transition-fast) var(--vtd-ease);
+  line-height: 1.5;
 }
 
-.dg-stage-close:hover {
-  border-color: var(--vtd-border-strong);
-  color: var(--vtd-text);
+.dg-card-pro-tag {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--vtd-warning-soft);
+  color: var(--vtd-warning);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.dg-stage-empty {
-  margin: 0;
-  padding: 16px 14px;
-  border: 1px dashed var(--vtd-border);
-  border-radius: var(--vtd-radius-lg);
-  background: var(--vtd-bg-soft);
-  font-size: 13px;
-  line-height: 1.7;
+.dg-card-pro-names {
   color: var(--vtd-text-3);
 }
 
-/* ---- 企业版横幅：舞台正下方的色块 ---- */
-/*
- * ⚠️ 里面的链接选择器都写成**两层类**（`.dg-pro .dg-pro-x`）。本站正文排版挂在
- * `[data-vp-example]` 上，其中 `[data-vp-example] a:not(.playground-shell *)`
- * 是 0,2,1；单层类 + scoped 属性只有 0,2,0，会被它加上下划线。多一层块类变成
- * 0,3,0 就压得住，也不用 `!important`（那会连主题覆盖一起挡掉）。
- */
-.dg-pro {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  margin: 14px 0 0;
-  padding: 12px 14px;
-  border: 1px solid var(--vtd-warning-border);
-  border-left: 3px solid var(--vtd-warning);
-  border-radius: var(--vtd-radius-lg);
-  background: var(--vtd-warning-soft);
+.dg-card.is-planned .dg-card-pro-tag {
+  background: var(--vtd-bg-mute);
+  color: var(--vtd-text-3);
 }
 
-.dg-pro-tag {
-  padding: 1px 8px;
-  border-radius: var(--vtd-radius-sm);
-  background: var(--vtd-warning);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.dg-pro-lead {
+/* ---- 卡片墙底下那一句：把「案例页首屏才是 demo」说出来 ---- */
+.dg-foot {
+  margin: 16px 0 0;
+  color: var(--vtd-text-3);
   font-size: 13px;
-  color: var(--vtd-text-2);
-}
-
-/*
- * 一个插件**独占一行**：`flex-basis: 100%` 在这个 wrap 容器里就是「从我开始换行」。
- * 不这么钉的话两个插件会挤在同一行、包名与另一个插件的能力标签混在一起，
- * 读的人分不清哪个标签属于哪个插件。
- */
-.dg-pro-group {
-  display: flex;
-  flex: 0 0 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-}
-
-.dg-pro .dg-pro-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vtd-primary);
-  text-decoration: none;
-}
-
-.dg-pro .dg-pro-name:hover {
-  text-decoration: underline;
-}
-
-.dg-pro-name code {
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.dg-pro-items {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* 标签本身也可点：横幅上任何一处都能进企业版页，不用先找那个包名 */
-.dg-pro .dg-pro-item {
-  padding: 1px 8px;
-  border: 1px solid var(--vtd-warning-border);
-  border-radius: var(--vtd-radius-full);
-  background: var(--vtd-bg);
-  color: var(--vtd-text-2);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 18px;
-  text-decoration: none;
-  transition: color var(--vtd-transition-fast) var(--vtd-ease);
-}
-
-.dg-pro .dg-pro-item:hover {
-  color: var(--vtd-warning);
+  line-height: 1.7;
 }
 
 /* ---- 宽屏加量：留白与横排都从这里开始 ---- */
 @media (min-width: 640px) {
-  .dg,
-  .dg-stage {
+  .dg {
     margin: 28px 0 0;
   }
 
@@ -604,20 +364,7 @@ async function load(c: DemoCase) {
     gap: 14px;
   }
 
-  .dg-stage-head {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
 
-  .dg-stage-close {
-    padding: 4px 12px;
-  }
 
-  .dg-stage-empty {
-    padding: 22px 20px;
-  }
 }
 </style>

@@ -63,6 +63,7 @@ import {
   buildFilterModelPredicate,
   isFilterModelActive,
   cloneFilterModel,
+  inferValueKind,
 } from './filter-model';
 export type {
   CellContentType,
@@ -163,6 +164,8 @@ import type { SearchMatch } from './plugins/search';
 import type { RowHeightLevel } from './plugins/row-height-config';
 import type { ToolbarItem } from './plugins/toolbar';
 import type { AIQueryResult } from './plugins/ai-query';
+import type { ImportOptions, ImportResult, ImportSource } from './plugins/import';
+import type { ImportedSheet } from './sheet-import';
 import type { AIQuery, AITableSchema } from './ai-query';
 import type { AIStreamState, AIStreamChunk, AIStreamConsumeOptions } from './plugins/ai-stream';
 import type { AIColumnCellState } from './plugins/ai-column';
@@ -843,6 +846,8 @@ export class VirtTable<T extends Record<string, any>> {
   private _allColumns: VirtTableColumn<T>[] = [];
   /** 全量叶子列（含隐藏），由 _applyColumnTree 派生。数据管线的筛选/排序用它 */
   private _allLeafColumns: VirtTableColumn<T>[] = [];
+  // 保存值快照，不能保留列引用：使用方可能原地修改列再 setColumns。
+  private _pipelineColumns: Array<Pick<VirtTableColumn<T>, 'key' | 'sortMethod' | 'filterMethod' | 'filterType'> & { valueKind: FilterValueKind }> = [];
 
   // 多级分组表头：列树里出现 children 时启用，表头改走网格渲染并支持横向虚拟化
   private _hasColumnGroups = false;
@@ -1215,6 +1220,19 @@ export class VirtTable<T extends Record<string, any>> {
     this._initWidthResizeObserver();
     this._updateFixedShadow();
     this._initRemote();
+    /*
+     * 有插件接管了源行集（`transformSourceRows`）→ 补一次数据重建。
+     *
+     * 首次数据构建发生在构造函数**很早**的位置（`options.list = this._computeDisplayList()`，
+     * 那时列前缀和刚算完），而插件是在 DOM 就绪之后才装的 —— 于是那一趟拿到的是**未变换的**
+     * `_originList`。少这一句，透视这类插件要等到用户第一次排序/筛选才生效，
+     * 而首屏显示的是明细行：看起来像「配置没生效」。
+     *
+     * 只在真有插件注册时才跑（`hasSourceTransform`），所以对其余所有表格零开销。
+     * 位置在 `emitMounted()` 之前：此刻 DOM 与 core 都已就绪，而插件的 `onMounted`
+     * 里若再改列（透视会 `setColumns`），那次改动自己会带来一次重建。
+     */
+    if (this._pluginRuntime?.hasSourceTransform) this._rebuildData();
     // 一切就绪后再通知插件（此时行 DOM 已首帧渲染，可安全查询）
     this._pluginRuntime?.emitMounted();
   }
@@ -1586,6 +1604,12 @@ export class VirtTable<T extends Record<string, any>> {
   }
 
   setColumns(columns: VirtTableColumn<T>[]): void {
+    // 数据管线按全量叶子列建谓词；比较独立快照才能发现原地修改的回调。
+    // 宽度、样式、hidden 等纯显示变化不触发重建。
+    const prevPipelineColumns = this._pipelineColumns;
+    const prevHasTree = this._hasTreeCol;
+    const prevHasExpand = this._hasExpandCol;
+
     // 入参视为全量列树（含隐藏、含分组节点），_columns 派生为可见叶子列
     this._applyColumnTree(columns);
     this._hasExpandCol = this._columns.some((c) => c.type === 'expand');
@@ -1608,6 +1632,22 @@ export class VirtTable<T extends Record<string, any>> {
     this._leftShadowEl.style.left = `${this._leftFixedWidth - 1}px`;
     this._updateShadowPosition();
     this._updateFixedShadow();
+
+    // _applyColumnTree 已保存新快照：数据钩子中幂等重提列不会再次重建。
+    if (
+      this._pipelineColumns.length !== prevPipelineColumns.length ||
+      this._pipelineColumns.some((col, i) => {
+        const prev = prevPipelineColumns[i];
+        return !prev || col.key !== prev.key || col.sortMethod !== prev.sortMethod ||
+          col.filterMethod !== prev.filterMethod || col.filterType !== prev.filterType ||
+          col.valueKind !== prev.valueKind;
+      }) ||
+      this._hasTreeCol !== prevHasTree ||
+      this._hasExpandCol !== prevHasExpand
+    ) {
+      this._rebuildData();
+    }
+
     this._clearItemPool();
     this._core.forceUpdate();
     this._pluginRuntime?.emitColumnsChanged();
@@ -1681,6 +1721,10 @@ export class VirtTable<T extends Record<string, any>> {
     // 隐藏一列不该让它上面的条件失效（AG Grid / Excel 同此语义）。在这里派生是
     // 顺带的——`_columns` 本来就要走一趟同样的遍历。
     this._allLeafColumns = flattenLeafColumns(columns, true);
+    this._pipelineColumns = this._allLeafColumns.map((col) => ({
+      key: col.key, sortMethod: col.sortMethod, filterMethod: col.filterMethod,
+      filterType: col.filterType, valueKind: inferValueKind(col),
+    }));
     this._options.columns = this._columns;
     this._headerDepth = this._hasColumnGroups ? columnTreeDepth(columns) : 1;
   }
@@ -2058,12 +2102,14 @@ export class VirtTable<T extends Record<string, any>> {
     this._checkedRows = new Set(keys);
     this._refreshCheckboxes();
     this._updateHeaderCheckbox();
+    this._pluginRuntime?.emitCheckedRowsChanged(this.getCheckedKeys());
   }
 
   clearCheckedRows(): void {
     this._checkedRows.clear();
     this._refreshCheckboxes();
     this._updateHeaderCheckbox();
+    this._pluginRuntime?.emitCheckedRowsChanged(this.getCheckedKeys());
   }
 
   destroy(): void {
@@ -3373,17 +3419,30 @@ export class VirtTable<T extends Record<string, any>> {
 
     const hasClientPage = this._clientPage;
 
+    /*
+     * ⓪ 源行集变换（`transformSourceRows` 钩子）——「把明细行换成另一种行」。
+     *
+     * 在最前面：这类插件（`@virt-table-pro/pivot`）同时会换掉列，而下面的筛选/排序谓词
+     * 是照**当前列**建的。变换先跑完，之后的每一阶段面对的才是同一套列与同一批行。
+     * 详见 `plugin.ts` 里那个钩子的注释。
+     *
+     * 无插件注册时完全短路（连一次函数调用都没有），`_originList` 原样往下走。
+     */
+    const source = this._pluginRuntime?.hasSourceTransform
+      ? this._pluginRuntime.applySourceTransform(this._originList)
+      : this._originList;
+
     if (
       !hasTree && !hasGroup && !hasExpand &&
       !hasSort && !hasFilter && !hasFilterModel && !hasClientPage
     ) {
-      this._recomputeSummary(this._originList);
-      return this._originList;
+      this._recomputeSummary(source);
+      return source;
     }
 
     // ① 筛选（结构保持：树保留祖先）
     // 列头筛选与高级筛选模型组合成单个谓词，只走一趟遍历（避免两次树克隆）
-    let prepared = this._originList;
+    let prepared = source;
     if (!this._serverFilter) {
       const pCol = buildColumnFilterPredicate(this._activeFilters, this._allLeafColumns);
       const pModel = buildFilterModelPredicate(this._filterModel, this._allLeafColumns);
@@ -4433,6 +4492,7 @@ export class VirtTable<T extends Record<string, any>> {
           this._checkedRows.clear();
         }
         this._refreshCheckboxes();
+        this._pluginRuntime?.emitCheckedRowsChanged(this.getCheckedKeys());
         this._options.onCheckAll?.(cb.checked);
       });
       th.appendChild(cb);
@@ -5194,6 +5254,7 @@ export class VirtTable<T extends Record<string, any>> {
           this._checkedRows.delete(key);
         }
         this._updateHeaderCheckbox();
+        this._pluginRuntime?.emitCheckedRowsChanged(this.getCheckedKeys());
         this._options.onCheckChange?.(cb.checked, item);
       });
       td.appendChild(cb);
@@ -6512,6 +6573,36 @@ export class VirtTable<T extends Record<string, any>> {
     return { startRow: sr, startCol: sc + offset, endRow: er, endCol: ec + offset };
   }
 
+  /** 源行主键的副本，包含树子节点及被筛选/分页隐藏的行。 */
+  getSourceRowKeys(): string[] {
+    const keys: string[] = [];
+    const visit = (rows: T[]): void => {
+      for (const row of rows) {
+        keys.push(String(row[this._options.itemKey]));
+        if (Array.isArray(row.children)) visit(row.children);
+      }
+    };
+    visit(this._originList);
+    return keys;
+  }
+
+  /**
+   * 源数据的行数 —— **筛选、搜索、分页之前**的那一份。
+   *
+   * 存在的理由是 `options.list` **不能**当源数据读：核心会把它改写成展示列表交给
+   * 虚拟滚动，筛掉一半之后读它拿到的是筛后的长度。管线的唯一数据源是私有的
+   * `_originList`，而插件（状态栏的「总行数」、分页器的总数）需要它。
+   *
+   * 只给数量不给数组：`_originList` 持有的是使用方传进来的引用，交出去等于允许
+   * 就地改它，而那会让表格状态与使用方手里那份静默分叉。要遍历源数据请走
+   * `transformSourceRows`，它的入参就是这一份。
+   *
+   * 树形数据下算的是**顶层**行数（与 `options.list.length` 同基准），不含展开出来的子行。
+   */
+  getSourceRowCount(): number {
+    return this._originList.length;
+  }
+
   /**
    * 静态合并配置（`options.merges` / `setMerges()` 传入的那份），返回副本。
    *
@@ -6978,6 +7069,24 @@ export interface VirtTablePluginApi {
   openColumnFilter(colKey: string): void;
   /** 关闭筛选面板（`vtColumnFilter`） */
   closeColumnFilter(): void;
+
+  /**
+   * 导入一个文件并落进表格（`vtImport`）。不传 `src` 就弹文件选择器 ——
+   * 用户取消时返回 `null`（而不是永远悬着的 Promise）。
+   */
+  importFile(src?: ImportSource, opts?: ImportOptions): Promise<ImportResult | null>;
+  /** 只解析、不落表：先问「这个文件里有哪些 sheet」（`vtImport`） */
+  readSheets(src?: ImportSource, opts?: ImportOptions): Promise<ImportedSheet[] | null>;
+
+  /**
+   * 打开某列的列头菜单（`vtColumnMenu`）。`anchor` 不给就贴那一列表头上的 ☰ ——
+   * 自己在别处放按钮时把那颗按钮传进来。
+   */
+  openColumnMenu(colKey: string, anchor?: HTMLElement): void;
+  /** 关闭列头菜单（`vtColumnMenu`） */
+  closeColumnMenu(): void;
+  /** 菜单开着吗；给了 `colKey` 则问的是「**这一列**的菜单开着吗」（`vtColumnMenu`） */
+  isColumnMenuOpen(colKey?: string): boolean;
 
   /**
    * 用一句自然语言查询表格（`vtAIQuery`）：交给 `resolve` 回调拿到模型产物，

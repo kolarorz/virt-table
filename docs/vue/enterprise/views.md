@@ -1,3 +1,12 @@
+<!--
+⚠️ 这一页目前是**孤儿页**：命名视图暂不作为付费能力出售，2026-08-31 起从侧边栏、定价页与
+所有交叉引用里摘掉了，只有直接输 URL 才走得到。页面正文原样保留，恢复出售时把
+`docs/enterprise/index.md` 同日注释里列的那几处一起取消注释即可。
+
+页内的 `<ProDemo example-id="pro-views" />` 现在落不到实 demo（三端 pro-demos 注册也注释掉了），
+会退化成说明卡 —— 这是预期行为，不是坏了。
+-->
+
 # 命名视图
 
 <ProPkgStatus pkg="@virt-table-pro/views" status="shipped" css="index.css" />

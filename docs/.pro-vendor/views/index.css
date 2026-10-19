@@ -1,0 +1,151 @@
+/* ==========================================================================
+ * vtViews 视图面板
+ *
+ * 视觉上与核心的面板类插件（vtFieldConfig / vtColumnFilter）保持一致，但**不复用**
+ * 它们的 class：那些规则在核心的 `plugins/*.css` 里，跨仓库 `@import` 不到，而靠
+ * 「用户恰好也引了某个核心插件的 CSS」是不可靠的。因此这里自带完整规则，只消费
+ * `core.css` 的 `--vt-*` 变量与 `vt-pop-in` 动画。
+ *
+ * 面板挂在 `.vt-root` 内部，明暗主题自动跟随核心（见核心 index.css §2），
+ * 这里一个主题选择器都不需要。
+ * ========================================================================== */
+.vtp-views-panel {
+  position: absolute;
+  z-index: 30;
+  min-width: 200px;
+  max-width: 280px;
+  overflow: hidden;
+  background: var(--vt-bg-elevated, #fff);
+  border: var(--vt-border-width, 1px) solid var(--vt-border-color, #e5e7eb);
+  border-radius: var(--vt-radius-panel, 8px);
+  box-shadow: var(--vt-shadow-lg, 0 8px 24px rgb(0 0 0 / 12%));
+  color: var(--vt-text-color, #1f2328);
+  font-size: var(--vt-font-size-sm, 13px);
+  animation: vt-pop-in var(--vt-transition, 0.15s) var(--vt-ease, ease);
+}
+
+.vtp-views-title {
+  padding: 8px 10px 4px;
+  color: var(--vt-text-secondary, #5b6472);
+  font-size: var(--vt-font-size-sm, 13px);
+}
+
+.vtp-views-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vt-scrollbar-thumb) var(--vt-scrollbar-track);
+}
+
+/* 自定义滚动条：与核心表体同款。WebKit 伪元素无法继承，只能按选择器重复一份 */
+.vtp-views-list::-webkit-scrollbar {
+  width: var(--vt-scrollbar-size, 10px);
+  height: var(--vt-scrollbar-size, 10px);
+}
+
+.vtp-views-list::-webkit-scrollbar-track {
+  background: var(--vt-scrollbar-track, transparent);
+}
+
+.vtp-views-list::-webkit-scrollbar-thumb {
+  background-color: var(--vt-scrollbar-thumb, rgb(0 0 0 / 20%));
+  border: 2px solid transparent;
+  border-radius: var(--vt-radius-full, 999px);
+  background-clip: padding-box;
+}
+
+.vtp-views-empty {
+  padding: 10px;
+  color: var(--vt-text-secondary, #5b6472);
+  text-align: center;
+}
+
+.vtp-views-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--vt-radius-sm, 4px);
+}
+
+.vtp-views-item:hover {
+  background: var(--vt-fill-color, #f1f3f7);
+}
+
+.vtp-views-item--active .vtp-views-apply {
+  color: var(--vt-color-primary, #3b82f6);
+  font-weight: 600;
+}
+
+/* 视图名占满剩余宽度，长名字省略而不是把删除按钮挤出去 */
+.vtp-views-apply {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vtp-views-del {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: var(--vt-radius-sm, 4px);
+  background: none;
+  color: var(--vt-text-secondary, #5b6472);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vtp-views-del:hover {
+  background: var(--vt-color-danger-soft, rgb(239 68 68 / 12%));
+  color: var(--vt-color-danger, #ef4444);
+}
+
+.vtp-views-save {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: var(--vt-border-width, 1px) solid var(--vt-border-color, #e5e7eb);
+}
+
+.vtp-views-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: var(--vt-border-width, 1px) solid var(--vt-border-color, #e5e7eb);
+  border-radius: var(--vt-radius-sm, 4px);
+  background: var(--vt-bg, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.vtp-views-input:focus {
+  border-color: var(--vt-color-primary, #3b82f6);
+  outline: none;
+}
+
+.vtp-views-save-btn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--vt-radius-sm, 4px);
+  background: var(--vt-color-primary, #3b82f6);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.vtp-views-save-btn:hover {
+  background: var(--vt-color-primary-hover, #2563eb);
+}

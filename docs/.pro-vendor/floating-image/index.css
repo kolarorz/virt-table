@@ -1,0 +1,229 @@
+/* ==========================================================================
+ * @virt-table-pro/floating-image 样式
+ *
+ * 依赖核心 `core.css` 提供的 `--vt-*` 变量。
+ *
+ * **不含图片查看器的样式**：那份由核心的公开子路径带进来 —— `src/index.ts` 里
+ * `import '@virt-table/vanilla/components/image-viewer'`，那个模块自己 import 它的 CSS。
+ * 于是查看器的 300 行规则只存在于核心一处，本包不复制（复制的那一刻就开始漂）。
+ * ========================================================================== */
+
+/*
+ * 图片图层：挂在 `.vt-client`（滚动视口）上，与 `.vt-cell-cover` 同一层。
+ *
+ * `width/height: 100%` 对滚动容器取的是**可视尺寸**（padding box），所以图层的盒子恒等于
+ * 可视区；配合 `overflow: hidden`，图片再怎么摆都不会把容器的 `scrollWidth` 撑大 ——
+ * 这一层存在的全部理由，见 floating-image.ts 里那段「中间那层不是装饰」。
+ * 横向位置由 JS 每帧写 `left = scrollLeft`（纵向 `scrollTop` 恒为 0，不用管）。
+ *
+ * `z-index: 4` 让图片盖住冻结列（`td.vt-fixed-left` 同为 4，同值时靠 DOM 顺序取胜：
+ * 图层挂在 `.vt-table` 之后），而编辑浮层（5）与当前单元格描边（6）仍压在图片之上。
+ * 要换档走 `zIndex` 选项，别改这里。
+ *
+ * `pointer-events: none` 是图层的，图片自己会开回来 —— 否则整个可视区都被这层挡住，
+ * 表格一格都点不动。
+ */
+.vt-floating-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/*
+ * 一张图的外层：承担**定位 + 旋转**，把手是它的子节点（于是把手跟着一起转，
+ * 和 PowerPoint / Keynote 里的行为一致）。
+ *
+ * 旋转绕默认的 `transform-origin`（中心）—— 缩放时「对角钉在原地」的补偿公式
+ * （`resizeFromCorner`）就是按绕中心推的，改这里等于让那套数学失效。
+ */
+.vt-floating-item {
+  position: absolute;
+  /* 图层关了指针事件，这里开回来：手势要靠它，代价是图片盖住的那块点不到单元格 */
+  pointer-events: auto;
+  /*
+   * 触屏上必须有：浏览器一旦决定开始滚动就不再给 pointermove，而 preventDefault() 拦不住
+   * 滚动 —— 只有 touch-action 能在手势开始前把这块区域让出来（见 internal/drag.ts）。
+   */
+  touch-action: none;
+  user-select: none;
+  border-radius: var(--vt-radius-sm);
+  box-shadow: var(--vt-shadow-sm);
+}
+
+.vt-floating-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  -webkit-user-drag: none;
+}
+
+.vt-floating-item--draggable {
+  cursor: grab;
+}
+
+/* 不可拖但能点开查看器：光标得说清「点一下有事发生」 */
+.vt-floating-item--zoomable {
+  cursor: zoom-in;
+}
+
+/* 手势进行中（移动 / 缩放 / 旋转）：抬高一档阴影，好看清它正被操作 */
+.vt-floating-item--active {
+  box-shadow: var(--vt-shadow-md);
+}
+
+.vt-floating-item--draggable.vt-floating-item--active {
+  cursor: grabbing;
+}
+
+/*
+ * 锁定（`locked: true`），或者四个交互开关一个都没开：连指针事件一起关掉。
+ * 只把 cursor 改回默认是不够的 —— 图片仍会吃掉点击与触摸手势，底下的单元格
+ * 就成了「看得见点不着」。水印类用法一定要走这一支。
+ */
+.vt-floating-item--locked {
+  cursor: default;
+  pointer-events: none;
+}
+
+/*
+ * 断图兜底：`<img>` 加载失败时浏览器只留一个碎图标（各家还长得不一样），
+ * 尺寸也会塌掉。给一圈虚线 + 底色，至少能看出「这儿本该有张图，地址坏了」。
+ */
+.vt-floating-item--broken {
+  min-width: 48px;
+  min-height: 48px;
+  background: var(--vt-bg-elevated);
+  border: 1px dashed var(--vt-border-color);
+  box-shadow: none;
+}
+
+/* ==========================================================================
+ * 把手（`resizable` / `rotatable` 时才建出来）
+ *
+ * ⚠️ **不能做成「hover 才显形」**，第一版这么写、CDP 一测就废：把手若是
+ * `visibility: hidden`，浏览器根本不对它做命中测试 —— 而**旋转把手在图的盒子外面**
+ * （顶边上方 26px），于是「先 hover 图让把手出现、再移上去抓」这条路走不通：指针一离开
+ * 图的盒子，`:hover` 当场失效、把手又藏回去，中间只剩那根 1px 的连接线可踩。
+ * 实测表现是「按下去什么都没发生，反而把表格拖着横滚了 16px」（事件落到了表体上）。
+ *
+ * 所以把手**常驻**，只用不透明度分档：平时 0.75 压一压噪音，指针在图上（或手势进行中）
+ * 时给到 1。开关本来就是显式打开的（`resizable` / `rotatable` 默认关），看得见才抓得住。
+ * ========================================================================== */
+/*
+ * `display: none` 起步，只有带 `--handles` 的图才显示。
+ *
+ * 元素本身是**无条件建出来的**（`locked` 可以在运行时被 `updateFloatingImage` 改），
+ * 所以「显不显示」只能交给 CSS 判断。少了这条基线，锁定的水印上也会挂着五个把手 ——
+ * 那张图连指针事件都不吃，把手纯属骗人（截图里当场抓到过）。
+ */
+.vt-floating-handle,
+.vt-floating-rotate {
+  display: none;
+  position: absolute;
+  box-sizing: border-box;
+  opacity: 0.75;
+  background: var(--vt-bg);
+  border: 1px solid var(--vt-color-primary);
+  border-radius: 2px;
+  transition: opacity var(--vt-transition-fast) var(--vt-ease);
+}
+
+.vt-floating-item--handles > .vt-floating-handle {
+  display: block;
+}
+
+.vt-floating-item--handles > .vt-floating-rotate {
+  display: flex;
+}
+
+.vt-floating-item--handles:hover > .vt-floating-handle,
+.vt-floating-item--handles:hover > .vt-floating-rotate,
+.vt-floating-item--handles.vt-floating-item--active > .vt-floating-handle,
+.vt-floating-item--handles.vt-floating-item--active > .vt-floating-rotate {
+  opacity: 1;
+}
+
+.vt-floating-handle {
+  width: 10px;
+  height: 10px;
+}
+
+/* 四个角各压在角上一半（`-5px` = 半个把手），于是把手中心正好落在角点 */
+.vt-floating-handle--nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.vt-floating-handle--ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.vt-floating-handle--sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.vt-floating-handle--se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+
+/*
+ * 旋转把手：顶边中间往上 26px 处的一颗圆钮，`::before` 是连到图上的那根细线。
+ * 放在外面而不是四角之一，是为了和缩放把手在**位置上**就区分开（角=缩放、顶=旋转，
+ * 与常见图形编辑器一致），不用靠图标去认。
+ */
+.vt-floating-rotate {
+  top: -26px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--vt-color-primary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: grab;
+}
+
+.vt-floating-rotate::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 1px;
+  height: 8px;
+  background: var(--vt-color-primary);
+}
+
+.vt-floating-item--active .vt-floating-rotate {
+  cursor: grabbing;
+}
+
+/*
+ * 顶上腾不出 26px 时（图贴着内容顶端，或快滚出上边缘）把旋转钮翻到下边 ——
+ * 图层是 `overflow: hidden` 的，不翻的话把手被裁掉，那张图就再也转不了。
+ * 由 JS 按当前位置 toggle（见 `place()`）。
+ */
+.vt-floating-item--flip-rotate .vt-floating-rotate {
+  top: auto;
+  bottom: -26px;
+}
+
+.vt-floating-item--flip-rotate .vt-floating-rotate::before {
+  top: auto;
+  bottom: 100%;
+}

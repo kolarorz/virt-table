@@ -1,0 +1,125 @@
+/* ==========================================================================
+ * vtColumnMenu 插件样式（表头 ☰ 图标 + 菜单面板）
+ *
+ * 面板本体走共享的 _panel.css（菜单里每一行就是 `.vt-filter-item`）；下面只有
+ * ☰ 图标本身，以及**它与排序箭头 / 筛选漏斗挤在同一侧时的让位规则**。
+ *
+ * ## 让位那一组为什么要穷举
+ *
+ * 表头右侧最多同时站三个图标：排序箭头（核心）、筛选漏斗（vtColumnFilter）、☰（本插件）。
+ * 三者各自由不同的插件决定有没有，所以「该留多少 padding、每个图标 right 多少」是
+ * 2×2×2 的组合。`column-filter.css` 里已经处理了 排序×筛选 那四种，这里补上
+ * **带 ☰ 的那四种**。
+ *
+ * 全部靠**特异度**压过 `column-filter.css` 里的对应规则，与两个文件谁先加载无关 ——
+ * 插件的 CSS 是使用方各自 import 的，顺序不由我们决定（核心 §7.1 那条「CSS 产物自包含」
+ * 的另一面）。所以这里的选择器一律带上 `.vt-th--has-menu`，类数量天然多一个。
+ *
+ * ☰ 排在**最右**：它是「更多」，习惯上永远在最外侧；排序与筛选往左让。
+ * ========================================================================== */
+@import './_panel.css';
+
+.vt-th--has-menu {
+  position: relative;
+}
+
+/* 只有 ☰ */
+.vt-th--has-menu {
+  padding-right: 28px !important;
+}
+
+.vt-column-menu-icon {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vt-icon-btn-size);
+  height: var(--vt-icon-btn-size);
+  cursor: pointer;
+  color: var(--vt-text-disabled);
+  border-radius: var(--vt-radius-control);
+  transition:
+    color var(--vt-transition-fast) linear,
+    background-color var(--vt-transition-fast) linear;
+}
+
+.vt-column-menu-icon svg {
+  display: block;
+}
+
+.vt-column-menu-icon:hover {
+  color: var(--vt-text-secondary);
+  background-color: var(--vt-fill-light);
+}
+
+.vt-column-menu-icon:focus-visible {
+  outline: 2px solid var(--vt-color-primary);
+  outline-offset: -1px;
+}
+
+/*
+ * 菜单开着时图标保持高亮 —— 否则浮层挂在别处，用户看不出这个菜单属于哪一列
+ * （三列的 ☰ 长得一模一样）。
+ */
+.vt-column-menu-icon--open {
+  color: var(--vt-color-primary);
+  background-color: var(--vt-fill-light);
+}
+
+/* ---- 让位：☰ + 筛选 ---- */
+.vt-th--has-menu.vt-th--filterable {
+  padding-right: 49px !important;
+}
+
+.vt-th--has-menu.vt-th--filterable .vt-filter-icon {
+  right: 26px;
+}
+
+/* ---- 让位：☰ + 排序 ---- */
+.vt-th--has-menu.vt-th--sortable {
+  padding-right: 49px !important;
+}
+
+.vt-th--has-menu.vt-th--sortable .vt-sort-icon {
+  right: 26px;
+}
+
+/* ---- 让位：☰ + 排序 + 筛选（三个都在） ---- */
+.vt-th--has-menu.vt-th--sortable.vt-th--filterable {
+  padding-right: 70px !important;
+}
+
+.vt-th--has-menu.vt-th--sortable.vt-th--filterable .vt-filter-icon {
+  right: 26px;
+}
+
+.vt-th--has-menu.vt-th--sortable.vt-th--filterable .vt-sort-icon {
+  right: 47px;
+}
+
+/* ---- 菜单面板 ---- */
+
+/*
+ * 菜单里的行比筛选面板的选项**更紧**一点：这里是一列动作，不是一列可勾选的值，
+ * 行高太松会让一个 6 项的菜单占掉半屏。
+ */
+.vt-toolbar-popup--column-menu .vt-column-menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  padding-block: 5px;
+}
+
+/* 当前生效的那一项（已按此列升序 / 已冻结在左 / 已按此列分组） */
+.vt-toolbar-popup--column-menu .vt-column-menu-item.is-active {
+  color: var(--vt-color-primary);
+  font-weight: var(--vt-font-weight-semibold);
+}
+
+.vt-toolbar-popup--column-menu .vt-column-menu-item:disabled {
+  color: var(--vt-text-disabled);
+  cursor: default;
+  background: none;
+}
