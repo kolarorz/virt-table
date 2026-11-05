@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="virt-table logo"></a>
+  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="VirtTable logo"></a>
 </p>
 
-<h1 align="center">virt-table — React / Vue / 原生 JavaScript 虚拟表格</h1>
+<h1 align="center">VirtTable — React / Vue / 原生JS 虚拟表格</h1>
 
 <p align="center">行列双向虚拟化 · 合并单元格 · 固定行列 · 编辑校验<br>为复杂业务表格提供一套共享的数据网格实现。</p>
 
