@@ -1,3 +1,4 @@
+import { seo } from './seo';
 import { defineConfigWithTheme, type DefaultTheme } from 'vitepress';
 import { fileURLToPath, URL } from 'node:url';
 import { logProMode, resolveProMode, type ProMode } from '../../build/pro-mode';
@@ -561,9 +562,11 @@ type ThemeConfig = DefaultTheme.Config & {
 
 export default defineConfigWithTheme<ThemeConfig>({
   base,
+  ...seo,
+  lang: 'zh-CN',
   ignoreDeadLinks: true,
   title: 'VirtTable',
-  description: 'A high-performance virtual list component for JavaScript',
+  description: '适用于 React、Vue 和原生 JavaScript 的虚拟表格与数据网格，支持行列双向虚拟化、合并单元格、固定行列和编辑校验。',
   // apps/*/README.md 是三个微应用的开发说明，跟着 docs/ 一起被扫成了页面，
   // 搜索里会冒出「运行」「示例应用」这类跟组件无关的条目，且没有任何地方链向它们
   srcExclude: ['apps/*/README.md'],
