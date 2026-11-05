@@ -1,6 +1,6 @@
 ---
 layout: home
-title: React / Vue 虚拟表格、合并单元格与数据网格
+title: React / Vue / 原生 JavaScript 虚拟表格、合并单元格与数据网格
 description: 适用于 React、Vue 和原生 JavaScript 的虚拟表格与数据网格，支持行列双向虚拟化、合并单元格、固定行列和编辑校验。
 
 # markdownStyles: false 是**功能性设置，不是排版偏好**。

@@ -1,18 +1,30 @@
-# virt-table — React / Vue 虚拟表格与数据网格
+<p align="center">
+  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="virt-table logo"></a>
+</p>
 
-[English](./README.en.md) · 简体中文
+<h1 align="center">virt-table — React / Vue / 原生 JavaScript 虚拟表格</h1>
 
-Virtualized data grid for React, Vue and vanilla JavaScript — row and column virtualization, merged cells and editing.
+<p align="center">行列双向虚拟化 · 合并单元格 · 固定行列 · 编辑校验<br>为复杂业务表格提供一套共享的数据网格实现。</p>
 
-行列双向虚拟化的高性能表格。十万级数据流畅滚动，同时把「一个后台管理系统的表格需求」补成完整闭环 —— 合并单元格、多级分组表头/表尾、固定行列、树形、分组、编辑器、插件化。
+<p align="center">
+  <a href="https://www.npmjs.com/package/@virt-table/vanilla"><img src="https://img.shields.io/npm/v/@virt-table/vanilla?style=flat-square&amp;label=vanilla" alt="@virt-table/vanilla npm version"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT license"></a>
+  <a href="https://github.com/kolarorz/virt-table"><img src="https://img.shields.io/badge/TypeScript-supported-3178c6?style=flat-square" alt="TypeScript supported"></a>
+</p>
 
-📖 **[文档与在线示例](https://kolarorz.github.io/virt-table/)** · [Vanilla](https://kolarorz.github.io/virt-table/vanilla/guide/started) · [React](https://kolarorz.github.io/virt-table/react/guide/started) · [Vue](https://kolarorz.github.io/virt-table/vue/guide/started)
+<p align="center"><a href="./README.en.md">English</a> · 简体中文</p>
+<p align="center"><strong><a href="https://kolarorz.github.io/virt-table/">文档</a> · <a href="https://kolarorz.github.io/virt-table/demos/">在线演示</a> · <a href="#快速开始">快速开始</a> · <a href="https://kolarorz.github.io/vue-virt-list/guide/project-selection">项目选型</a></strong></p>
+
+---
 
 ## 先体验，再接入
 
-- [十万行与合并单元格演示](https://kolarorz.github.io/virt-table/)：直接滚动、跳转，观察渲染中的行与单元格。
-- [按值自动合并](https://kolarorz.github.io/virt-table/vanilla/examples/merge/auto-merge)：在虚拟表格中配置 `mergeKey`。
-- [业务案例](https://kolarorz.github.io/virt-table/demos/)：查看完整场景及其使用的能力；企业插件以案例标注为准。
+| 大数据滚动 | 合并单元格 | 完整业务场景 |
+| --- | --- | --- |
+| 纵向与横向虚拟化、动态行高 | 表体 / 表头 / 表尾，按值自动合并 | 列定义、筛选、分组与编辑 |
+| [十万行在线体验](https://kolarorz.github.io/virt-table/) | [自动合并示例](https://kolarorz.github.io/virt-table/vanilla/examples/merge/auto-merge) | [浏览业务案例](https://kolarorz.github.io/virt-table/demos/) |
+
+> 业务案例可能使用企业插件，具体以案例中的能力标注为准。
 
 适合需要列定义、合并单元格、固定行列、排序筛选和编辑校验的业务表格。
 只需要列表、树形或流式聊天，查看 [virt-list](https://github.com/kolarorz/virt-list)；
@@ -36,6 +48,8 @@ Virtualized data grid for React, Vue and vanilla JavaScript — row and column v
 - **18 个内置单元格组件**：输入框、下拉、多级联动、日期 / 区间、开关、评分、标签、进度、人员…
 
 ## 安装
+
+[原生 JavaScript](https://kolarorz.github.io/virt-table/vanilla/guide/started) · [React](https://kolarorz.github.io/virt-table/react/guide/started) · [Vue](https://kolarorz.github.io/virt-table/vue/guide/started)
 
 ```bash
 npm install @virt-table/vanilla   # 原生 JS / 任意框架
