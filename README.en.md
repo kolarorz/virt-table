@@ -1,10 +1,21 @@
-# virt-table — Virtualized Data Grid for React, Vue and JavaScript
+<p align="center">
+  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="virt-table logo"></a>
+</p>
 
-English · [简体中文](./README.md)
+<h1 align="center">virt-table — React, Vue &amp; Vanilla JavaScript</h1>
 
-A data grid with row and column virtualization, merged cells, pinned rows and columns, and editing. React and Vue bindings share a framework-independent implementation.
+<p align="center">A virtualized data grid with merged cells, pinned columns and editing.<br>One shared implementation for three application environments.</p>
 
-**[Live large-table demos](https://kolarorz.github.io/virt-table/)** · [Merged cells](https://kolarorz.github.io/virt-table/vanilla/examples/merge/auto-merge) · [Business examples](https://kolarorz.github.io/virt-table/demos/)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@virt-table/vanilla"><img src="https://img.shields.io/npm/v/@virt-table/vanilla?style=flat-square&amp;label=vanilla" alt="@virt-table/vanilla npm version"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT license"></a>
+  <a href="https://github.com/kolarorz/virt-table"><img src="https://img.shields.io/badge/TypeScript-supported-3178c6?style=flat-square" alt="TypeScript supported"></a>
+</p>
+
+<p align="center">English · <a href="./README.md">简体中文</a></p>
+<p align="center"><strong><a href="https://kolarorz.github.io/virt-table/">Documentation</a> · <a href="https://kolarorz.github.io/virt-table/demos/">Live demos</a> · <a href="#vanilla-javascript-quick-start">Quick start</a></strong></p>
+
+---
 
 The documentation site is currently in Chinese; this page provides an English starting point.
 
