@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="virt-table logo"></a>
+  <a href="https://kolarorz.github.io/virt-table/"><img src="./docs/public/logo.svg" width="72" height="72" alt="VirtTable logo"></a>
 </p>
 
-<h1 align="center">virt-table — React, Vue &amp; Vanilla JavaScript</h1>
+<h1 align="center">VirtTable — React, Vue &amp; Vanilla JavaScript</h1>
 
 <p align="center">A virtualized data grid with merged cells, pinned columns and editing.<br>One shared implementation for three application environments.</p>
 
