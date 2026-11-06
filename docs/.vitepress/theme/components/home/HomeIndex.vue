@@ -538,6 +538,25 @@ const guideLink = computed(() => withBase(`/${activeFw.value}/guide/started`));
       </div>
     </section>
 
+    <section class="vth-sec">
+      <div class="vth-wrap">
+        <div class="vth-sec-head">
+          <p class="vth-eyebrow">Related projects</p>
+          <h2 class="vth-h2">只需要列表或树？选择适合的项目</h2>
+          <p class="vth-lead">
+            VirtList 提供跨框架虚拟列表、树、网格与流式聊天；vue-virt-list 适合需要原生滚动行为的 Vue 2 / Vue 3 项目。
+          </p>
+        </div>
+        <div class="vth-actions">
+          <a class="vth-btn vth-btn--alt" href="https://github.com/kolarorz/virt-list">VirtList GitHub</a>
+          <a class="vth-btn vth-btn--alt" href="https://kolarorz.github.io/virt-list/">VirtList 文档</a>
+          <a class="vth-btn vth-btn--alt" href="https://github.com/kolarorz/vue-virt-list">vue-virt-list GitHub</a>
+          <a class="vth-btn vth-btn--alt" href="https://kolarorz.github.io/vue-virt-list/">vue-virt-list 文档</a>
+          <a class="vth-btn vth-btn--alt" href="https://kolarorz.github.io/vue-virt-list/guide/project-selection">三个项目如何选择</a>
+        </div>
+      </div>
+    </section>
+
     <!-- ================= CTA ================= -->
     <section class="vth-cta">
       <div class="vth-wrap">
